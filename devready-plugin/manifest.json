@@ -1,0 +1,91 @@
+{
+  "name": "DevReady Inspect",
+  "id": "devready-inspect-local",
+  "api": "1.0.0",
+  "main": "code.js",
+  "ui": "ui.html",
+  "editorType": [
+    "figma",
+    "dev"
+  ],
+  "capabilities": [
+    "inspect",
+    "codegen",
+    "vscode"
+  ],
+  "documentAccess": "dynamic-page",
+  "networkAccess": {
+    "allowedDomains": [
+      "https://fonts.googleapis.com",
+      "https://fonts.gstatic.com"
+    ],
+    "reasoning": "Loads the design's Google Font so the live HTML preview matches the design. No data is sent."
+  },
+  "codegenLanguages": [
+    {
+      "label": "DevReady \u00b7 React + Tailwind",
+      "value": "react-tailwind"
+    },
+    {
+      "label": "DevReady \u00b7 React + CSS",
+      "value": "react-css"
+    },
+    {
+      "label": "DevReady \u00b7 HTML + CSS",
+      "value": "html-css"
+    },
+    {
+      "label": "DevReady \u00b7 Single HTML (CSS + assets in one file)",
+      "value": "html-single"
+    },
+    {
+      "label": "DevReady \u00b7 SwiftUI",
+      "value": "swiftui"
+    },
+    {
+      "label": "DevReady \u00b7 Jetpack Compose",
+      "value": "compose"
+    }
+  ],
+  "codegenPreferences": [
+    {
+      "itemType": "unit",
+      "scaledUnit": "Rem",
+      "defaultScaleFactor": 16,
+      "default": false,
+      "includedLanguages": [
+        "react-tailwind",
+        "react-css",
+        "html-css"
+      ]
+    },
+    {
+      "itemType": "select",
+      "propertyName": "gate",
+      "label": "Dev-ready gate",
+      "options": [
+        {
+          "label": "Only when Ready for dev",
+          "value": "strict",
+          "isDefault": true
+        },
+        {
+          "label": "Always generate",
+          "value": "off"
+        }
+      ],
+      "includedLanguages": [
+        "react-tailwind",
+        "react-css",
+        "html-css"
+      ]
+    }
+  ],
+  "relaunchButtons": [
+    {
+      "command": "open",
+      "name": "Inspect with DevReady",
+      "multipleSelection": true
+    }
+  ]
+}
