@@ -138,7 +138,7 @@ async function setReady(nodeId, type, note) {
   // Change tracking: snapshot the design when it's handed off
   try {
     if (type === 'READY_FOR_DEV') saveBaseline(target);
-    else if (!type) { target.setSharedPluginData(NS, 'baseline', ''); target.setSharedPluginData(NS, 'baselineAt', ''); diffCache[target.id] = null; }
+    else if (!type) { writeChunked(target, 'baseline', ''); target.setSharedPluginData(NS, 'baselineAt', ''); diffCache[target.id] = null; }
   } catch (e) { /* ignore */ }
   return { ok: true, native: native, name: target.name };
 }
@@ -1612,10 +1612,31 @@ function nodeSig(n) {
   }
   return [hashStr(g), hashStr(st), tx ? hashStr(tx) : ''];
 }
+const SNAP_LIMIT = 2500;
+/* Figma caps each plugin-data entry at 100 kB (enforced since March 2025), so large
+   values are split across "<key>:0..n" entries. 30k UTF-16 units is < 90 kB even
+   when every unit needs 3 bytes of UTF-8. */
+const CHUNK_UNITS = 30000;
+function writeChunked(node, key, str) {
+  const old = +node.getSharedPluginData(NS, key + ':n') || 0;
+  const n = str ? Math.ceil(str.length / CHUNK_UNITS) : 0;
+  for (let i = 0; i < n; i++) node.setSharedPluginData(NS, key + ':' + i, str.slice(i * CHUNK_UNITS, (i + 1) * CHUNK_UNITS));
+  for (let i = n; i < old; i++) node.setSharedPluginData(NS, key + ':' + i, '');
+  node.setSharedPluginData(NS, key + ':n', n ? String(n) : '');
+  if (node.getSharedPluginData(NS, key)) node.setSharedPluginData(NS, key, ''); // legacy single entry
+}
+function readChunked(node, key) {
+  const n = +node.getSharedPluginData(NS, key + ':n') || 0;
+  if (!n) return node.getSharedPluginData(NS, key); // written by an older version
+  let out = '';
+  for (let i = 0; i < n; i++) out += node.getSharedPluginData(NS, key + ':' + i);
+  return out;
+}
 function snapshot(root, limit) {
   const map = {}; let count = 0;
   (function walk(n) {
-    if (count++ > limit) return;
+    if (count >= limit) { map.__partial = 1; return; }
+    count++;
     const s = nodeSig(n);
     map[n.id] = [String(n.name).slice(0, 40), s[0], s[1], s[2]];
     if ('children' in n) n.children.forEach(walk);
@@ -1623,19 +1644,21 @@ function snapshot(root, limit) {
   return map;
 }
 function saveBaseline(target) {
-  const snap = snapshot(target, 2500);
-  target.setSharedPluginData(NS, 'baseline', JSON.stringify(snap));
+  const snap = snapshot(target, SNAP_LIMIT);
+  writeChunked(target, 'baseline', JSON.stringify(snap));
   target.setSharedPluginData(NS, 'baselineAt', new Date().toISOString());
   diffCache[target.id] = null;
 }
 const diffCache = {};
 function diffBaseline(target) {
   if (diffCache[target.id]) return diffCache[target.id];
-  const raw = target.getSharedPluginData(NS, 'baseline');
+  const raw = readChunked(target, 'baseline');
   if (!raw) return null;
   let base;
   try { base = JSON.parse(raw); } catch (e) { return null; }
-  const now = snapshot(target, 2500);
+  const now = snapshot(target, SNAP_LIMIT);
+  const partial = !!(base.__partial || now.__partial);
+  delete base.__partial; delete now.__partial;
   const changes = [];
   Object.keys(now).forEach(id => {
     const a = base[id], b = now[id];
@@ -1647,8 +1670,13 @@ function diffBaseline(target) {
     if (a[0] !== b[0]) parts.push('renamed');
     if (parts.length) changes.push({ id: id, name: b[0], kind: 'changed', parts: parts });
   });
-  Object.keys(base).forEach(id => { if (!now[id]) changes.push({ id: null, name: base[id][0], kind: 'removed', parts: [] }); });
-  const res = { at: target.getSharedPluginData(NS, 'baselineAt'), count: changes.length, changes: changes.slice(0, 150), containerId: target.id, containerName: target.name };
+  // When a snapshot hit the layer cap, layers past it are unknown, not added/removed.
+  if (partial) {
+    for (let i = changes.length - 1; i >= 0; i--) { if (changes[i].kind !== 'changed') changes.splice(i, 1); }
+  } else {
+    Object.keys(base).forEach(id => { if (!now[id]) changes.push({ id: null, name: base[id][0], kind: 'removed', parts: [] }); });
+  }
+  const res = { at: target.getSharedPluginData(NS, 'baselineAt'), partial: partial, limit: SNAP_LIMIT, count: changes.length, changes: changes.slice(0, 150), containerId: target.id, containerName: target.name };
   diffCache[target.id] = res;
   return res;
 }
@@ -1801,7 +1829,12 @@ const tokenId = t => camel(String(t).replace(/^--/, ''));
 
 /* ---------- SwiftUI ---------- */
 const SW_WEIGHT = { 100: 'ultraLight', 200: 'thin', 300: 'light', 400: 'regular', 500: 'medium', 600: 'semibold', 700: 'bold', 800: 'heavy', 900: 'black' };
-function swStr(s) { return JSON.stringify(String(s)); }
+/* Unicode bidi controls are escaped so generated code can't hide "Trojan Source" text. */
+const BIDI_RE = /[\u202A-\u202E\u2066-\u2069]/g;
+function swStr(s) {
+  return '"' + String(s).replace(/[\\"\u0000-\u001f\u007f\u202A-\u202E\u2066-\u2069]/g, c =>
+    c === '\\' ? '\\\\' : c === '"' ? '\\"' : c === '\n' ? '\\n' : c === '\t' ? '\\t' : c === '\r' ? '\\r' : '\\u{' + c.charCodeAt(0).toString(16) + '}') + '"';
+}
 function swColor(c, ctx) {
   if (!c) return null;
   if (c.token && ctx.tokenUse) { ctx.tokenUse[c.token] = c; return 'Color.' + tokenId(c.token); }
@@ -1929,7 +1962,7 @@ function generateSwift(root, defs, ctx, name) {
 
 /* ---------- Jetpack Compose ---------- */
 const KT_WEIGHT = { 100: 'Thin', 200: 'ExtraLight', 300: 'Light', 400: 'Normal', 500: 'Medium', 600: 'SemiBold', 700: 'Bold', 800: 'ExtraBold', 900: 'Black' };
-function ktStr(s) { return JSON.stringify(String(s)).replace(/\$/g, '\\$'); }
+function ktStr(s) { return JSON.stringify(String(s)).replace(/\$/g, '\\$').replace(BIDI_RE, c => '\\u' + c.charCodeAt(0).toString(16).toUpperCase().padStart(4, '0')); }
 function ktColor(c, ctx) {
   if (!c) return null;
   if (c.token && ctx.tokenUse) { ctx.tokenUse[c.token] = c; return 'AppColors.' + pascal(tokenId(c.token)); }

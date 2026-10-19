@@ -165,8 +165,12 @@ What the plugin does now:
 - Code Connect mapping affects React output only. SwiftUI and Compose still rebuild the component from its layers.
 - Plugins can't do the following, so Dev Mode still does them better: hover-to-measure on the canvas, version comparison, notifications when designs change, and VS Code's built-in "Figma for VS Code" integration.
 - Full-tree code stops after 600 layers in the panel (1,500 for Download project) and 150 in Dev Mode's Code section, because Figma gives code generation only a 3-second time limit.
-- Network access is limited to `fonts.googleapis.com` / `fonts.gstatic.com`, used only so the preview shows the design's real font. Nothing is uploaded.
+- Network access is limited to `fonts.googleapis.com` / `fonts.gstatic.com`. Those requests contain only **font family names and weights** (to check which fonts exist on Google Fonts and to show the real font in the preview). No layer names, text, images or file data are sent anywhere. Everything else stays inside Figma. See [PRIVACY.md](../PRIVACY.md) for the full list, and `npm test` for the automated check.
 - Before you publish, replace `"id"` in `manifest.json` with the ID Figma gives you.
+
+## Testing
+
+From the repo root: `npm install && npm test`. The suite runs 9 fixture designs through all 6 code targets and checks each output parses (JSX/CSS with esbuild; HTML, Swift and Kotlin with structural checks). It also tests escaping of hostile layer names, change tracking against Figma's 100 kB plugin-data limit, offline fonts, and what gets sent over the network. See [docs/test-report.md](../docs/test-report.md).
 
 ## Troubleshooting
 

@@ -1,0 +1,18 @@
+{
+  "name": "dev-ready",
+  "version": "1.0.0",
+  "description": "Free Figma plugin: Dev Mode-style inspect, change tracking and design-to-code (React, HTML, SwiftUI, Compose), gated on Ready for dev.",
+  "private": true,
+  "license": "MIT",
+  "repository": { "type": "git", "url": "https://github.com/Ankushui18/Dev-Ready.git" },
+  "scripts": {
+    "test": "node tests/run.js",
+    "test:report": "node tests/run.js --report",
+    "check": "node devready-plugin/check-sandbox.js",
+    "zip": "node scripts/zip.js"
+  },
+  "devDependencies": {
+    "esbuild": "0.24.2"
+  },
+  "engines": { "node": ">=18" }
+}

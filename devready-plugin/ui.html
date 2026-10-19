@@ -478,6 +478,8 @@
   .exp-prev { border-radius: 6px; background: repeating-conic-gradient(var(--bg2) 0 25%, var(--bg) 0 50%) 0 0 / 12px 12px; box-shadow: inset 0 0 0 1px var(--border); min-height: 96px; display: grid; place-items: center; padding: 10px; }
   .exp-prev img { max-width: 100%; max-height: 220px; object-fit: contain; }
   .exp-prev .ph { color: var(--fg3); }
+  .src-b { margin-left: 6px; padding: 0 5px; border-radius: 4px; font-size: 10px; line-height: 16px; color: var(--fg2); background: var(--bg2); white-space: nowrap; cursor: help; }
+  .src-b.flag { color: var(--accent, #0d99ff); background: color-mix(in srgb, #0d99ff 12%, transparent); }
 </style>
 </head>
 <body>
@@ -701,7 +703,7 @@ function renderInspect(d) {
   const canChange = st && (!d.isDev || st.source === 'plugin');
   const ch = d.changes, n = ch && !ch.none ? ch.count : 0;
   const meta = st ? '<div class="h-meta">' + I.clock + '<span class="txt">' + (st.type === 'COMPLETED' ? 'Completed' : 'Ready for dev') + (st.at ? ' ' + ago(st.at) : '') +
-      ' · <span class="link" data-select="' + esc(st.nodeId) + '">' + esc(st.nodeName) + '</span>' + (st.source === 'plugin' ? ' · team flag' : '') + '</span><span class="fill1"></span>' +
+      ' · <span class="link" data-select="' + esc(st.nodeId) + '">' + esc(st.nodeName) + '</span>' + '</span>' + srcBadge(st) + '<span class="fill1"></span>' +
       (ch ? '<button class="btn sm' + (n ? ' warn' : '') + '" data-act="show-changes" title="Compare with the design that was handed off">' + (n ? n + ' change' + (n > 1 ? 's' : '') : 'Compare changes') + I.chevS + '</button>' : '') + '</div>' : '';
   $('hdr').innerHTML =
     '<div class="hdr-row"><div class="name" title="' + esc(sp.name) + '">' + esc(sp.name) + '</div>' +
@@ -1021,6 +1023,13 @@ function renderEmpty(d) {
     sec('Ready for dev', '', readyRows(d.ready), d.ready ? d.ready.length : 0);
 }
 
+/* Where a status comes from. Figma's native status and DevReady's shared flag are different things. */
+function srcBadge(st) {
+  if (!st) return '';
+  return st.source === 'plugin'
+    ? '<span class="src-b flag" title="Set with DevReady (stored as shared plugin data on the frame). Anyone running DevReady sees it; Figma’s own Ready for dev list does not.">DevReady flag</span>'
+    : '<span class="src-b" title="Figma’s native Ready for dev status — the same one shown in Dev Mode.">Figma status</span>';
+}
 function renderLocked(d) {
   $('hdr').innerHTML = '<div class="hdr-row"><span class="ico' + (isCmp(d.node.type) ? ' cmp' : '') + '">' + typeIcon(d.node.type) + '</span><div class="name">' + esc(d.node.name) + '</div>' + statusChip(null) + ib(I.more, 'more-menu', 'Settings') + '</div>';
   let hand = '';
@@ -1029,11 +1038,12 @@ function renderLocked(d) {
       '<div class="list-row" data-select="' + esc(d.target.id) + '" style="margin-bottom:6px"><span class="ico">' + typeIcon(d.target.type) + '</span><span class="ln">' + esc(d.target.name) + '</span></div>' +
       '<textarea id="note" placeholder="Add a note for developers (optional)"></textarea>' +
       '<div class="row-btns"><button class="btn green full" data-act="mark" data-status="READY_FOR_DEV">' + I.ready + (d.isDev ? 'Flag as ready for dev' : 'Mark as ready for dev') + '</button></div>' +
-      '<div class="faint" style="margin-top:6px">' + (d.isDev ? 'Dev Mode is read-only — saves a shared team flag.' : 'Uses Figma’s status when your plan allows it, otherwise a shared team flag.') + '</div>');
+      '<div class="faint" style="margin-top:6px">' + (d.isDev ? 'Dev Mode is read-only, so this saves a DevReady flag (shared plugin data).' : 'Uses Figma’s native status when your plan allows it, otherwise a DevReady flag.') + '</div>');
   }
   $('main').innerHTML =
-    '<div class="empty"><div class="em-ico">' + I.lock + '</div><h3>Not ready for dev</h3><p>This layer isn’t inside a frame, component or section marked ready for dev.</p>' +
-    '<div class="row-btns" style="justify-content:center"><button class="btn" data-act="gate-off">Inspect anyway</button></div></div>' +
+    '<div class="empty"><div class="em-ico">' + I.lock + '</div><h3>Not ready for dev</h3><p>This layer isn’t inside a frame, component or section marked ready for dev, so specs, code and assets are hidden.</p>' +
+    '<div class="row-btns" style="justify-content:center"><button class="btn" data-act="gate-off">Inspect anyway</button></div>' +
+    '<p class="faint" style="margin-top:10px">The gate is an optional team workflow. “Inspect anyway” turns it off for you on this device (⋯ → Dev-ready gate turns it back on). Status comes from Figma’s Ready for dev or, where that isn’t available, a DevReady flag.</p></div>' +
     hand + sec('Ready for dev', '', readyRows(d.ready), d.ready ? d.ready.length : 0);
 }
 
@@ -1047,9 +1057,11 @@ function secChanges(d) {
   const c = d.changes; if (!c) return '';
   const save = '<button class="btn" data-act="baseline-save" title="Treat the current design as the new handoff baseline">' + (c.none ? 'Start tracking' : 'Mark as reviewed') + '</button>';
   if (c.none) return sec('Changes', '', '<div class="muted" style="margin-bottom:8px">This design was marked ready before change tracking was on. Save a snapshot to see future edits here.</div>' + save);
-  if (!c.count) return sec('Changes', '', '<div class="list-row dead"><span class="ico" style="color:var(--green)">' + I.check + '</span><span class="ln muted">No changes since ready for dev · ' + esc(fmtDate(c.at)) + '</span></div>');
+  if (!c.count) return sec('Changes', '', '<div class="list-row dead"><span class="ico" style="color:var(--green)">' + I.check + '</span><span class="ln muted">No changes' + (c.partial ? ' in the first ' + (c.limit || 2500).toLocaleString() + ' layers' : '') + ' since ready for dev · ' + esc(fmtDate(c.at)) + '</span></div>');
   const rows = c.changes.map(x => '<div class="list-row' + (x.id ? '' : ' dead') + '"' + (x.id ? ' data-select="' + esc(x.id) + '"' : '') + '><span class="kb ' + x.kind + '">' + x.kind + '</span><span class="ln">' + esc(x.name) + '</span><span class="faint">' + esc(x.parts.join(', ')) + '</span></div>').join('');
-  return '<div id="sec-changes">' + sec('Changes since ready', save, '<div class="faint" style="margin:-2px 0 4px">Compared with the snapshot from ' + esc(fmtDate(c.at)) + (c.count > c.changes.length ? ' · showing ' + c.changes.length + ' of ' + c.count : '') + '</div>' + rows, c.count) + '</div>';
+  return '<div id="sec-changes">' + sec('Changes since ready', save, '<div class="faint" style="margin:-2px 0 4px">Compared with the snapshot from ' + esc(fmtDate(c.at)) + (c.count > c.changes.length ? ' · showing ' + c.changes.length + ' of ' + c.count : '') + '</div>' +
+    (c.partial ? '<div class="warn" style="margin-bottom:6px">Partial check — only the first ' + (c.limit || 2500).toLocaleString() + ' layers are tracked. Edits deeper in this frame, and added or removed layers, aren’t detected.</div>' : '') +
+    rows + '<div class="faint" style="margin-top:6px">Shows which layers changed and how (size/position, style, text, name). Before/after values aren’t stored.</div>', c.count) + '</div>';
 }
 function secLayers(sp) {
   const L = sp.layers; if (!L || !L.children.length) return '';
@@ -1332,7 +1344,7 @@ function menuFor(act, el) {
   if (act === 'fmt-menu') openMenu(el, FMTS.map(f => ({ label: f[1], checked: S.assetFmt === f[0], run: () => { S.assetFmt = f[0]; render(); } })));
   if (act === 'more-menu') openMenu(el, [
     { label: 'Dev-ready gate', checked: s.gate !== 'off', run: () => { setSetting({ gate: s.gate === 'off' ? 'strict' : 'off' }); toast(s.gate === 'off' ? 'Gate on — only ready designs unlock' : 'Gate off — inspecting everything'); } },
-    { label: 'Accept team flag', checked: !!s.pluginFlag, run: () => setSetting({ pluginFlag: !s.pluginFlag }) },
+    { label: 'Accept DevReady flags', checked: !!s.pluginFlag, run: () => setSetting({ pluginFlag: !s.pluginFlag }) },
     '-',
     { label: 'Clear redlines on page', disabled: S.data.isDev, run: () => send({ type: 'clear-redlines' }) },
     { label: 'Remove canvas notes on page', disabled: S.data.isDev, run: () => send({ type: 'notes-clear' }) }
