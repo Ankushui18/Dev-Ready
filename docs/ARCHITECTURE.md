@@ -42,7 +42,7 @@ Top-level sections, in file order:
 | 1009–1,114 | Pass 2 | Structure, semantic tags, CSS hygiene |
 | 1,115–1,146 | Pass 3 | BEM naming and class de-duplication |
 | 1,147–1,186 | Pass 4 (React) | Repeated instances → component + props |
-| 1,187–1,267 | Renderers | HTML, CSS, Tailwind, React, Vue, Svelte, single-file HTML |
+| 1,187–1,267 | Renderers | HTML, CSS, Tailwind, React (JSX and TSX), Vue, Svelte, single-file HTML |
 | 1,268–1,435 | **Fonts** | `GF_DATA` catalog, `googleCheck()`, `googleHref()`, `planFonts()` (Google / `@font-face` / system) |
 | 1,436–1,599 | Single-file embedding | Assets and image fills → data URIs, size budget |
 | 1,600–1,705 | Variable modes | Per-mode values, `[data-theme]` blocks, token collection |
@@ -141,7 +141,7 @@ Nothing is stored on a server, because there is no server.
 
 | Task | Start here |
 |---|---|
-| Add a code target | `generateCode()` renderers (line ~1,187), `LANG_IDS`, `manifest.json` → `codegenLanguages`, `LANGS`/`NATIVE` in `ui.html`, a validator in `tests/validators.js`, a language in `tests/run.js` |
+| Add a code target | `generateCode()` renderers (line ~1,187), `LANG_IDS`, `manifest.json` → `codegenLanguages`, `LANGS`/`NATIVE` in `ui.html`, a validator in `tests/validators.js`, a language in `tests/run.js`. The TypeScript targets are the same React renderer with `ts` set — copy that pattern instead of forking the generator. |
 | Fix a measurement | `buildSpec()` and `boxModel()` in `ui.html` |
 | Change typography or colour extraction | `buildSpec()` → `typography`, `paints` |
 | Add a panel section | `sec…()` in `ui.html` + a field in the `state` payload, plus a `DEMO` example |

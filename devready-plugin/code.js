@@ -28,7 +28,7 @@ let settings = Object.assign({}, DEFAULT_SETTINGS);
 /* unknown types are ignored, unknown fields dropped, values typed and  */
 /* range-checked. The UI is bundled, but this keeps the boundary narrow. */
 /* ------------------------------------------------------------------ */
-const LANG_IDS = ['react-tailwind', 'react-css', 'html-css', 'html-single', 'vue', 'svelte', 'react-native', 'swiftui', 'compose', 'flutter'];
+const LANG_IDS = ['react-tailwind', 'react-css', 'react-ts', 'react-tailwind-ts', 'html-css', 'html-single', 'vue', 'svelte', 'react-native', 'swiftui', 'compose', 'flutter'];
 const MAP_NAME_RE = /^[A-Za-z_$][\w$.]{0,79}$/;
 const MAP_PATH_RE = /^[\w@~.\-][\w@~.\/\-]{0,199}$/;
 const V = {
@@ -1569,7 +1569,9 @@ async function generateCode(node, lang, unit, base, maxNodes, opts) {
     files.push({ name: 'index.html', lang: 'html', code: html });
     files.push({ name: 'styles.css', lang: 'css', code: stylesheet(ctx, root.cls, unit, base, fontCss(ctx.fontPlan, false)) });
   } else {
-    const mode = lang === 'react-tailwind' ? 'tw' : 'css';
+    // react-css / react-tailwind emit JSX; react-ts / react-tailwind-ts add types.
+    const ts = /-ts$/.test(lang);
+    const mode = /^react-tailwind/.test(lang) ? 'tw' : 'css';
     const defs = extractComponents(root, ctx);
     const imports = Object.keys(ctx.imports).map(p => "import { " + Object.keys(ctx.imports[p]).join(', ') + " } from " + jsQuote(p) + ";")
       .concat(ctx.assets.map(a => "import " + a.varName + " from './assets/" + a.file + "';"));
@@ -1577,11 +1579,21 @@ async function generateCode(node, lang, unit, base, maxNodes, opts) {
     else if (Object.keys(ctx.vars).length || fontCss(ctx.fontPlan, true)) imports.push("import './tokens.css';");
     const defCode = defs.map(def => {
       const args = def.props.length ? '{ ' + def.props.map(p => p.name).join(', ') + ' }' : '';
-      return 'function ' + def.name + '(' + args + ') {\n  return (\n' + renderJSX(def.tpl, 2, mode, unit, base, true) + '\n  );\n}';
+      const typed = ts && def.props.length ? args + ': ' + def.name + 'Props' : args;
+      const propsType = ts && def.props.length ? 'type ' + def.name + 'Props = {\n' + def.props.map(p => '  ' + p.name + ': string;').join('\n') + '\n};\n\n' : '';
+      return propsType + 'function ' + def.name + '(' + typed + ') {\n  return (\n' + renderJSX(def.tpl, 2, mode, unit, base, true) + '\n  );\n}';
     });
     const main = 'export default function ' + Comp + '() {\n  return (\n' + renderJSX(root, 2, mode, unit, base, false) + '\n  );\n}';
     const code = (imports.length ? imports.join('\n') + '\n\n' : '') + (note ? '// ' + note + '\n\n' : '') + defCode.concat([main]).join('\n\n') + '\n';
-    files.push({ name: Comp + '.jsx', lang: 'jsx', code: code });
+    files.push({ name: Comp + (ts ? '.tsx' : '.jsx'), lang: ts ? 'tsx' : 'jsx', code: code });
+    // Asset and CSS imports need ambient declarations, or `tsc` rejects the component.
+    if (ts) {
+      const exts = {};
+      ctx.assets.forEach(a => { const e = String(a.file).split('.').pop().toLowerCase(); if (e) exts[e] = 1; });
+      const decl = ['css'].concat(Object.keys(exts).filter(e => e !== 'css').sort()).map(e =>
+        e === 'css' ? "declare module '*.css';" : "declare module '*." + e + "' {\n  const src: string;\n  export default src;\n}");
+      files.push({ name: 'assets.d.ts', lang: 'ts', code: '/* Ambient declarations for asset and stylesheet imports. */\n' + decl.join('\n') + '\n' });
+    }
     const fcss = fontCss(ctx.fontPlan, true);
     if (mode === 'css') files.push({ name: Comp + '.css', lang: 'css', code: stylesheet(ctx, root.cls, unit, base, fcss) });
     else if (Object.keys(ctx.vars).length || fcss) files.push({ name: 'tokens.css', lang: 'css', code: (fcss ? fcss + '\n\n' : '') + (Object.keys(ctx.vars).length ? '/* Design tokens from Figma variables */\n' + varsBlock(ctx, unit, base) + '\n' : '') });

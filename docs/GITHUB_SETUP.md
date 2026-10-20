@@ -34,7 +34,7 @@ Verify any time:
 ```bash
 npm ci
 npm run check:layout    # must print "layout OK"
-npm run verify          # layout + sandbox + lint + 110 checks
+npm run verify          # layout + sandbox + lint + 133 checks
 ```
 
 > ⚠️ **Never use GitHub's web "Add file → Upload files" for a folder.** Dragging a
@@ -70,7 +70,7 @@ Click ⚙️ next to **About** on the repository page.
 
 **Description:**
 > Free Figma plugin: Dev Mode-style inspect, design tokens, accessibility checks and
-> design-to-code in 10 targets (React, Vue, Svelte, React Native, HTML, SwiftUI,
+> design-to-code in 12 targets (React + TypeScript, React, Vue, Svelte, React Native, HTML, SwiftUI,
 > Compose, Flutter), gated on Ready for dev.
 
 **Website:** leave empty until the Community listing exists, then paste its URL.

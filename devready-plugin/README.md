@@ -19,7 +19,7 @@ You don't need a build step. The plugin is plain `code.js` and `ui.html`.
 |---|---|
 | **Design mode** | The full UI. You can also mark designs ready or completed and draw redlines on the canvas |
 | **Dev Mode → Plugins tab** | The full inspector (read-only, which is how Figma runs Dev Mode plugins) |
-| **Dev Mode → Code section** | All ten targets in the language dropdown: **DevReady · React + Tailwind / React + CSS / HTML + CSS / Single HTML / Vue / Svelte / React Native / SwiftUI / Jetpack Compose / Flutter**, with a rem unit option and a gate preference |
+| **Dev Mode → Code section** | All twelve targets in the language dropdown: **DevReady · React + Tailwind / React + CSS / React + TypeScript / React + TypeScript + Tailwind / HTML + CSS / Single HTML / Vue / Svelte / React Native / SwiftUI / Jetpack Compose / Flutter**, with a rem unit option and a gate preference |
 | **VS Code (Figma for VS Code)** | The same as Dev Mode |
 
 ## How the "dev ready" gate works
@@ -32,13 +32,14 @@ You can turn the gate off in ⚙ Settings, or use the "Inspect anyway" button.
 ## Using it in Dev Mode (developer side)
 1. Open the file and press **Shift + D** (or use the `</>` toggle) to switch to **Dev Mode**.
 2. **Inspect panel → Plugins → DevReady Inspect** shows the full inspector inside Dev Mode's own panel. Drag the panel edge to make it wider.
-3. **Inspect panel → Code → language dropdown** lists all ten **DevReady ·** targets (React + Tailwind, React + CSS, HTML + CSS, Single HTML, Vue, Svelte, React Native, SwiftUI, Jetpack Compose, Flutter). These show the generated code directly in Figma's native Code section, with no plugin window.
+3. **Inspect panel → Code → language dropdown** lists all twelve **DevReady ·** targets (React + Tailwind, React + CSS, React + TypeScript, React + TypeScript + Tailwind, HTML + CSS, Single HTML, Vue, Svelte, React Native, SwiftUI, Jetpack Compose, Flutter). These show the generated code directly in Figma's native Code section, with no plugin window.
 4. In Design mode the plugin opens as a 480px-wide window. You can resize it from the corner.
 
 ## Code engine
 Code is built from the whole layer tree, not just the one layer you selected:
 - **Semantic BEM class names.** Auto-generated layer names are ignored (`Frame 2121453060` → `insights__header`, `1284` → `insights__value`, `12.4%` → `insights__change`, a pill with a fill → `insights__badge`). Text inside a component gets a role name from the main component, so every instance shares classes.
 - **De-duplication.** Layers with identical styles share one class. Repeated component instances become one **React component with props**, e.g. `<StatCard label="Sessions" value="342" />`.
+- **TypeScript.** The two `React + TypeScript` targets emit `.tsx` instead of `.jsx`, export a `Props` type for every extracted component, and add an `assets.d.ts` with ambient declarations for the CSS and asset imports the design needs — so the output type-checks in a strict project. CI compiles it with `tsc --strict`.
 - **Design tokens.** Figma variables are collected into `:root { --surface: #FFF; … }` and the code uses `var(--surface)`.
 - **Clean CSS.** It removes Figma's inline comments and `font-style: normal`, strips flex-only properties when the parent isn't flex, adds `position: relative` when a child is absolutely positioned, sets the most common font family once on the root, and adds a scoped reset (Figma has no default margins).
 - **Semantics.** Lists become `ul`/`li`, buttons become `<button type="button">`, and only one real title becomes a heading (`h1` for page-sized frames, otherwise `h2`). Numbers never become headings.
@@ -168,7 +169,7 @@ What the plugin does now:
 
 ## Files
 - `manifest.json`: editor types, capabilities (inspect + codegen + vscode), codegen languages and preferences
-- `code.js`: plugin logic (gate, spec extraction, variable modes, change tracking, Code Connect mapping, CSS→Tailwind, tree code generation for all ten targets, assets, native measurements, annotations, dev resources, codegen). Section map: [docs/ARCHITECTURE.md](../docs/ARCHITECTURE.md)
+- `code.js`: plugin logic (gate, spec extraction, variable modes, change tracking, Code Connect mapping, CSS→Tailwind, tree code generation for all twelve targets, assets, native measurements, annotations, dev resources, codegen). Section map: [docs/ARCHITECTURE.md](../docs/ARCHITECTURE.md)
 - `ui.html`: the panel UI, styled after Figma Dev Mode's Inspect panel (UI3 look, follows Figma's light/dark theme). If you open it in a normal browser, it shows sample data.
 
 ## Notes and limits
@@ -185,7 +186,7 @@ What the plugin does now:
 
 ## Testing
 
-From the repo root: `npm ci && npm run verify` (layout, Figma sandbox check, ESLint, tests). The suite runs 9 fixture designs through all 10 code targets and checks each output parses (JSX/CSS with esbuild; HTML, Swift, Kotlin, Dart, Vue and Svelte with structural checks). It also tests:
+From the repo root: `npm ci && npm run verify` (layout, Figma sandbox check, ESLint, tests). The suite runs 9 fixture designs through all 12 code targets and checks each output parses (JSX/CSS with esbuild; HTML, Swift, Kotlin, Dart, Vue and Svelte with structural checks). It also tests:
 - escaping of hostile layer names;
 - message validation and mapping injection;
 - change tracking (100 kB limit, before → after values);

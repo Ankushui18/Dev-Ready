@@ -2,13 +2,22 @@
 
 All notable changes to DevReady are listed here. The format follows [Keep a Changelog](https://keepachangelog.com/), and versions follow [SemVer](https://semver.org/).
 
-## [Unreleased]
+## [1.3.0] — 2026-10-20
 
-Repository and documentation only — the plugin code is unchanged.
+A new code target, plus the repository repair and documentation work from the merged
+layout fix.
+
+### Added
+- **React + TypeScript targets** (`react-ts`, `react-tailwind-ts`, in the panel, the Dev Mode Code section and Figma for VS Code):
+  - files are `.tsx`, and every extracted component gets a `Props` type, e.g. `type StatCardProps = { label: string; value: string }` with `function StatCard({ label, value }: StatCardProps)`;
+  - an `assets.d.ts` is emitted with ambient declarations for the CSS and asset (`*.svg`, `*.png`, …) imports the design needs, so the output type-checks in a strict project;
+  - the JavaScript targets are unchanged, and a test fails if types leak into them.
+- **CI compiles the generated TypeScript with `tsc --strict`**, so "type-checked output" is verified rather than claimed (`typescript` is a dev dependency only).
+- 23 new checks (**133 total**): the two targets across all 9 fixtures, plus typed-props, ambient-declaration, `tsc` and no-types-in-JS checks.
 
 ### Fixed
 - **Repository layout restored.** All root files had been uploaded *inside* `devready-plugin/`, including a second, older copy of the plugin in `devready-plugin/devready-plugin/`. The result: GitHub showed no README or license, CI never ran, `npm test` could not work from a fresh clone, and Figma imported the older plugin. Root files are back at the root; `devready-plugin/` now contains only `manifest.json`, `code.js`, `ui.html`, `README.md` and `check-sandbox.js`.
-- **CI restored** (`.github/workflows/ci.yml`): layout check, Figma sandbox check, ESLint, the 110-check suite, the Playwright browser job, and a release job that attaches `devready-plugin.zip` to a tag.
+- **CI restored** (`.github/workflows/ci.yml`): layout check, Figma sandbox check, ESLint, the 133-check suite, the Playwright browser job, and a release job that attaches `devready-plugin.zip` to a tag.
 - Added the missing `.gitignore`.
 
 ### Added
@@ -20,7 +29,8 @@ Repository and documentation only — the plugin code is unchanged.
 
 ### Changed
 - `docs/GITHUB_SETUP.md` now describes the correct layout and how to recover if it breaks again, instead of the old "current state is broken" instructions.
-- Refreshed `docs/test-report.md`: **110/110 checks**, 9 fixtures × 10 code targets.
+- Refreshed `docs/test-report.md`: **133/133 checks**, 9 fixtures × 12 code targets.
+- `SECURITY.md`: a "verify these claims yourself" section with the exact commands, and a note that reviews of the pre-1.2 tree (or of the stale duplicate plugin folder) describe protections that already exist.
 - Plugin README: complete target list in Dev Mode, catalog size (1,950 families), test counts, and links to the architecture doc.
 
 ## [1.2.0] — 2026-10-20
