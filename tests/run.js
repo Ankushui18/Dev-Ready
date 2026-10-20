@@ -273,7 +273,7 @@ function sandboxCheck() {
     FIXTURES.forEach(fx => { const row = LANGS.map(l => { const r = results.find(x => x.group === fx.name && x.name === l); return r ? (r.ok ? '✅' : '❌') : '–'; }); md += '| `' + fx.name + '` — ' + fx.about + ' | ' + row.join(' | ') + ' |\n'; });
     md += '\n## Other checks\n\n';
     results.filter(r => !LANGS.includes(r.name)).forEach(r => { md += '- ' + (r.ok ? '✅' : '❌') + ' ' + r.name + (r.extra ? ' (' + r.extra + ')' : '') + '\n'; });
-    md += '\nWhat "valid" means per language: JSX/TSX is parsed by esbuild; CSS by esbuild plus comment/brace checks; HTML is checked for injected markup, balanced `<style>` and well-formed tags; Swift and Kotlin are checked for balanced brackets and safe string literals (escapes, `\\(` and `$` templates). Swift/Kotlin are **not compiled** in CI.\n';
+    md += '\nWhat "valid" means per language: JSX/TSX is parsed by esbuild; CSS by esbuild plus comment/brace checks; HTML is checked for injected markup, balanced `<style>` and well-formed tags; Swift, Kotlin and Dart are checked for balanced brackets and safe string literals (escapes, `\\(` and `$` templates), and Vue/Svelte for escaped template expressions. Swift, Kotlin and Dart are **not compiled** in CI.\n';
     md += '\nBrowser checks (`npm run test:browser`: panel render in light/dark, preview sandbox against a hostile document, online and offline) run as a separate CI job.\n';
     void groups;
     fs.writeFileSync(path.join(__dirname, '..', 'docs', 'test-report.md'), md);

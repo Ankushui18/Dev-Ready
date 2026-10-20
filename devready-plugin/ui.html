@@ -91,7 +91,25 @@
   .list-row .x { opacity: 0; color: var(--fg2); }
   .list-row:hover .x, .note:hover .x { opacity: 1; }
   .note .x { margin-left: auto; opacity: 0; color: var(--fg2); align-self: flex-start; }
-  .modes { display: grid; grid-template-columns: auto 1fr; gap: 2px 10px; margin: 2px 0 6px; padding-left: 8px; border-left: 2px solid var(--bg2); }
+  /* accessibility + tokens */
+  .a-sum { display: flex; gap: 6px; flex-wrap: wrap; margin: 0 0 6px; }
+  .a-sum .pill { display: inline-flex; align-items: center; gap: 5px; height: 20px; padding: 0 7px; border-radius: 10px; font-weight: 500; background: var(--bg2); color: var(--fg2); }
+  .a-sum .pill i { width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
+  .a-sum .pill.bad { background: var(--danger-tint); color: var(--danger); }
+  .a-sum .pill.warn { background: var(--warn-tint); color: var(--warn-fg); }
+  .a-sum .pill.ok { background: var(--green-tint); color: var(--green-fg); }
+  .a-row { height: auto; min-height: 32px; padding-top: 3px; padding-bottom: 3px; }
+  .a-row .ln { display: flex; flex-direction: column; min-width: 0; line-height: 15px; }
+  .a-row .ln small { color: var(--fg2); font-size: 11px; white-space: normal; }
+  .a-sw { width: 28px; height: 20px; border-radius: 4px; display: inline-grid; place-items: center; font-weight: 700; font-size: 11px; box-shadow: inset 0 0 0 1px rgba(128,128,128,.35); flex-shrink: 0; }
+  .list-row .a-dot { display: block; flex: 0 0 8px; width: 8px; height: 8px; min-height: 0; padding: 0; border-radius: 50%; margin: 0 10px; background: var(--fg3); }
+  .list-row .a-dot.fail { background: var(--danger); } .list-row .a-dot.warn { background: #f5a623; } .list-row .a-dot.pass { background: var(--green); }
+  .a-ratio { font-family: var(--mono); font-size: 10px; font-weight: 600; flex-shrink: 0; text-align: right; line-height: 14px; }
+  .a-ratio.fail { color: var(--danger); } .a-ratio.pass { color: var(--green-fg); } .a-ratio small { display: block; color: var(--fg2); font-weight: 400; }
+  .tok-bar { display: flex; align-items: center; gap: 6px; margin: 0 0 6px; }
+  .tok-bar .fill1 { flex: 1; }
+  .tok-bar .dd { box-shadow: inset 0 0 0 1px var(--border); }
+  .modes { grid-template-columns: auto 1fr; gap: 2px 10px; margin: 2px 0 6px; padding-left: 8px; border-left: 2px solid var(--bg2); }
   .modes .mk { color: var(--fg2); line-height: 20px; }
   .modes .mv { display: flex; align-items: center; gap: 6px; min-width: 0; line-height: 20px; }
   .modes .mv .sw { width: 12px; height: 12px; }
@@ -480,6 +498,13 @@
   .exp-prev .ph { color: var(--fg3); }
   .src-b { margin-left: 6px; padding: 0 5px; border-radius: 4px; font-size: 10px; line-height: 16px; color: var(--fg2); background: var(--bg2); white-space: nowrap; cursor: help; }
   .src-b.flag { color: var(--accent, #0d99ff); background: color-mix(in srgb, #0d99ff 12%, transparent); }
+.chg-det{margin:-2px 0 6px 28px;padding:4px 0 4px 10px;border-left:1px solid var(--border);display:grid;gap:2px}
+.chg-line{display:grid;grid-template-columns:70px minmax(0,1fr) 12px minmax(0,1fr);gap:6px;align-items:center;font-size:11px;line-height:16px}
+.chg-p{color:var(--fg2)}
+.chg-b,.chg-n{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-family:var(--mono)}
+.chg-b{color:var(--fg3);text-decoration:line-through;text-decoration-color:var(--fg3)}
+.chg-a{color:var(--fg3)}
+.chg-sw{display:inline-block;width:9px;height:9px;border-radius:2px;margin-right:4px;vertical-align:-1px;box-shadow:inset 0 0 0 1px rgba(0,0,0,.15)}
 </style>
 </head>
 <body>
@@ -621,13 +646,14 @@ function hl(code, lang) {
   let s = esc(code);
   if (lang === 'css') {
     return s.split('\n').map(line => {
-      if (/^\s*\/\*.*\*\/\s*$/.test(line)) return '<span class="c-c">' + line + '</span>';
+      if (/^\s*(\/\*.*\*\/|\/\/.*)\s*$/.test(line)) return '<span class="c-c">' + line + '</span>';
       if (/^\s*\.[\w-]+\s*\{/.test(line)) return line.replace(/(\.[\w-]+)/, '<span class="c-t">$1</span>');
-      return line.replace(/^(\s*)(-{0,2}[a-z][a-z0-9-]*)(:\s*)(.*?)(;?)$/, (m, a, p, c, v, e) =>
+      return line.replace(/^(\s*)(-{0,2}\$?[a-z][a-z0-9-]*)(:\s*)(.*?)(;?)$/, (m, a, p, c, v, e) =>
         a + '<span class="c-p">' + p + '</span>' + c + hlVal(v) + e);
     }).join('\n');
   }
   if (lang === 'tw') return '<span class="c-s">' + s + '</span>';
+  if (lang === 'json') return s.replace(/(&quot;.*?&quot;)(\s*:)?|(-?\d+\.?\d*)(?=[,\s}\]]|$)/g, (m, str, colon, num) => str ? (colon ? '<span class="c-p">' + str + '</span>' + colon : '<span class="c-s">' + str + '</span>') : '<span class="c-n">' + num + '</span>');
   if (lang === 'native') {
     return s.split('\n').map(line => {
       if (/^\s*\/\//.test(line)) return '<span class="c-c">' + line + '</span>';
@@ -668,7 +694,7 @@ function codeBlock(code, lang, label, copyAct) {
 /* ===================================================================
  * Dev Mode–style sections (v3)
  * =================================================================== */
-S.closed = S.closed || { 'Layers': true };
+S.closed = S.closed || { 'Layers': true, 'Design tokens': true };
 function sec(title, actions, body, cnt, opts) {
   opts = opts || {};
   const key = opts.key || title;
@@ -714,8 +740,8 @@ function renderInspect(d) {
 
   $('main').innerHTML = [
     secOverrides(sp), secResources(sp), secCodeConnect(sp), secChanges(d), secComponent(sp), secRecommended(sp), secAnnotations(d),
-    secCode(d), d.count === 2 ? secSpacing(d) : '', secLayerProps(d), secTypography(sp), secColors(sp), secEffects(sp),
-    secVariables(sp), secContent(sp), secInteractions(sp), secLayers(sp), secAssets(d), secExport(d)
+    secCode(d), d.count === 2 ? secSpacing(d) : '', secLayerProps(d), secTypography(sp), secColors(sp), secEffects(sp), secA11y(d),
+    secVariables(sp), secTokens(d, false), secContent(sp), secInteractions(sp), secLayers(sp), secAssets(d), secExport(d)
   ].join('');
   const f = document.querySelector('.form [autofocus]'); if (f && S.focusForm) { f.focus(); S.focusForm = false; }
   mountPreview();
@@ -734,8 +760,8 @@ function secOverrides(sp) {
   }
   let b = '<div class="ov-note">' + I.info + '<span>' + msg + '</span></div>';
   if (n) b += '<div class="ov-act"><button class="btn" data-act="ov-compare">' + (S.ovOpen ? 'Hide comparison' : 'Compare with main component') + '</button></div>';
-  if (n && S.ovOpen) b += '<div class="ov-list">' + (c.overrides || []).map(o => '<div class="list-row" data-select="' + esc(o.id) + '"><span class="ln">' + esc(o.name) + '</span><span class="faint">' + esc(o.fields.map(prettyField).join(', ')) + '</span></div>').join('') +
-    (n > (c.overrides || []).length ? '<div class="faint" style="padding:4px 0">+ ' + (n - c.overrides.length) + ' more</div>' : '') + '</div>';
+  if (n && S.ovOpen) {b += '<div class="ov-list">' + (c.overrides || []).map(o => '<div class="list-row" data-select="' + esc(o.id) + '"><span class="ln">' + esc(o.name) + '</span><span class="faint">' + esc(o.fields.map(prettyField).join(', ')) + '</span></div>').join('') +
+    (n > (c.overrides || []).length ? '<div class="faint" style="padding:4px 0">+ ' + (n - c.overrides.length) + ' more</div>' : '') + '</div>';}
   return '<div class="blk">' + b + '</div>';
 }
 
@@ -745,8 +771,8 @@ function secResources(sp) {
   const list = sp.devResources || [];
   let b = list.map(r => '<div class="res-row"><span class="ri">' + resIcon(r.url) + '</span><a class="ln" href="' + esc(r.url) + '" target="_blank" rel="noopener">' + esc(r.name || r.url) + '</a>' +
     '<button class="ibtn x" data-act="res-del" data-url="' + esc(r.url) + '" title="Remove link">' + I.x + '</button><a class="ibtn" href="' + esc(r.url) + '" target="_blank" rel="noopener" title="Open">' + I.ext + '</a></div>').join('');
-  if (S.form === 'res') b += '<div class="form"><input class="in" id="res-url" autofocus placeholder="https://github.com/org/repo/blob/main/Button.tsx"><input class="in" id="res-name" placeholder="Name (optional), e.g. Notification - Storybook">' +
-    '<div class="row"><button class="btn" data-act="form-cancel">Cancel</button><button class="btn blue" data-act="res-add">Add link</button></div></div>';
+  if (S.form === 'res') {b += '<div class="form"><input class="in" id="res-url" autofocus placeholder="https://github.com/org/repo/blob/main/Button.tsx"><input class="in" id="res-name" placeholder="Name (optional), e.g. Notification - Storybook">' +
+    '<div class="row"><button class="btn" data-act="form-cancel">Cancel</button><button class="btn blue" data-act="res-add">Add link</button></div></div>';}
   if (!list.length && S.form !== 'res') b = '<div class="faint">Link GitHub, Storybook, Jira or docs · <span class="mini" data-act="form-res">Add link</span></div>';
   return sec('Dev resources', S.form !== 'res' ? ib(I.plus, 'form-res', 'Add dev resource') : '', b, list.length || undefined);
 }
@@ -904,7 +930,7 @@ function lpCode(d) {
   return groups.map(g => '<div class="cg-h"><span class="t">' + esc(g.title) + (g.sub ? ' <span class="faint">' + esc(g.sub) + '</span>' : '') + '</span><button class="ibtn" data-copy="' + esc(g.lines.join('\n')) + '" title="Copy ' + esc(g.title.toLowerCase()) + '">' + I.clip + '</button></div>' + codeBlock2(g.lines.join('\n'), 'css')).join('');
 }
 function codeBlock2(code, lang) {
-  let h = hl(String(code).replace(/\n$/, ''), lang);
+  const h = hl(String(code).replace(/\n$/, ''), lang);
   const body = h.split('\n').map(l => '<span class="l">' + (l || ' ') + '</span>').join('');
   return '<div class="code' + (lang === 'tw' ? ' wrap' : '') + '"><pre>' + body + '</pre></div>';
 }
@@ -1020,7 +1046,7 @@ function renderEmpty(d) {
   $('hdr').innerHTML = '<div class="hdr-row"><div class="name">' + esc(d.page || 'Page') + '</div>' + ib(I.more, 'more-menu', 'Settings') + '</div>';
   $('main').innerHTML =
     '<div class="empty"><div class="em-ico">' + I.FRAME + '</div><h3>Select a layer</h3><p>Inspect specs, code and assets of designs marked ready for dev.</p></div>' +
-    sec('Ready for dev', '', readyRows(d.ready), d.ready ? d.ready.length : 0);
+    sec('Ready for dev', '', readyRows(d.ready), d.ready ? d.ready.length : 0) + secTokens(d, true);
 }
 
 /* Where a status comes from. Figma's native status and DevReady's shared flag are different things. */
@@ -1058,10 +1084,12 @@ function secChanges(d) {
   const save = '<button class="btn" data-act="baseline-save" title="Treat the current design as the new handoff baseline">' + (c.none ? 'Start tracking' : 'Mark as reviewed') + '</button>';
   if (c.none) return sec('Changes', '', '<div class="muted" style="margin-bottom:8px">This design was marked ready before change tracking was on. Save a snapshot to see future edits here.</div>' + save);
   if (!c.count) return sec('Changes', '', '<div class="list-row dead"><span class="ico" style="color:var(--green)">' + I.check + '</span><span class="ln muted">No changes' + (c.partial ? ' in the first ' + (c.limit || 2500).toLocaleString() + ' layers' : '') + ' since ready for dev · ' + esc(fmtDate(c.at)) + '</span></div>');
-  const rows = c.changes.map(x => '<div class="list-row' + (x.id ? '' : ' dead') + '"' + (x.id ? ' data-select="' + esc(x.id) + '"' : '') + '><span class="kb ' + x.kind + '">' + x.kind + '</span><span class="ln">' + esc(x.name) + '</span><span class="faint">' + esc(x.parts.join(', ')) + '</span></div>').join('');
+  const sw = v => { const m = /^#[0-9A-F]{6,8}/.exec(v); return m ? '<i class="chg-sw" style="background:' + m[0] + '"></i>' : ''; };
+  const det = x => (x.detail && x.detail.length) ? '<div class="chg-det">' + x.detail.map(d => '<div class="chg-line"><span class="chg-p">' + esc(d.prop) + '</span><span class="chg-b" title="' + esc(d.before) + '">' + sw(d.before) + esc(d.before) + '</span><span class="chg-a">→</span><span class="chg-n" title="' + esc(d.after) + '">' + sw(d.after) + esc(d.after) + '</span></div>').join('') + '</div>' : '';
+  const rows = c.changes.map(x => '<div class="chg"><div class="list-row' + (x.id ? '' : ' dead') + '"' + (x.id ? ' data-select="' + esc(x.id) + '"' : '') + '><span class="kb ' + x.kind + '">' + x.kind + '</span><span class="ln">' + esc(x.name) + '</span><span class="faint">' + esc(x.parts.join(', ')) + '</span></div>' + det(x) + '</div>').join('');
   return '<div id="sec-changes">' + sec('Changes since ready', save, '<div class="faint" style="margin:-2px 0 4px">Compared with the snapshot from ' + esc(fmtDate(c.at)) + (c.count > c.changes.length ? ' · showing ' + c.changes.length + ' of ' + c.count : '') + '</div>' +
     (c.partial ? '<div class="warn" style="margin-bottom:6px">Partial check — only the first ' + (c.limit || 2500).toLocaleString() + ' layers are tracked. Edits deeper in this frame, and added or removed layers, aren’t detected.</div>' : '') +
-    rows + '<div class="faint" style="margin-top:6px">Shows which layers changed and how (size/position, style, text, name). Before/after values aren’t stored.</div>', c.count) + '</div>';
+    rows + '<div class="faint" style="margin-top:6px">' + (c.values ? 'Before → after for position, size, fill, stroke, radius, effects, layout, font and text. Other edits (e.g. gradient stops) are flagged by category.' : 'This snapshot was saved by an older version, so only the kind of change is shown. Mark as reviewed to record before/after values from now on.') + '</div>', c.count) + '</div>';
 }
 function secLayers(sp) {
   const L = sp.layers; if (!L || !L.children.length) return '';
@@ -1069,11 +1097,11 @@ function secLayers(sp) {
   return sec('Layers', '', rows + (L.more ? '<div class="faint" style="padding:4px 0">+ ' + L.more + ' more</div>' : ''), L.children.length + (L.more || 0));
 }
 const ANN_PROPS = [['', 'No pinned property'], ['width', 'Width'], ['height', 'Height'], ['fills', 'Fill'], ['strokes', 'Stroke'], ['cornerRadius', 'Corner radius'], ['itemSpacing', 'Gap'], ['padding', 'Padding'], ['layoutMode', 'Layout direction'], ['alignItems', 'Alignment'], ['effects', 'Effects'], ['opacity', 'Opacity'], ['fontSize', 'Font size'], ['fontWeight', 'Font weight'], ['fontFamily', 'Font family'], ['lineHeight', 'Line height'], ['textAlignHorizontal', 'Text align']];
-const LANGS = { css: 'CSS', tailwind: 'Tailwind', 'html-css': 'HTML + CSS', 'html-single': 'Single HTML (one file)', 'react-tailwind': 'React + Tailwind', 'react-css': 'React + CSS', swiftui: 'SwiftUI', compose: 'Jetpack Compose' };
-const LANG_HL = { html: 'html', css: 'css', jsx: 'jsx', swift: 'native', kotlin: 'native', text: 'plain' };
-const NATIVE = { swiftui: 1, compose: 1 };
+const LANGS = { css: 'CSS', tailwind: 'Tailwind', 'html-css': 'HTML + CSS', 'html-single': 'Single HTML (one file)', 'react-tailwind': 'React + Tailwind', 'react-css': 'React + CSS', vue: 'Vue (single file)', svelte: 'Svelte', 'react-native': 'React Native', swiftui: 'SwiftUI', compose: 'Jetpack Compose', flutter: 'Flutter (Dart)' };
+const LANG_HL = { json: 'json', html: 'html', vue: 'html', svelte: 'html', css: 'css', jsx: 'jsx', swift: 'native', kotlin: 'native', dart: 'native', text: 'plain' };
+const NATIVE = { swiftui: 1, compose: 1, 'react-native': 1, flutter: 1 };
 function secCode(d) {
-  let body = '', copyAll = '';
+  let body, copyAll = '';
   const canPreview = !NATIVE[S.lang];
   const tabs = canPreview ? '<div class="top-tabs"><div class="seg"><button class="' + (S.view !== 'preview' ? 'on' : '') + '" data-act="view-code">Code</button><button class="' + (S.view === 'preview' ? 'on' : '') + '" data-act="view-preview">Preview</button></div>' +
     (S.view === 'preview' ? '<span class="faint">Live HTML build vs. Figma design</span>' : '') + '</div>' : '';
@@ -1118,7 +1146,7 @@ function fontsBlock(c) {
     if (f.source === 'google') {
       const off = f.variants.filter(v => !v.onGoogle);
       return '<div class="frow"><div class="frow-top"><span class="fsrc google">Google</span><b>' + fam + '</b><span class="fill1"></span><span class="faint">' + f.variants.map(v => v.weight + (v.italic ? 'i' : '')).join(' · ') + '</span></div>' +
-        '<p class="fnote">' + (f.offline ? 'Couldn\'t reach Google Fonts — assumed from the popular list. ' : '') + 'Loaded automatically from Google Fonts with just the weights this design uses.' + (off.length ? ' Not on Google: ' + off.map(vLabel).join(', ') + ' — the browser will synthesize them.' : '') + '</p></div>';
+        '<p class="fnote">' + 'Loaded automatically from Google Fonts with just the weights this design uses.' + (off.length ? ' Not on Google: ' + off.map(vLabel).join(', ') + ' — the browser will synthesize them.' : '') + '</p></div>';
     }
     if (f.source === 'system') {
       return '<div class="frow"><div class="frow-top"><span class="fsrc system">System</span><b>' + fam + '</b></div>' +
@@ -1168,7 +1196,24 @@ async function uploadFonts(files) {
 $('font-file').addEventListener('change', e => { const fl = Array.from(e.target.files || []); e.target.value = ''; if (fl.length) uploadFonts(fl); });
 
 /* ---------- Preview & compare (single-file HTML vs Figma render) ---------- */
+/** Preview fonts: 'google' loads public Google Fonts; 'off' makes the preview fully offline. */
+function pvOnline() { return !S.demo && !(S.data && S.data.settings && S.data.settings.previewFonts === 'off'); }
+/*
+ * The preview iframe is sandboxed WITHOUT allow-scripts (nothing in it can run JS,
+ * so allow-same-origin only lets this panel measure it), and the document gets a
+ * CSP: images only from data:/blob:, styles inline, fonts only from Google Fonts
+ * (or nowhere, offline). Generated HTML has no scripts; this is defence in depth.
+ */
+function pvCsp(online) {
+  return '<meta http-equiv="Content-Security-Policy" content="default-src \'none\'; img-src data: blob:; style-src \'unsafe-inline\'' +
+    (online ? ' https://fonts.googleapis.com' : '') + '; font-src data:' + (online ? ' https://fonts.gstatic.com' : '') + '; base-uri \'none\'; form-action \'none\'">';
+}
 function previewDoc(html, ov) {
+  const online = pvOnline();
+  let src = String(html);
+  if (!online) src = src.replace(/<link[^>]+fonts\.(googleapis|gstatic)\.com[^>]*>\s*/gi, '').replace(/@import url\([^)]*fonts\.googleapis\.com[^)]*\);?\s*/gi, '');
+  src = /<head[^>]*>/i.test(src) ? src.replace(/<head[^>]*>/i, m => m + pvCsp(online)) : pvCsp(online) + src;
+  html = src;
   const css = '<style>html,body{margin:0!important;padding:0!important;background:transparent!important;min-height:0!important;display:block!important;overflow:hidden}' +
     '#__dr_ov{position:fixed;left:0;top:0;pointer-events:none;z-index:2147483647}</style>';
   let doc = String(html).replace('</head>', css + '</head>');
@@ -1186,7 +1231,7 @@ function secPreview(d) {
   const colW = mode === 'side' ? (avail - 8) / 2 : avail;
   const sc = Math.min(1, colW / pv.w);
   const box = (inner) => '<div class="pv-box" style="width:' + Math.round(pv.w * sc) + 'px;height:' + Math.round(pv.h * sc) + 'px">' + inner + '</div>';
-  const frame = '<iframe id="pv-frame" title="HTML preview" style="width:' + pv.w + 'px;height:' + pv.h + 'px;transform:scale(' + sc + ')"></iframe>';
+  const frame = '<iframe id="pv-frame" title="HTML preview" sandbox="allow-same-origin" referrerpolicy="no-referrer" style="width:' + pv.w + 'px;height:' + pv.h + 'px;transform:scale(' + sc + ')"></iframe>';
   let stage;
   if (mode === 'side') {
     stage = '<div class="pv-cols"><div class="pv-col"><div class="cap"><span>Figma design</span></div>' + box(shotReady ? '<img class="shot" src="' + S.shot.url + '" alt="">' : '<div class="pv-note" style="padding:8px">' + (S.demo ? 'Design snapshot loads inside Figma' : 'Loading…') + '</div>') + '</div>' +
@@ -1196,7 +1241,7 @@ function secPreview(d) {
     (mode === 'overlay' ? '<label title="Design opacity"><input type="range" id="pv-op" min="0" max="100" value="' + S.opacity + '"><span id="pv-opv">' + S.opacity + '%</span></label><label><input type="checkbox" id="pv-diff"' + (S.diff ? ' checked' : '') + '>Difference</label>' : '') +
     '<span class="fill1"></span><button class="btn" data-act="pv-download">' + I.dl + 'Download .html</button></div>';
   const note = mode === 'overlay' ? (shotReady ? 'Figma\'s render is laid over the HTML. Use <b>Difference</b>: anything that isn\'t black is a mismatch.' : (S.demo ? 'The design overlay loads inside Figma.' : 'Loading the design snapshot…'))
-    : mode === 'side' ? 'Left: Figma\'s own render. Right: the generated HTML.' : 'Scaled to ' + Math.round(sc * 100) + '% · ' + pv.w + '×' + pv.h + ' · fonts load from Google Fonts';
+    : mode === 'side' ? 'Left: Figma\'s own render. Right: the generated HTML.' : 'Scaled to ' + Math.round(sc * 100) + '% · ' + pv.w + '×' + pv.h + (pvOnline() ? ' · public Google Fonts load from Google' : ' · offline: fonts aren’t downloaded, installed copies or fallbacks are used');
   S.pvMount = { h: pv.h, sc: sc, html: c.files[0].code, ov: mode === 'overlay' && shotReady ? { url: S.shot.url, w: pv.w, h: pv.h } : null };
   return bar + '<div class="pv-stage">' + stage + '</div><div class="pv-note">' + note + '</div>';
 }
@@ -1227,14 +1272,13 @@ function requestShot(id) {
   send({ type: 'design-shot', id: id });
 }
 
-function bn(v, cls) { return '<span class="n ' + cls + (v ? '' : ' z') + '">' + (v === undefined || v === null ? '' : r2(v)) + '</span>'; }
 function secSpacing(d) {
   const m = d.measure; if (!m) return '';
   let b;
   if (m.mode === 'inset') b = '<div class="spacing">' + ['top', 'right', 'bottom', 'left'].map(k => '<div class="sp" data-copy="' + m[k] + 'px"><b>' + r2(m[k]) + '</b><span>' + pretty(k) + '</span></div>').join('') + '</div>';
-  else b = '<div class="spacing two">' +
+  else {b = '<div class="spacing two">' +
     '<div class="sp" data-copy="' + (m.horizontal === null ? '' : m.horizontal + 'px') + '"><b>' + (m.horizontal === null ? '–' : r2(m.horizontal)) + '</b><span>Horizontal</span></div>' +
-    '<div class="sp" data-copy="' + (m.vertical === null ? '' : m.vertical + 'px') + '"><b>' + (m.vertical === null ? '–' : r2(m.vertical)) + '</b><span>Vertical</span></div></div>';
+    '<div class="sp" data-copy="' + (m.vertical === null ? '' : m.vertical + 'px') + '"><b>' + (m.vertical === null ? '–' : r2(m.vertical)) + '</b><span>Vertical</span></div></div>';}
   b += '<div class="faint" style="margin-top:6px">' + (m.mode === 'inset' ? 'Inside ' + esc(m.outer) : esc(m.a) + ' ↔ ' + esc(m.b)) + (d.count === 1 ? ' · Shift-select another layer to measure' : '') + '</div>';
   const actions = ib(I.ruler, 'measure-native', d.isDev ? 'Add Dev Mode measurement' : 'Add measurement on canvas') + ib(I.x, 'measure-clear', 'Clear measurements');
   return sec(d.count === 2 ? 'Spacing' : 'Distance to parent', actions, b);
@@ -1264,15 +1308,10 @@ function colorRow(p, styleName) {
     return '<div class="color-row" data-copy="' + esc(p.variable && p.variable.web ? p.variable.web : v.split('  ')[0]) + '">' + sw(p.color) +
       (name ? '<span class="cn">' + esc(name) + '</span><span class="cv">' + esc(v) + '</span>' : '<span class="cv solo">' + esc(v) + '</span>') + '</div>';
   }
-  if (p.stops) return '<div class="color-row">' + gsw(p.stops) + '<span class="cn">' + (styleName ? esc(styleName) : pretty(p.type)) + '</span><span class="cv">' + p.stops.length + ' stops</span></div>' +
-    p.stops.map(s => '<div class="color-row" style="padding-left:32px" data-copy="' + esc(fmtColor(s.color).split('  ')[0]) + '">' + sw(s.color) + '<span class="cv solo">' + esc(fmtColor(s.color)) + '</span><span class="cv">' + s.position + '%</span></div>').join('');
+  if (p.stops) {return '<div class="color-row">' + gsw(p.stops) + '<span class="cn">' + (styleName ? esc(styleName) : pretty(p.type)) + '</span><span class="cv">' + p.stops.length + ' stops</span></div>' +
+    p.stops.map(s => '<div class="color-row" style="padding-left:32px" data-copy="' + esc(fmtColor(s.color).split('  ')[0]) + '">' + sw(s.color) + '<span class="cv solo">' + esc(fmtColor(s.color)) + '</span><span class="cv">' + s.position + '%</span></div>').join('');}
   if (p.type === 'IMAGE') return '<div class="color-row"><span class="sw"><i style="background:var(--bg3)"></i></span><span class="cn">Image</span><span class="cv">' + pretty(p.scaleMode) + (p.opacity < 1 ? ' · ' + Math.round(p.opacity * 100) + '%' : '') + '</span></div>';
   return '';
-}
-function secStroke(sp) {
-  if (!sp.strokeInfo) return '';
-  const i = sp.strokeInfo;
-  return sec('Stroke', '', '<div class="props">' + prop('Weight', typeof i.weight === 'number' ? px(i.weight) : i.weight) + prop('Position', pretty(i.align)) + (i.dash ? prop('Dash', i.dash) : '') + '</div>');
 }
 function secEffects(sp) {
   if (!sp.effects || !sp.effects.length) return '';
@@ -1292,6 +1331,47 @@ function secVariables(sp) {
     (m.color ? '<span class="sw"><i style="background:' + fmtColor(m.color) + '"></i></span>' : '') + esc(m.display === null ? '—' : m.display) + (m.alias ? ' <span class="faint">→ ' + esc(m.alias) + '</span>' : '') + '</span>').join('') + '</div>';
   return sec('Variables', '', '<div class="props">' + sp.tokens.map(t => '<div class="pk">' + esc(t.property.replace(/([A-Z])/g, ' $1').replace(/^./, c => c.toUpperCase())) + '</div><div class="pv">' + tok(t) + '</div>' + modes(t)).join('') + '</div>' +
     (sp.explicitModes ? '<div class="faint" style="margin-top:4px">Layer mode: ' + sp.explicitModes.map(m => esc(m.collection) + ' → ' + esc(m.mode)).join(', ') + '</div>' : ''), sp.tokens.length);
+}
+/* ---------- Accessibility ---------- */
+function a11yRow(i) {
+  let lead = '<span class="a-dot ' + i.status + '"></span>', sub, meta = '';
+  if (i.kind === 'contrast' && i.status !== 'unknown') {
+    lead = '<span class="a-sw" style="color:' + esc(i.fg) + ';background:' + esc(i.bg) + '">Aa</span>';
+    sub = esc(i.fg) + ' on ' + esc(i.bg) + (i.assumed ? ' (assumed white)' : '') + (i.large ? ' \u00b7 large text' : '');
+    meta = '<span class="a-ratio ' + i.status + '">' + i.ratio + ':1<small>' + (i.status === 'fail' ? 'needs ' + i.need : i.aaa ? 'AAA' : 'AA') + '</small></span>';
+  } else sub = esc(i.detail || '');
+  return '<div class="list-row a-row" data-select="' + esc(i.id) + '">' + lead + '<span class="ln"><span>' + esc(i.name) + '</span><small>' + sub + '</small></span>' + meta + '</div>';
+}
+function secA11y(d) {
+  const a = d.a11y;
+  if (!a || !a.items || !a.items.length) return '';
+  const c = a.counts, issues = a.items.filter(i => i.status !== 'pass');
+  const pills = '<div class="a-sum">' +
+    (c.fail ? '<span class="pill bad"><i></i>' + c.fail + ' failing</span>' : '') + (c.warn ? '<span class="pill warn"><i></i>' + c.warn + ' to review</span>' : '') +
+    (c.unknown ? '<span class="pill"><i></i>' + c.unknown + ' unmeasured</span>' : '') + (c.pass ? '<span class="pill ok"><i></i>' + c.pass + ' passing</span>' : '') + '</div>';
+  const rows = (S.a11yAll ? a.items : issues).map(a11yRow).join('');
+  const toggle = c.pass ? '<button class="mini" data-act="a11y-all" style="margin-top:4px">' + (S.a11yAll ? 'Show only issues' : 'Show ' + c.pass + ' passing') + '</button>' : '';
+  const empty = !issues.length && !S.a11yAll ? '<div class="muted" style="padding:2px 0 4px">No contrast or touch-target problems found in this layer.</div>' : '';
+  return sec('Accessibility', '', pills + rows + empty + toggle + '<div class="faint" style="margin-top:6px">WCAG 2.2 AA: text 4.5:1 (3:1 for large text), targets 24\u00d724 (44\u00d744 recommended on touch). Checked ' + a.scanned + ' layers' + (a.limited ? ' (stopped at the limit)' : '') + '.</div>', c.fail + c.warn);
+}
+
+/* ---------- Design tokens export ---------- */
+const TOK_FORMATS = { css: 'CSS variables', scss: 'SCSS variables', json: 'JSON (design tokens)', tailwind: 'Tailwind v4 theme' };
+function secTokens(d, fileOnly) {
+  S.tok = S.tok || { format: 'css', scope: fileOnly ? 'file' : 'selection', out: null, busy: false };
+  const T = S.tok;
+  if (fileOnly) T.scope = 'file';
+  const seg = fileOnly ? '' : '<div class="seg"><button class="' + (T.scope === 'selection' ? 'on' : '') + '" data-act="tok-scope-selection">This layer</button><button class="' + (T.scope === 'file' ? 'on' : '') + '" data-act="tok-scope-file">Whole file</button></div>';
+  const note = T.scope === 'selection' ? 'Variables used by this layer and everything inside it, with all of their modes.' : 'Every local variable with all modes, plus color and text styles.';
+  let body = '<div class="tok-bar">' + seg + '<span class="fill1"></span>' + ddBtn(TOK_FORMATS[T.format], 'tokfmt-menu') + '</div><div class="faint" style="margin-bottom:6px">' + note + '</div>';
+  const o = T.out;
+  if (T.busy) body += '<div class="faint">Reading variables\u2026</div>';
+  else if (o && o.format === T.format && o.scope === T.scope) {
+    if (o.empty) body += '<div class="muted">No variables' + (T.scope === 'selection' ? ' are bound to this layer.' : ' or styles in this file.') + '</div><button class="btn" data-act="tok-gen" style="margin-top:6px">Try again</button>';
+    else {body += codeBlock(o.text, o.lang || 'css') + '<div class="code-foot"><span class="stats">' + o.stats.variables + ' variables' + (o.stats.modes ? ' \u00b7 ' + o.stats.modes + ' modes' : '') + (o.stats.styles ? ' \u00b7 ' + o.stats.styles + ' styles' : '') + '</span>' +
+      '<button class="btn" data-act="tok-copy">' + I.copy + 'Copy</button><button class="btn blue" data-act="tok-dl">' + I.dl + esc(o.file) + '</button></div>';}
+  } else body += '<button class="btn blue" data-act="tok-gen">Generate ' + esc(TOK_FORMATS[T.format]) + '</button>';
+  return sec('Design tokens', '', body);
 }
 function secContent(sp) {
   if (!sp.text) return '';
@@ -1331,24 +1411,26 @@ function setSetting(patch) {
 function menuFor(act, el) {
   const s = S.data.settings;
   if (act === 'lang-menu') openMenu(el, Object.keys(LANGS).map(k => ({ label: LANGS[k], checked: S.lang === k, run: () => { S.lang = k; render(); } })));
-  if (act === 'code-menu') openMenu(el, [
+  if (act === 'code-menu') {openMenu(el, [
     { header: 'Unit' },
     { label: 'Pixels (px)', checked: s.unit === 'px', run: () => setSetting({ unit: 'px' }) },
     { label: 'Rem (' + (s.remBase || 16) + 'px base)', checked: s.unit === 'rem', run: () => setSetting({ unit: 'rem' }) },
     '-', { header: 'Rem base' }
-  ].concat([10, 14, 16, 18, 20].map(n => ({ label: n + 'px', checked: +s.remBase === n, run: () => setSetting({ remBase: n }) }))));
+  ].concat([10, 14, 16, 18, 20].map(n => ({ label: n + 'px', checked: +s.remBase === n, run: () => setSetting({ remBase: n }) }))));}
   if (act === 'color-menu') openMenu(el, [['hex', 'Hex'], ['rgb', 'RGB'], ['hsl', 'HSL']].map(f => ({ label: f[1], checked: s.colorFormat === f[0], run: () => setSetting({ colorFormat: f[0] }) })));
+  if (act === 'tokfmt-menu') openMenu(el, Object.keys(TOK_FORMATS).map(k => ({ label: TOK_FORMATS[k], checked: S.tok.format === k, run: () => { S.tok.format = k; S.tok.out = null; render(); } })));
   if (act === 'lplang-menu') openMenu(el, [['css', 'CSS'], ['tailwind', 'Tailwind']].map(f => ({ label: f[1], checked: (S.lpLang || 'css') === f[0], run: () => { S.lpLang = f[0]; render(); } })));
   if (act === 'expscale-menu') openMenu(el, EX_SCALES.map(n => ({ label: n + 'x', checked: S.exp.scale === n, run: () => { S.exp.scale = n; render(); } })));
   if (act === 'expfmt-menu') openMenu(el, EX_FMTS.map(f => ({ label: f, checked: S.exp.fmt === f, run: () => { S.exp.fmt = f; render(); } })));
   if (act === 'fmt-menu') openMenu(el, FMTS.map(f => ({ label: f[1], checked: S.assetFmt === f[0], run: () => { S.assetFmt = f[0]; render(); } })));
-  if (act === 'more-menu') openMenu(el, [
+  if (act === 'more-menu') {openMenu(el, [
+    { label: 'Load Google Fonts in preview', checked: s.previewFonts !== 'off', run: () => { setSetting({ previewFonts: s.previewFonts === 'off' ? 'google' : 'off' }); toast(s.previewFonts === 'off' ? 'Preview loads public Google Fonts' : 'Offline: the preview makes no network requests'); } },
     { label: 'Dev-ready gate', checked: s.gate !== 'off', run: () => { setSetting({ gate: s.gate === 'off' ? 'strict' : 'off' }); toast(s.gate === 'off' ? 'Gate on — only ready designs unlock' : 'Gate off — inspecting everything'); } },
     { label: 'Accept DevReady flags', checked: !!s.pluginFlag, run: () => setSetting({ pluginFlag: !s.pluginFlag }) },
     '-',
     { label: 'Clear redlines on page', disabled: S.data.isDev, run: () => send({ type: 'clear-redlines' }) },
     { label: 'Remove canvas notes on page', disabled: S.data.isDev, run: () => send({ type: 'notes-clear' }) }
-  ]);
+  ]);}
   if (act === 'status-menu') {
     const st = S.data.status, id = st.nodeId;
     openMenu(el, [
@@ -1388,6 +1470,14 @@ document.addEventListener('click', e => {
   const live = ['baseline-save', 'measure-native', 'measure-clear', 'ann-add', 'ann-del', 'res-add', 'res-del', 'map-save', 'map-del', 'notes-clear', 'goto-main'];
   if (S.demo && live.indexOf(act) > -1) { S.form = null; render(); return toast('Works inside Figma'); }
   if (act === 'sec-toggle') { const k = a.getAttribute('data-key'); S.closed[k] = !S.closed[k]; render(); return; }
+  if (act === 'a11y-all') { S.a11yAll = !S.a11yAll; render(); return; }
+  if (/^tok-scope-/.test(act)) { S.tok.scope = act.slice(10); S.tok.out = null; render(); return; }
+  if (act === 'tok-gen') {
+    if (S.demo) { S.tok.out = Object.assign({ format: S.tok.format, scope: S.tok.scope }, DEMO_TOKENS[S.tok.format]); render(); return; }
+    S.tok.busy = true; render(); send({ type: 'tokens-export', format: S.tok.format, scope: S.tok.scope }); return;
+  }
+  if (act === 'tok-copy') { if (S.tok.out) copy(S.tok.out.text); return; }
+  if (act === 'tok-dl') { const o = S.tok.out; if (o) { download(o.file, new TextEncoder().encode(o.text), 'text/plain'); toast('Downloaded ' + o.file); } return; }
   if (act === 'ov-compare') { S.ovOpen = !S.ovOpen; render(); return; }
   if (act === 'props-more') { S.propsAll = !S.propsAll; render(); return; }
   if (act === 'lp-list' || act === 'lp-code') { S.lp = act.slice(3); render(); return; }
@@ -1426,7 +1516,7 @@ document.addEventListener('click', e => {
   if (act === 'ann-del') { send({ type: 'annotate-remove', id: sp.id, index: +a.getAttribute('data-idx') }); return; }
   if (act === 'res-add') { const u = $('res-url').value.trim(); if (!/^https?:\/\/\S+$/.test(u)) return toast('Enter a full https:// link'); send({ type: 'devres-add', id: sp.id, url: u, name: $('res-name').value.trim() }); S.form = null; return; }
   if (act === 'res-del') { send({ type: 'devres-remove', id: sp.id, url: a.getAttribute('data-url') }); return; }
-  if (act === 'map-save') { const n = $('map-name').value.trim(); if (!/^[A-Za-z_$][\w$.]*$/.test(n)) return toast('Use a valid component name, e.g. Button'); send({ type: 'map-save', key: sp.component.mapKey, name: n, path: $('map-path').value.trim() }); S.form = null; S.code = {}; pending = {}; return; }
+  if (act === 'map-save') { const n = $('map-name').value.trim(); if (!/^[A-Za-z_$][\w$.]*$/.test(n)) return toast('Use a valid component name, e.g. Button'); const mp = $('map-path').value.trim(); if (mp && !/^[\w@~.\-][\w@~.\/\-]{0,199}$/.test(mp)) return toast('Import path can only use letters, numbers and @ ~ . / - _'); send({ type: 'map-save', key: sp.component.mapKey, name: n, path: $('map-path').value.trim() }); S.form = null; S.code = {}; pending = {}; return; }
   if (act === 'map-del') { send({ type: 'map-remove', key: sp.component.mapKey }); S.code = {}; pending = {}; return; }
   if (act === 'gate-off') { setSetting({ gate: 'off' }); toast('Gate off — turn it back on from ⋯'); }
   else if (act === 'mark') { const n = $('note'); mark(S.data.target.id, a.getAttribute('data-status'), n ? n.value.trim() : ''); }
@@ -1452,7 +1542,7 @@ document.addEventListener('input', e => {
 
 window.onmessage = ev => {
   const m = ev.data && ev.data.pluginMessage; if (!m) return;
-  if (['loading', 'state', 'code', 'download', 'error', 'thumb', 'project', 'design-shot', 'fonts-updated', 'ann-result'].indexOf(m.type) === -1) return;
+  if (['loading', 'state', 'code', 'download', 'error', 'thumb', 'project', 'design-shot', 'fonts-updated', 'ann-result', 'tokens'].indexOf(m.type) === -1) return;
   S.got = true; S.demo = false;
   if (m.type === 'loading') $('bar').classList.add('on');
   else if (m.type === 'state') {
@@ -1470,6 +1560,7 @@ window.onmessage = ev => {
     document.querySelectorAll('[data-thumb="' + CSS.escape(m.id) + '"]').forEach(x => { x.innerHTML = '<img src="' + S.thumbs[m.id] + '" alt="">'; });
   }
   else if (m.type === 'code') { S.code[m.lang] = m.out; pending[m.lang] = false; render(); }
+  else if (m.type === 'tokens') { S.tok = S.tok || { format: m.format, scope: m.scope }; S.tok.busy = false; S.tok.out = Object.assign({ format: m.format, scope: m.scope }, m.out); render(); }
   else if (m.type === 'fonts-updated') { S.code = {}; pending = {}; render(); }
   else if (m.type === 'ann-result') { if (!m.ok) { S.annHelp = true; render(); } }
   else if (m.type === 'download') {
@@ -1502,6 +1593,12 @@ window.onmessage = ev => {
 /* ===================================================================
  * Demo data — only when opened outside Figma
  * =================================================================== */
+const DEMO_TOKENS = {
+  css: { file: 'tokens.css', lang: 'css', stats: { variables: 6, modes: 2, styles: 0 }, text: '/* Design tokens \u2014 exported from Figma by DevReady (all local variables and styles) */\n:root {\n  --blue-500: #0D99FF;\n  --color-brand-primary: var(--blue-500);\n  --color-surface: #FFFFFF;\n  --spacing-200: 8px;\n  --spacing-400: 16px;\n  --radius-300: 12px;\n}\n\n[data-theme="dark"] {\n  --blue-500: #3DADFF;\n  --color-surface: #121726;\n}\n\n[data-density="compact"] {\n  --spacing-400: 12px;\n}\n' },
+  json: { file: 'tokens.json', lang: 'json', stats: { variables: 3, modes: 1, styles: 0 }, text: '{\n  "color": {\n    "brand": {\n      "primary": {\n        "$type": "color",\n        "$value": "{blue.500}",\n        "$extensions": { "com.figma": { "collection": "Theme", "modes": { "Dark": "#3DADFF" } } }\n      }\n    }\n  },\n  "spacing": { "400": { "$type": "dimension", "$value": "16px" } }\n}\n' },
+  scss: { file: 'tokens.scss', lang: 'css', stats: { variables: 3, modes: 1, styles: 0 }, text: '// Design tokens \u2014 exported from Figma by DevReady\n\n$blue-500: #0D99FF;\n$blue-500--dark: #3DADFF;\n$color-brand-primary: $blue-500;\n$spacing-400: 16px;\n' },
+  tailwind: { file: 'theme.css', lang: 'css', stats: { variables: 3, modes: 1, styles: 0 }, text: '/* Design tokens \u2014 exported from Figma by DevReady */\n@import "tailwindcss";\n\n@theme {\n  --color-blue-500: #0D99FF;\n  --color-brand-primary: var(--color-blue-500);\n  --spacing-400: 16px;\n}\n\n[data-theme="dark"] {\n  --color-blue-500: #3DADFF;\n}\n' }
+};
 const DEMO = {
   type: 'state', mode: 'inspect', editor: 'figma', isDev: false, count: 1,
   settings: { gate: 'strict', unit: 'px', remBase: 16, colorFormat: 'hex', pluginFlag: true },
@@ -1528,10 +1625,18 @@ const DEMO = {
     layers: { ancestors: [{ id: '1:1', name: 'Checkout / Mobile', type: 'FRAME' }, { id: '1:15', name: 'Footer', type: 'FRAME' }],
       children: [{ id: '1:21', name: 'icon/lock', type: 'INSTANCE', visible: true, kids: 1 }, { id: '1:23', name: 'Pay ₹1,499', type: 'TEXT', visible: true, kids: 0 }, { id: '1:22', name: 'icon/arrow-right', type: 'INSTANCE', visible: true, kids: 1 }], more: 0 }
   },
-  changes: { at: '2026-10-18T10:42:00.000Z', count: 3, containerId: '1:1', containerName: 'Checkout / Mobile', changes: [
-    { id: '1:20', name: 'Pay button', kind: 'changed', parts: ['style'] }, { id: '1:23', name: 'Pay ₹1,499', kind: 'changed', parts: ['text'] }, { id: null, name: 'Promo banner', kind: 'removed', parts: [] }] },
+  changes: { at: '2026-10-18T10:42:00.000Z', values: true, count: 3, containerId: '1:1', containerName: 'Checkout / Mobile', changes: [
+    { id: '1:20', name: 'Pay button', kind: 'changed', parts: ['style'], detail: [{ prop: 'Fill', before: '#7B61FF', after: '#0D99FF' }, { prop: 'Radius', before: '8', after: '12' }] },
+    { id: '1:23', name: 'Pay ₹1,499', kind: 'changed', parts: ['text'], detail: [{ prop: 'Text', before: 'Pay ₹1,299', after: 'Pay ₹1,499' }] },
+    { id: null, name: 'Promo banner', kind: 'removed', parts: [] }] },
   css: '/* Auto layout */\ndisplay: flex;\npadding: 12px 24px;\njustify-content: center;\nalign-items: center;\ngap: var(--space-200, 8px);\n\n/* Layout */\nalign-self: stretch;\n\n/* Style */\nborder-radius: var(--radius-300, 12px);\nbackground: var(--brand-primary, #0D99FF);\nbox-shadow: 0 4px 12px 0 rgba(13, 153, 255, 0.25);',
   tailwind: 'flex px-6 py-3 justify-center items-center gap-[var(--space-200,8px)] self-stretch rounded-[var(--radius-300,12px)] bg-[var(--brand-primary,#0D99FF)] shadow-[0_4px_12px_0_rgba(13,153,255,0.25)]',
+  a11y: { scanned: 12, limited: false, counts: { fail: 2, warn: 2, pass: 3, unknown: 0 }, items: [
+    { id: '1:23', name: 'Pay \u20b91,499', kind: 'contrast', status: 'fail', ratio: 3.02, need: 4.5, aaa: false, large: false, fg: '#7BC4FF', bg: '#0D99FF', assumed: false, size: 14 },
+    { id: '1:30', name: 'Promo terms', kind: 'contrast', status: 'fail', ratio: 2.48, need: 4.5, aaa: false, large: false, fg: '#9CA3AF', bg: '#FFFFFF', assumed: true, size: 12 },
+    { id: '1:20', name: 'Pay button', kind: 'target', status: 'warn', detail: '327\u00d740 \u2014 aim for 44\u00d744 on touch screens' },
+    { id: '1:31', name: 'Close', kind: 'label', status: 'warn', detail: 'No visible text \u2014 give it an accessible name (aria-label / contentDescription)' },
+    { id: '1:25', name: 'Subtotal', kind: 'contrast', status: 'pass', ratio: 12.63, need: 4.5, aaa: true, large: false, fg: '#111827', bg: '#FFFFFF', assumed: false, size: 14 }] },
   measure: { mode: 'inset', outer: 'Checkout / Mobile', inner: 'Button', top: 712, right: 24, bottom: 52, left: 24, segments: [] },
   assets: [{ id: '1:20', name: 'Pay button', type: 'INSTANCE', kind: 'selection', w: 327, h: 48 }, { id: '1:21', name: 'icon/lock', type: 'INSTANCE', kind: 'icon', w: 20, h: 20 }, { id: '1:22', name: 'icon/arrow-right', type: 'INSTANCE', kind: 'icon', w: 20, h: 20 }]
 };

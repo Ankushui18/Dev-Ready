@@ -1,0 +1,20 @@
+# dependencies
+node_modules/
+
+# build output
+devready-plugin.zip
+dist/
+*.tgz
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
+
+# logs and local test artifacts
+*.log
+npm-debug.log*
+.pytest_cache/
+__pycache__/

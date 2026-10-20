@@ -17,9 +17,71 @@ const DEFAULT_SETTINGS = {
   unit: 'px',            // 'px' | 'rem'
   remBase: 16,
   colorFormat: 'hex',    // 'hex' | 'rgb' | 'hsl'
-  pluginFlag: true       // also accept the plugin's own "ready" flag (for free plans / Dev Mode)
+  pluginFlag: true,      // also accept the plugin's own "ready" flag (for free plans / Dev Mode)
+  previewFonts: 'google' // 'google' = preview loads public Google Fonts, 'off' = no network at all
 };
 let settings = Object.assign({}, DEFAULT_SETTINGS);
+
+/* ------------------------------------------------------------------ */
+/* UI → main-thread message validation                                 */
+/* Every message from ui.html is checked against a schema before use:  */
+/* unknown types are ignored, unknown fields dropped, values typed and  */
+/* range-checked. The UI is bundled, but this keeps the boundary narrow. */
+/* ------------------------------------------------------------------ */
+const LANG_IDS = ['react-tailwind', 'react-css', 'html-css', 'html-single', 'vue', 'svelte', 'react-native', 'swiftui', 'compose', 'flutter'];
+const MAP_NAME_RE = /^[A-Za-z_$][\w$.]{0,79}$/;
+const MAP_PATH_RE = /^[\w@~.\-][\w@~.\/\-]{0,199}$/;
+const V = {
+  id: v => typeof v === 'string' && /^[\w:;\-]{1,300}$/.test(v) ? v : undefined,
+  str: max => v => v === undefined || v === null ? '' : String(v).slice(0, max),
+  oneOf: list => v => list.indexOf(v) > -1 ? v : undefined,
+  num: (lo, hi) => v => typeof v === 'number' && isFinite(v) ? Math.min(hi, Math.max(lo, v)) : undefined,
+  int: (lo, hi) => v => typeof v === 'number' && Number.isInteger(v) && v >= lo && v <= hi ? v : undefined,
+  bool: v => !!v,
+  bytes: max => v => v instanceof Uint8Array && v.length > 0 && v.length <= max ? v : undefined,
+  url: v => typeof v === 'string' && v.length <= 2000 && /^https?:\/\/[^\s"'<>]+$/i.test(v) ? v : undefined,
+  re: (re, max) => v => typeof v === 'string' && v.length <= max && re.test(v) ? v : undefined,
+  opt: f => v => v === undefined || v === null || v === '' ? '' : f(v)
+};
+const EXPORT_ITEM = { id: V.id, format: V.oneOf(['PNG', 'JPG', 'SVG', 'PDF']), scale: V.num(0.5, 4) };
+const SETTINGS_SCHEMA = { gate: V.oneOf(['strict', 'off']), unit: V.oneOf(['px', 'rem']), remBase: V.int(8, 32), colorFormat: V.oneOf(['hex', 'rgb', 'hsl']), pluginFlag: V.bool, previewFonts: V.oneOf(['google', 'off']) };
+const MSG_SCHEMA = {
+  'ui-ready': {}, 'measure-native': {}, 'measure-clear': {}, 'notes-clear': {}, 'redlines': {}, 'clear-redlines': {},
+  'settings': { settings: v => { if (!v || typeof v !== 'object') return undefined; const o = {}; Object.keys(SETTINGS_SCHEMA).forEach(k => { if (k in v) { const x = SETTINGS_SCHEMA[k](v[k]); if (x !== undefined) o[k] = x; } }); return o; } },
+  'select': { id: V.id }, 'goto': { id: V.id }, 'design-shot': { id: V.id }, 'baseline-save': { id: V.id },
+  'mark': { id: V.id, status: V.opt(V.oneOf(['READY_FOR_DEV', 'COMPLETED'])), note: V.str(2000) },
+  'export': EXPORT_ITEM,
+  'export-all': { items: v => Array.isArray(v) ? v.slice(0, 300).map(i => checkFields(i || {}, EXPORT_ITEM)).filter(Boolean) : undefined, zipName: V.opt(V.re(/^[\w .\-]{1,100}\.zip$/, 104)) },
+  'gen-code': { lang: V.oneOf(LANG_IDS) }, 'tokens-export': { format: V.oneOf(['css', 'scss', 'json', 'tailwind']), scope: V.oneOf(['selection', 'file']) }, 'export-project': { lang: V.oneOf(LANG_IDS) },
+  'font-upload': { family: V.re(/^[^|]{1,100}$/, 100), key: V.re(/^[01],[1-9]00$/, 5), ext: V.oneOf(['woff2', 'woff', 'ttf', 'otf']), bytes: V.bytes(2.5 * 1024 * 1024), name: V.str(200), last: V.bool },
+  'font-remove': { family: V.re(/^[^|]{1,100}$/, 100), key: V.re(/^[01],[1-9]00$/, 5) },
+  'annotate-add': { id: V.id, label: V.str(5000), prop: V.opt(V.re(/^[A-Za-z]{1,40}$/, 40)), cat: V.opt(V.re(/^[\w:;\-]{1,200}$/, 200)), color: V.opt(V.oneOf(['yellow', 'orange', 'red', 'pink', 'violet', 'blue', 'teal', 'green'])), pin: V.bool },
+  'annotate-remove': { id: V.id, index: V.int(0, 9999) },
+  'devres-add': { id: V.id, url: V.url, name: V.str(200) }, 'devres-remove': { id: V.id, url: V.re(/^\S{1,2000}$/, 2000) },
+  'map-save': { key: V.re(/^[\w:;\-]{1,200}$/, 200), name: V.re(MAP_NAME_RE, 80), path: V.opt(V.re(MAP_PATH_RE, 200)) },
+  'map-remove': { key: V.re(/^[\w:;\-]{1,200}$/, 200) },
+  'notify': { text: V.str(300), error: V.bool },
+  'resize': { w: V.num(360, 1600), h: V.num(420, 1600) }
+};
+/** Returns a cleaned copy with only schema fields, or null if a required field is invalid. */
+function checkFields(src, schema, bad) {
+  const out = {};
+  for (const k of Object.keys(schema)) {
+    const x = schema[k](src[k]);
+    if (x === undefined) { if (bad) bad.field = k; return null; }
+    out[k] = x;
+  }
+  return out;
+}
+/** Validate a UI message. Returns { type, ...fields } or null (ignored). */
+function validateMsg(msg) {
+  if (!msg || typeof msg !== 'object' || typeof msg.type !== 'string' || !Object.prototype.hasOwnProperty.call(MSG_SCHEMA, msg.type)) return null;
+  const bad = {};
+  const out = checkFields(msg, MSG_SCHEMA[msg.type], bad);
+  if (!out) return { type: '__invalid', of: msg.type, field: bad.field };
+  out.type = msg.type;
+  return out;
+}
 
 /* ------------------------------------------------------------------ */
 /* Small utils                                                         */
@@ -495,10 +557,6 @@ function modeList(info) {
 async function safeCSS(node) {
   try { return await node.getCSSAsync(); } catch (e) { return {}; }
 }
-function cssObjToString(obj, unit, base, indent) {
-  const pad = indent || '';
-  return Object.keys(obj).map(k => pad + k + ': ' + remify(obj[k], unit, base) + ';').join('\n');
-}
 
 const CSS_GROUPS = [
   ['Auto layout', /^(display|flex-direction|flex-wrap|justify-content|align-items|align-content|gap|row-gap|column-gap|padding(-.*)?)$/],
@@ -768,7 +826,7 @@ function nodeIsGeneric(node) {
 function cleanCss(raw) {
   const o = {};
   Object.keys(raw || {}).forEach(k => {
-    let v = String(raw[k]).replace(/\/\*[\s\S]*?\*\//g, '').trim();
+    const v = String(raw[k]).replace(/\/\*[\s\S]*?\*\//g, '').trim();
     if (!v) return;
     if (k === 'font-style' && v === 'normal') return;
     o[k] = v;
@@ -899,7 +957,7 @@ async function buildRawNode(node, ctx, isRoot, inInst) {
     const key = el.comp ? el.comp.key : node.id;
     let file = ctx.assetByKey[key];
     if (!file) {
-      let baseName = (el.comp && cleanName(el.comp.variant ? el.comp.name + ' ' + variantSlug(el.comp.variant) : el.comp.name)) ||
+      const baseName = (el.comp && cleanName(el.comp.variant ? el.comp.name + ' ' + variantSlug(el.comp.variant) : el.comp.name)) ||
         (!el.generic && cleanName(node.name)) || (icon ? 'icon' : 'image');
       let fname = baseName, i = 1;
       while (ctx.assetNames[fname]) fname = baseName + '-' + (++i);
@@ -1109,7 +1167,7 @@ function extractComponents(root, ctx) {
       const vals = all.map(l => leaf.kind === 'text' ? l[idx].text : leaf.kind === 'mapped' ? JSON.stringify(l[idx].mapProps) : l[idx].asset.varName);
       if (vals.every(v => v === vals[0])) return;
       if (leaf.kind === 'mapped') { unsafe = true; return; }
-      let pn = camel(leaf.kind === 'img' ? 'icon' : (leaf.base || 'text'));
+      const pn = camel(leaf.kind === 'img' ? 'icon' : (leaf.base || 'text'));
       let p = pn, j = 1; while (propNames[p]) p = pn + (++j); propNames[p] = 1;
       props.push({ idx: idx, name: p, kind: leaf.kind });
     });
@@ -1127,7 +1185,6 @@ function extractComponents(root, ctx) {
 }
 
 /* ---------- renderers ---------- */
-const VOID = { img: 1 };
 function escHtml(s) { return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
 function escAttr(s) { return escHtml(s).replace(/"/g, '&quot;'); }
 function ind(n) { return '  '.repeat(n); }
@@ -1139,6 +1196,7 @@ function htmlText(el) {
 }
 function renderHTML(el, d) {
   const attrs = ' class="' + el.cls + '"' + Object.keys(el.attrs).filter(k => k !== 'alt').map(k => ' ' + k + '="' + escAttr(el.attrs[k]) + '"').join('');
+  if (el.kind === 'img' && el.asset.svg) return ind(d) + el.asset.svg.replace(/^<svg\b/, '<svg class="' + el.cls + '"' + (el.attrs.alt ? ' role="img" aria-label="' + escAttr(el.attrs.alt) + '"' : ' aria-hidden="true"') + ' focusable="false"');
   if (el.kind === 'img') return ind(d) + '<img' + attrs + ' src="' + (el.asset.src || 'assets/' + el.asset.file) + '" alt="' + escAttr(el.attrs.alt) + '"' + (el.attrs.alt ? '' : ' aria-hidden="true"') + ' />';
   if (el.kind === 'text') return ind(d) + '<' + el.tag + attrs + '>' + htmlText(el) + '</' + el.tag + '>';
   if (!el.children.length) return ind(d) + '<' + el.tag + attrs + '></' + el.tag + '>';
@@ -1203,6 +1261,7 @@ function stylesheet(ctx, rootCls, unit, base, pre) {
   parts.push(resetBlock(rootCls));
   const rules = ctx.order.map(r => cssBlock('.' + r.cls, r.css, unit, base)).filter(Boolean);
   parts.push(rules.join('\n\n'));
+  if (ctx.embed && ctx.embed.list.length) parts.push('/* Embedded images (data URIs): swap for real files when you ship */\n:root {\n' + ctx.embed.list.map(x => '  ' + x.name + ': ' + x.value + ';').join('\n') + '\n}');
   return parts.join('\n\n') + '\n';
 }
 
@@ -1210,13 +1269,6 @@ function stylesheet(ctx, rootCls, unit, base, pre) {
 /* Fonts: Google Fonts → <link>; other fonts → @font-face that uses     */
 /* the installed copy, or the file the user uploaded (embedded/bundled) */
 /* ------------------------------------------------------------------ */
-const POPULAR_GOOGLE = ('inter,roboto,open sans,lato,montserrat,poppins,source sans 3,raleway,nunito,nunito sans,ubuntu,rubik,work sans,noto sans,dm sans,manrope,space grotesk,' +
-  'plus jakarta sans,outfit,sora,urbanist,figtree,lexend,mulish,karla,barlow,ibm plex sans,ibm plex mono,ibm plex serif,jetbrains mono,fira sans,fira code,oswald,playfair display,' +
-  'merriweather,lora,pt sans,pt serif,roboto mono,roboto slab,roboto condensed,archivo,be vietnam pro,red hat display,red hat text,josefin sans,quicksand,cabin,libre baskerville,' +
-  'crimson text,eb garamond,cormorant garamond,bebas neue,anton,dm serif display,space mono,inconsolata,source code pro,noto serif,heebo,hind,kanit,prompt,mukta,titillium web,' +
-  'exo 2,oxygen,assistant,onest,geist,geist mono,instrument sans,instrument serif,bricolage grotesque,schibsted grotesk,albert sans,epilogue,syne,unbounded,chivo,public sans,' +
-  'overpass,asap,signika,varela round,zilla slab,spectral,alegreya,bitter,arvo,abril fatface,pacifico,dancing script,caveat,satisfy,lobster,comfortaa,righteous,orbitron,' +
-  'rajdhani,teko,saira,chakra petch,tektur,audiowide,hanken grotesk,golos text,mona sans,hubot sans,league spartan,archivo black,inter tight,noto sans display').split(',');
 const SYSTEM_FONTS = {
   sans: /^(sf pro( (text|display|rounded))?|sf compact( (text|display|rounded))?|system-ui|-apple-system|blinkmacsystemfont|helvetica( neue)?|arial|segoe ui|tahoma|verdana|trebuchet ms)$/i,
   serif: /^(new york( (small|medium|large|extra large))?|times( new roman)?|georgia)$/i,
@@ -1228,6 +1280,9 @@ const STACK = {
   mono: 'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace'
 };
 function fontKind(fam) {
+  const g = gfLookup(fam);
+  if (g && (g.cat === 'm' || g.cat === 'r')) return g.cat === 'm' ? 'mono' : 'serif';
+  if (g && g.cat === 's') return 'sans';
   const f = fam.toLowerCase();
   if (/mono|code|courier|menlo|consolas/.test(f)) return 'mono';
   if (!/sans/.test(f) && /serif|times|georgia|garamond|playfair|merriweather|lora|baskerville|caslon|bodoni|new york|didot|spectral|crimson|cormorant|bitter|arvo/.test(f)) return 'serif';
@@ -1252,40 +1307,54 @@ function collectFonts(node, ctx) {
   try { const segs = node.getStyledTextSegments(['fontName', 'fontWeight']); if (segs && segs.length) { segs.forEach(s => add(s.fontName, s.fontWeight)); return; } } catch (e) { /* ignore */ }
   try { add(node.fontName, isMixed(node.fontWeight) ? undefined : node.fontWeight); } catch (e) { /* ignore */ }
 }
-function timed(p, ms) { return Promise.race([p, new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), ms))]); }
 const sortKeys = keys => keys.slice().sort((a, b) => { const x = a.split(',').map(Number), y = b.split(',').map(Number); return x[0] - y[0] || x[1] - y[1]; });
-const gMem = {};
-/** Is `fam` on Google Fonts, and which of the used weights/styles exist there? Cached per user. */
-async function googleCheck(fam, keys) {
-  const ck = fam + '|' + sortKeys(keys).join(';');
-  if (gMem[ck]) return gMem[ck];
-  let store = {};
-  try { store = (await figma.clientStorage.getAsync('gfonts-v1')) || {}; } catch (e) { /* ignore */ }
-  if (store[ck]) return (gMem[ck] = store[ck]);
-  const base = 'https://fonts.googleapis.com/css2?family=' + encodeURIComponent(fam).replace(/%20/g, '+');
-  let res;
-  try {
-    if (typeof fetch !== 'function') throw new Error('no fetch');
-    const probe = await timed(fetch(base), 2500);
-    if (probe.status !== 200) res = { google: false, ok: [] };
-    else {
-      const oks = await Promise.all(keys.map(k => timed(fetch(base + ':ital,wght@' + k), 2500).then(r => r.status === 200 ? k : null).catch(() => null)));
-      res = { google: true, ok: sortKeys(oks.filter(Boolean)) };
-      if (!res.ok.length) res.ok = ['0,400'];
-    }
-    store[ck] = res;
-    try { await figma.clientStorage.setAsync('gfonts-v1', store); } catch (e) { /* ignore */ }
-  } catch (e) {
-    const known = POPULAR_GOOGLE.indexOf(fam.toLowerCase()) > -1; // offline fallback
-    res = { google: known, ok: known ? sortKeys(keys) : [], offline: true };
+/**
+ * Is `fam` on Google Fonts, and which of the used weights/styles exist there?
+ * Answered from the bundled catalog (GF_DATA, below), so the plugin never sends
+ * font names over the network to find out. Private/proprietary family names
+ * therefore never leave Figma; only public Google families are ever linked.
+ */
+function googleCheck(fam, keys) {
+  const g = gfLookup(fam);
+  if (!g) return { google: false, ok: [] };
+  const hasItalic = (g.mask >> 9) > 0;
+  const has = k => {
+    const p = k.split(',').map(Number), it = p[0] === 1, w = p[1];
+    if (it && !hasItalic) return false;
+    if (g.min && w >= g.min && w <= g.max) return true; // variable font: any weight in range
+    const i = w / 100 - 1;
+    return Number.isInteger(i) && i >= 0 && i < 9 && ((g.mask >> (i + (it ? 9 : 0))) & 1) === 1;
+  };
+  let ok = keys.filter(has);
+  if (!ok.length) {
+    // none of the used styles exist: link the closest upright weight instead of nothing
+    const want = +(keys[0] || '0,400').split(',')[1];
+    let best = 400, bd = 1e9;
+    for (let i = 0; i < 9; i++) if ((g.mask >> i) & 1) { const w = (i + 1) * 100, dd = Math.abs(w - want); if (dd < bd) { bd = dd; best = w; } }
+    ok = ['0,' + best];
   }
-  return (gMem[ck] = res);
+  return { google: true, ok: sortKeys(ok), family: g.family };
 }
 function googleHref(list) {
   return 'https://fonts.googleapis.com/css2?' + list.map(g => {
     const ital = g.keys.some(k => k[0] === '1');
     return 'family=' + encodeURIComponent(g.family).replace(/%20/g, '+') + ':' + (ital ? 'ital,wght@' + g.keys.join(';') : 'wght@' + g.keys.map(k => k.split(',')[1]).join(';'));
   }).join('&') + '&display=swap';
+}
+/* Google Fonts catalog (fonts.google.com/metadata/fonts, 1950 families).
+   Record: family|category(s sans, r serif, m mono, d display, h handwriting)|weights|wghtMin-wghtMax
+   weights = base-36 bitmask: bits 0-8 = 100..900 upright, bits 9-17 = 100..900 italic. */
+const GF_DATA = 'ABeeZee|s|360;ADLaM Display|d|8;AR One Sans|s|3c|400-700;Abel|s|8;Abhaya Libre|r|6w;Aboreto|d|8;Abril Fatface|d|8;Abyssinica SIL|r|8;Aclonica|s|8;Acme|s|8;Actor|s|8;Adamina|r|8;Advent Pro|s|5m9r|100-900;Afacad|s|1bi0|400-700;Afacad Flux|s|e7|100-1000;Agbalumo|d|8;Agdasima|s|20;Agu Display|d|8;Aguafina Script|h|8;Akatab|s|e0;Akaya Kanadaka|d|8;Akaya Telivigala|d|8;Akronim|d|8;Akshar|s|3g|300-700;Akt|s|e7|100-900;Aladin|d|8;Alan Sans|s|e4|300-900;Alata|s|8;Alatsi|s|8;Albert Sans|s|5m9r|100-900;Aldrich|s|8;Alef|s|20;Alegreya|r|5ji0|400-900;Alegreya SC|r|56u0;Alegreya Sans|s|58t9;Alegreya Sans SC|s|58t9;Aleo|r|5m9r|100-900;Alex Brush|h|8;Alexandria|s|e7|100-900;Alfa Slab One|d|8;Alice|r|8;Alien Block|d|8;Alike|r|8;Alike Angular|r|8;Alkalami|r|8;Alkatra|d|3c|400-700;Allan|d|20;Allerta|s|8;Allerta Stencil|s|8;Allison|h|8;Allkin|d|8;Allura|h|8;Almarai|s|5o;Almendra|r|si0;Almendra Display|d|8;Almendra SC|r|8;Alumni Sans|s|5m9r|100-900;Alumni Sans Collegiate One|s|360;Alumni Sans Inline One|d|360;Alumni Sans Pinstripe|s|360;Alumni Sans SC|s|5m9r|100-900;Alyamama|r|e4|300-900;Amarante|d|8;Amaranth|s|si0;Amarna|s|1e9r|100-700;Amatic SC|h|20;Amethysta|r|8;Amiko|s|2w;Amiri|r|si0;Amiri Quran|r|8;Amita|h|20;Anaheim|s|6w|400-800;Ancizar Sans|s|5m9r|100-1000;Ancizar Serif|r|5l30|300-900;Andada Pro|r|2q60|400-840;Andika|s|si0;Anek Bangla|s|73|100-800;Anek Devanagari|s|73|100-800;Anek Gujarati|s|73|100-800;Anek Gurmukhi|s|73|100-800;Anek Kannada|s|73|100-800;Anek Latin|s|73|100-800;Anek Malayalam|s|73|100-800;Anek Odia|s|73|100-800;Anek Tamil|s|73|100-800;Anek Telugu|s|73|100-800;Angkor|d|8;Annapurna SIL|r|20;Annie Use Your Telescope|h|8;Anonymous Pro|m|si0;Anta|s|8;Antic|s|8;Antic Didone|r|8;Antic Slab|r|8;Anton|s|8;Anton SC|s|8;Antonio|s|3j|100-700;Anuphan|s|3j|100-700;Anybody|d|5m9r|100-900;Aoboshi One|r|8;Arapey|r|360;Arbutus|r|8;Arbutus Slab|r|8;Architects Daughter|h|8;Archivo|s|5m9r|100-900;Archivo Black|s|8;Archivo Narrow|s|1bi0|400-700;Are You Serious|h|8;Aref Ruqaa|r|20;Aref Ruqaa Ink|r|20;Arima|d|3j|100-700;Arimo|s|1bi0|400-700;Arizonia|h|8;Armata|s|8;Arsenal|s|si0;Arsenal SC|s|si0;Artifika|r|8;Arvo|r|si0;Arya|s|20;Asap|s|5m9r|100-900;Asap Condensed|s|5lvi;Asap Sharp|s|5m9r|100-900;Asar|r|8;Asimovian|s|8;Asset|d|8;Assistant|s|72|200-800;Asta Sans|s|70|300-800;Astloch|d|20;Asul|r|20;Athiti|s|3i;Atkinson Hyperlegible|s|si0;Atkinson Hyperlegible Mono|s|2sji|200-800;Atkinson Hyperlegible Next|s|2sji|200-800;Atma|d|3g;Atomic Age|d|8;Aubrey|d|8;Audiowide|d|8;Autour One|d|8;Average|r|8;Average Sans|s|8;Averia Gruesa Libre|d|8;Averia Libre|d|u30;Averia Sans Libre|d|u30;Averia Serif Libre|d|u30;Azeret Mono|m|5m9r|100-900;B612|s|si0;B612 Mono|m|si0;BBH Bartle|s|8;BBH Bogle|s|8;BBH Hegarty|s|8;BIZ UDGothic|s|20;BIZ UDMincho|r|20;BIZ UDPGothic|s|20;BIZ UDPMincho|r|20;BJCree|r|3c;Babylonica|h|8;Bacasime Antique|r|8;Bad Script|h|8;Badeen Display|d|8;Bagel Fat One|d|8;Bahiana|d|8;Bahianita|d|8;Bai Jamjuree|s|1dvi;Bakbak One|d|8;Ballet|h|8;Baloo 2|d|6w|400-800;Baloo Bhai 2|d|6w|400-800;Baloo Bhaijaan 2|d|6w|400-800;Baloo Bhaina 2|d|6w|400-800;Baloo Chettan 2|d|6w|400-800;Baloo Da 2|d|6w|400-800;Baloo Paaji 2|d|6w|400-800;Baloo Tamma 2|d|6w|400-800;Baloo Tammudu 2|d|6w|400-800;Baloo Thambi 2|d|6w|400-800;Balsamiq Sans|d|si0;Balthazar|r|8;Bangers|d|8;Barlow|s|5m9r;Barlow Condensed|s|5m9r;Barlow Semi Condensed|s|5m9r;Barriecito|d|8;Barrio|d|8;Basic|s|8;Baskervville|r|1bi0|400-700;Baskervville SC|r|3c|400-700;Battambang|d|99;Baumans|d|8;Bayon|s|8;Be Vietnam Pro|s|5m9r;Beau Rivage|h|8;Bebas Neue|s|8;Beiruti|s|e6|200-900;Belanosima|s|2w;Belgrano|r|8;Bellefair|r|8;Belleza|s|8;Bellota|d|u30;Bellota Text|d|u30;BenchNine|s|24;Benne|r|8;Bentham|r|8;Berkshire Swash|h|8;Besley|r|5ji0|400-900;Betania Patmos|h|8;Betania Patmos GDL|h|8;Betania Patmos In|h|8;Betania Patmos In GDL|h|8;Beth Ellen|h|8;Bevan|r|360;BhuTuka Expanded One|r|8;Big Shoulders|d|e7|100-900;Big Shoulders Inline|d|e7|100-900;Big Shoulders Stencil|d|e7|100-900;Bigelow Rules|d|8;Bigshot One|d|8;Bilbo|h|8;Bilbo Swash Caps|h|8;BioRhyme|r|72|200-800;BioRhyme Expanded|r|5q;Birthstone|h|8;Birthstone Bounce|h|o;Biryani|s|dq;Bitcount|d|e7|100-900;Bitcount Grid Double|d|e7|100-900;Bitcount Grid Double Ink|d|e7|100-900;Bitcount Grid Single|d|e7|100-900;Bitcount Grid Single Ink|d|e7|100-900;Bitcount Ink|d|e7|100-900;Bitcount Prop Double|d|e7|100-900;Bitcount Prop Double Ink|d|e7|100-900;Bitcount Prop Single|d|e7|100-900;Bitcount Prop Single Ink|d|e7|100-900;Bitcount Single|d|e7|100-900;Bitcount Single Ink|d|e7|100-900;Bitter|r|5m9r|100-900;Black And White Picture|d|8;Black Han Sans|s|8;Black Ops One|d|8;Blaka|d|8;Blaka Hollow|d|8;Blaka Ink|d|8;Blinker|s|dr;Bodoni Moda|r|5ji0|400-900;Bodoni Moda SC|r|5ji0|400-900;Bokor|d|8;Boldonse|d|8;Bona Nova|r|37s;Bona Nova SC|r|37s;Bonbon|h|8;Bonheur Royale|h|8;Boogaloo|d|8;Borel|h|8;Bowlby One|d|8;Bowlby One SC|d|8;Bpmf Huninn|s|8;Bpmf Iansui|h|8;Bpmf Zihi Kai Std|s|8;Braah One|s|8;Brawler|r|20;Bree Serif|r|8;Bricolage Grotesque|s|72|200-800;Bruno Ace|d|8;Bruno Ace SC|d|8;Brygada 1918|r|1bi0|400-700;Bubblegum Sans|d|8;Bubbler One|s|8;Buda|d|4;Buenard|r|3c|400-700;Bungee|d|8;Bungee Hairline|d|8;Bungee Inline|d|8;Bungee Outline|d|8;Bungee Shade|d|8;Bungee Spice|d|8;Bungee Tint|d|8;Butcherman|d|8;Butterfly Kids|h|8;Bytesized|s|8;Caacupe One|d|8;Cabin|s|1bi0|400-700;Cabin Condensed|s|3c;Cabin Sketch|d|20;Cactus Classical Serif|r|8;Caesar Dressing|d|8;Cagliostro|s|8;Cairo|s|e6|200-1000;Cairo Play|s|e6|200-1000;Cal Sans|s|8;Caladea|r|si0;Calistoga|d|8;Calligraffitti|h|8;Cambay|s|si0;Cambo|r|8;Candal|s|8;Cantarell|s|si0;Cantata One|r|8;Cantora One|s|8;Caprasimo|d|8;Capriola|s|8;Caramel|h|8;Carattere|h|8;Cardo|r|37s;Carlito|s|si0;Carme|s|8;Carrois Gothic|s|8;Carrois Gothic SC|s|8;Carter One|d|8;Cascadia Code|s|1dvi|200-700;Cascadia Mono|s|1dvi|200-700;Castoro|r|360;Castoro Titling|d|8;Catamaran|s|e7|100-900;Caudex|r|si0;Cause|h|e7|100-900;Caveat|h|3c|400-700;Caveat Brush|h|8;Cedarville Cursive|h|8;Ceviche One|d|8;Chakra Petch|s|1d30;Changa|s|72|200-800;Changa One|d|360;Chango|d|8;Charis SIL|r|si0;Charm|h|20;Charmonman|h|20;Chathura|s|5p;Chau Philomene One|s|360;Chela One|d|8;Chelsea Market|d|8;Chenla|d|8;Cherish|h|8;Cherry Bomb One|d|8;Cherry Cream Soda|d|8;Cherry Swash|d|20;Chewy|d|8;Chicle|d|8;Chilanka|h|8;Chiron GoRound TC|s|e6|200-900;Chiron Hei HK|s|5lvi|200-900;Chiron Sung HK|r|5lvi|200-900;Chivo|s|5m9r|100-900;Chivo Mono|m|5m9r|100-900;Chocolate Classical Sans|s|8;Chokokutai|d|8;Chonburi|d|8;Cinzel|r|e0|400-900;Cinzel Decorative|d|94;Clarity City|s|5m9r|100-900;Clicker Script|h|8;Climate Crisis|d|8;Coda|d|3s;Codystar|d|c;Coiny|d|8;Combo|d|8;Comfortaa|d|3g|300-700;Comforter|h|8;Comforter Brush|h|8;Comic Neue|h|u30;Comic Relief|d|20;Coming Soon|h|8;Comme|s|e7|100-900;Commissioner|s|e7|100-900;Concert One|d|8;Condiment|h|8;Content|d|20;Contrail One|d|8;Convergence|s|8;Cookie|h|8;Copse|r|8;Coral Pixels|d|8;Corben|d|20;Corinthia|h|20;Cormorant|r|1d30|300-700;Cormorant Garamond|r|1d30|300-700;Cormorant Infant|r|1d30|300-700;Cormorant SC|r|3g;Cormorant Unicase|r|3g;Cormorant Upright|r|3g;Cossette Texte|s|20;Cossette Titre|s|20;Courgette|h|8;Courier Prime|m|si0;Cousine|m|si0;Coustard|r|7c;Covered By Your Grace|h|8;Crafty Girls|h|8;Creepster|d|8;Crete Round|r|360;Crimson Pro|r|5lvi|200-900;Crimson Text|r|1560;Croissant One|d|8;Crushed|d|8;Cuprum|s|1bi0|400-700;Cute Font|d|8;Cutive|r|8;Cutive Mono|m|8;DM Mono|m|b30;DM Sans|s|5m9r|100-1000;DM Serif Display|r|360;DM Serif Text|r|360;Dai Banna SIL|r|1d30;Damion|h|8;Dancing Script|h|3c|400-700;Danfo|r|8;Dangrek|d|8;Darker Grotesque|s|e4|300-900;Darumadrop One|d|8;Datatype|m|e7|100-900;David Libre|r|2g;Dawning of a New Day|h|8;Days One|s|8;Dekko|h|8;Dela Gothic One|d|8;Delicious Handrawn|h|8;Delius|h|8;Delius Swash Caps|h|8;Delius Unicase|h|20;Della Respira|r|8;Denk One|s|8;Devonshire|h|8;Dhurjati|s|8;Didact Gothic|s|8;Diphylleia|r|8;Diplomata|d|8;Diplomata SC|d|8;Do Hyeon|s|8;Dokdo|d|8;Domine|r|3c|400-700;Donegal One|r|8;Dongle|s|24;Doppio One|s|8;Dorsa|s|8;Dosis|s|72|200-800;DotGothic16|s|8;Doto|s|e7|100-900;Dr Sugiyama|h|8;Duru Sans|s|8;DynaPuff|d|3c|400-700;Dynalight|d|8;EB Garamond|r|2q60|400-800;Eagle Lake|h|8;East Sea Dokdo|h|8;Eater|d|8;Economica|s|si0;Eczar|r|6w|400-800;Edu AU VIC WA NT Arrows|h|3c|400-700;Edu AU VIC WA NT Dots|h|3c|400-700;Edu AU VIC WA NT Guides|h|3c|400-700;Edu AU VIC WA NT Hand|h|3c|400-700;Edu AU VIC WA NT Pre|h|3c|400-700;Edu NSW ACT Cursive|h|3c|400-700;Edu NSW ACT Foundation|h|3c|400-700;Edu NSW ACT Hand Pre|h|3c|400-700;Edu QLD Beginner|h|3c|400-700;Edu QLD Hand|h|3c|400-700;Edu SA Beginner|h|3c|400-700;Edu SA Hand|h|3c|400-700;Edu TAS Beginner|h|3c|400-700;Edu VIC WA NT Beginner|h|3c|400-700;Edu VIC WA NT Hand|h|3c|400-700;Edu VIC WA NT Hand Pre|h|3c|400-700;El Messiri|s|3c|400-700;Electrolize|s|8;Elms Sans|s|5m9r|100-900;Elsie|d|7c;Elsie Swash Caps|d|7c;Emblema One|d|8;Emilys Candy|d|8;Encode Sans|s|e7|100-900;Encode Sans Condensed|s|e7;Encode Sans Expanded|s|e7;Encode Sans SC|s|e7|100-900;Encode Sans Semi Condensed|s|e7;Encode Sans Semi Expanded|s|e7;Engagement|h|8;Englebert|s|8;Enriqueta|r|3c;Ephesis|h|8;Epilogue|s|5m9r|100-900;Epunda Sans|s|5l30|300-900;Epunda Slab|r|5l30|300-900;Erica One|d|8;Esteban|r|8;Estedad|s|e7|100-900;Estonia|h|8;Euphoria Script|h|8;Ewert|d|8;Exile|d|8;Exo|s|5m9r|100-900;Exo 2|s|5m9r|100-900;Expletus Sans|d|1bi0|400-700;Explora|h|8;Faculty Glyphic|s|8;Fahkwang|s|1dvi;Familjen Grotesk|s|1bi0|400-700;Fanwood Text|r|360;Farro|s|2k;Farsan|d|8;Fascinate|d|8;Fascinate Inline|d|8;Faster One|d|8;Fasthand|d|8;Fauna One|r|8;Faustina|r|2rr0|300-800;Federant|d|8;Federo|s|8;Felipa|h|8;Fenix|r|8;Festive|h|8;Figtree|s|5l30|300-900;Finger Paint|d|8;Finlandica Headline|s|5m9r|100-900;Finlandica Text|s|5m9r|100-900;Fira Code|m|3g|300-700;Fira Mono|m|2g;Fira Sans|s|5m9r;Fira Sans Condensed|s|5m9r;Fira Sans Extra Condensed|s|5m9r;Fjalla One|s|8;Fjord One|r|8;Flamenco|d|c;Flavors|d|8;Fleur De Leah|h|8;Flow Block|d|8;Flow Circular|d|8;Flow Rounded|d|8;Foldit|d|e7|100-900;Fondamento|h|360;Fontdiner Swanky|d|8;Forum|d|8;Fragment Mono|m|360;Francois One|s|8;Frank Ruhl Libre|r|e4|300-900;Fraunces|r|5m9r|100-900;Freckle Face|d|8;Fredericka the Great|d|8;Fredoka|s|3g|300-700;Freehand|d|8;Freeman|d|8;Fresca|s|8;Frijole|d|8;Fruktur|d|360;Fugaz One|d|8;Fuggles|h|8;Funnel Display|d|70|300-800;Funnel Sans|s|2rr0|300-800;Fustat|s|72|200-800;Fuzzy Bubbles|h|20;GFS Didot|r|8;GFS Neohellenic|s|si0;Ga Maamli|d|8;Gabarito|d|e0|400-900;Gabriela|r|8;Gaegu|h|24;Gafata|s|8;Gajraj One|d|8;Galada|d|8;Galdeano|s|8;Galindo|d|8;Gamja Flower|h|8;Gantari|s|5m9r|100-900;Gasoek One|s|8;Gayathri|s|21;Geist|s|5m9r|100-900;Geist Mono|m|5m9r|100-900;Geist Pixel|d|8;Gelasio|r|1bi0|400-700;Gemunu Libre|s|72|200-800;Genos|s|5m9r|100-900;Gentium Book Plus|r|si0;Gentium Plus|r|si0;Geo|s|360;Geologica|s|e7|100-900;Geom|s|5l30|300-900;Geomini|s|72|200-800;Georama|s|5m9r|100-900;Geostar|d|8;Geostar Fill|d|8;Germania One|d|8;Gideon Roman|d|8;Gidole|s|8;Gidugu|s|8;Gilda Display|r|8;Girassol|d|8;Give You Glory|h|8;Glass Antiqua|d|8;Glegoo|r|20;Gloock|r|8;Gloria Hallelujah|h|8;Glory|s|2sxr|100-800;Gluten|d|e7|100-900;Goblin One|d|8;Gochi Hand|h|8;Goldman|d|20;Golos Text|s|e0|400-900;Google Sans|s|1bi0|400-700;Google Sans Code|m|2rr0|300-800;Google Sans Flex|s|e7|1-1000;Gorditas|d|20;Gothic A1|s|e7;Gotu|s|8;Goudy Bookletter 1911|r|8;Gowun Batang|r|20;Gowun Dodum|s|8;Graduate|r|8;Grand Hotel|h|8;Grandiflora One|r|8;Grandstander|d|5m9r|100-900;Grape Nuts|h|8;Gravitas One|d|8;Great Vibes|h|8;Grechen Fuemen|h|8;Grenze|r|5m9r|100-900;Grenze Gotisch|d|e7|100-900;Grey Qo|h|8;Griffy|d|8;Gruppo|s|8;Gudea|s|37s;Gugi|d|8;Gulzar|r|8;Gupter|r|2g;Gurajada|s|8;Gveret Levin|h|8;Gwendolyn|h|20;Habibi|r|8;Hachi Maru Pop|h|8;Hahmlet|r|e7|100-900;Halant|r|3g;Hammersmith One|s|8;Hanalei|d|8;Hanalei Fill|d|8;Handjet|d|e7|100-900;Handlee|h|8;Hanken Grotesk|s|5m9r|100-900;Hanuman|r|e7|100-900;Happy Monkey|d|8;Harmattan|s|3c;Headland One|r|8;Hedvig Letters Sans|s|8;Hedvig Letters Serif|r|8;Heebo|s|e7|100-900;Henny Penny|d|8;Hepta Slab|r|e7|1-900;Herr Von Muellerhoff|h|8;Hi Melody|h|8;Hibur Mono|m|8;Hina Mincho|r|8;Hind|s|3g;Hind Guntur|s|3g;Hind Madurai|s|3g;Hind Mysuru|s|3g;Hind Siliguri|s|3g;Hind Vadodara|s|3g;Holtwood One SC|r|8;Homemade Apple|h|8;Homenaje|s|8;Honk|d|8;Host Grotesk|s|2rr0|300-800;Hubballi|s|8;Hubot Sans|s|5lvi|200-900;Huninn|s|8;Hurricane|h|8;IBM Plex Mono|m|1e9r;IBM Plex Sans|s|1e9r|100-700;IBM Plex Sans Arabic|s|3j;IBM Plex Sans Condensed|s|1e9r;IBM Plex Sans Devanagari|s|3j;IBM Plex Sans Hebrew|s|3j;IBM Plex Sans JP|s|3j;IBM Plex Sans KR|s|3j;IBM Plex Sans Thai|s|3j;IBM Plex Sans Thai Looped|s|3j;IBM Plex Serif|r|1e9r;IM Fell DW Pica|r|360;IM Fell DW Pica SC|r|8;IM Fell Double Pica|r|360;IM Fell Double Pica SC|r|8;IM Fell English|r|360;IM Fell English SC|r|8;IM Fell French Canon|r|360;IM Fell French Canon SC|r|8;IM Fell Great Primer|r|360;IM Fell Great Primer SC|r|8;Iansui|h|8;Ibarra Real Nova|r|1bi0|400-700;Iceberg|d|8;Iceland|d|8;Idiqlat|r|e;Imbue|r|e7|100-900;Imperial Script|h|8;Imprima|s|8;Inclusive Sans|s|1d30|300-700;Inconsolata|m|e6|200-900;Inder|s|8;Indie Flower|h|8;Ingrid Darling|h|8;Inika|r|20;Inknut Antiqua|r|e4;Inria Sans|s|u30;Inria Serif|r|u30;Inspiration|h|8;Instrument Sans|s|1bi0|400-700;Instrument Serif|r|360;Intel One Mono|m|1d30|300-700;Inter|s|5m9r|100-900;Inter Tight|s|5m9r|100-900;Iosevka Charon|m|10f0;Iosevka Charon Mono|m|10f0;Irish Grover|d|8;Island Moments|h|8;Isometra|r|8;Istok Web|s|si0;Italiana|s|8;Italianno|h|8;Itim|h|8;Jacquard 12|d|8;Jacquard 12 Charted|d|8;Jacquard 24|d|8;Jacquard 24 Charted|d|8;Jacquarda Bastarda 9|d|8;Jacquarda Bastarda 9 Charted|d|8;Jacques Francois|r|8;Jacques Francois Shadow|d|8;Jaini|d|8;Jaini Purva|d|8;Jaldi|s|20;Jaro|s|8;Jersey 10|d|8;Jersey 10 Charted|d|8;Jersey 15|d|8;Jersey 15 Charted|d|8;Jersey 20|d|8;Jersey 20 Charted|d|8;Jersey 25|d|8;Jersey 25 Charted|d|8;JetBrains Mono|m|2sxr|100-800;Jim Nightshade|h|8;Joan|r|8;Jockey One|s|8;Jolly Lodger|d|8;Jomhuria|d|8;Jomolhari|r|8;Josefin Sans|s|1e9r|100-700;Josefin Slab|r|1e9r|100-700;Jost|s|5m9r|100-900;Joti One|d|8;Jua|s|8;Judson|r|37s;Julee|h|8;Julius Sans One|s|8;Junge|r|8;Jura|s|3g|300-700;Just Another Hand|h|8;Just Me Again Down Here|h|8;K2D|s|2sxr;Kablammo|d|8;Kadwa|r|20;Kaisei Decol|r|2g;Kaisei HarunoUmi|r|2g;Kaisei Opti|r|2g;Kaisei Tokumin|r|60;Kalam|h|24;Kalnia|r|3j|100-700;Kalnia Glaze|d|3j|100-700;Kameron|r|3c|400-700;Kanchenjunga|s|3c;Kanit|s|5m9r;Kantumruy Pro|s|1e9r|100-700;Kapakana|h|c|300-400;Karantina|d|24;Karla|s|2sji|200-800;Karla Tamil Inclined|s|20;Karla Tamil Upright|s|20;Karma|r|3g;Katibeh|d|8;Kaushan Script|h|8;Kavivanar|h|8;Kavoon|d|8;Kay Pho Du|r|3c;Kdam Thmor Pro|s|8;Keania One|d|8;Kedebideri|s|e0;Kelly Slab|d|8;Kenia|d|8;Khand|s|3g;Khmer|s|8;Khula|s|6k;Kings|h|8;Kirang Haerang|d|8;Kite One|s|8;Kiwi Maru|r|s;Klee One|h|14;Knewave|d|8;KoHo|s|1dvi;Kodchasan|s|1dvi;Kode Mono|m|3c|400-700;Koh Santepheap|r|99;Kolker Brush|h|8;Konkhmer Sleokchher|d|8;Kosugi|s|8;Kosugi Maru|s|8;Kotta One|r|8;Koulen|d|8;Kranky|d|8;Kreon|r|3g|300-700;Kripa|s|e7|100-900;Kristi|h|8;Krona One|s|8;Krub|s|1dvi;Kufam|s|5ji0|400-900;Kulim Park|s|17ji;Kumar One|d|8;Kumar One Outline|d|8;Kumbh Sans|s|e7|100-900;Kurale|r|8;LINE Seed JP|s|5l;LXGW Marker Gothic|s|8;LXGW WenKai Mono TC|m|24;LXGW WenKai TC|h|24;La Belle Aurore|h|8;Labrada|r|5m9r|100-900;Lacquer|d|8;Laila|r|3g;Lakki Reddy|h|8;Lalezar|s|8;Lancelot|d|8;Langar|d|8;Lateef|r|72;Lato|s|3nt9;Lavishly Yours|h|8;League Gothic|s|8;League Script|h|8;League Spartan|s|e7|100-900;Leckerli One|h|8;Ledger|r|8;Lekton|m|37s;Lemon|d|8;Lemonada|d|3g|300-700;Lexend|s|e7|100-900;Lexend Deca|s|e7|100-900;Lexend Exa|s|e7|100-900;Lexend Giga|s|e7|100-900;Lexend Mega|s|e7|100-900;Lexend Peta|s|e7|100-900;Lexend Tera|s|e7|100-900;Lexend Zetta|s|e7|100-900;Libertinus Keyboard|d|8;Libertinus Math|d|8;Libertinus Mono|m|8;Libertinus Sans|s|37s;Libertinus Serif|r|1560;Libertinus Serif Display|d|8;Libre Barcode 128|d|8;Libre Barcode 128 Text|d|8;Libre Barcode 39|d|8;Libre Barcode 39 Extended|d|8;Libre Barcode 39 Extended Text|d|8;Libre Barcode 39 Text|d|8;Libre Barcode EAN13 Text|d|8;Libre Baskerville|r|1bi0|400-700;Libre Bodoni|r|1bi0|400-700;Libre Caslon Condensed|r|1bi0|400-700;Libre Caslon Display|r|8;Libre Caslon Text|r|37s;Libre Franklin|s|5m9r|100-900;Licorice|h|8;Life Savers|d|5k;Lilex|m|1e9r|100-700;Lilita One|d|8;Lily Script One|d|8;Limelight|d|8;Linden Hill|r|360;Linefont|d|e7|4-1000;Lisu Bosa|r|5lvi;Liter|s|8;Literata|r|5lvi|200-900;Liu Jian Mao Cao|h|8;Livvic|s|47lr;Lobster|d|8;Lobster Two|d|si0;Londrina Outline|d|8;Londrina Shadow|d|8;Londrina Sketch|d|8;Londrina Solid|d|7h;Long Cang|h|8;Lora|r|1bi0|400-700;Love Light|h|8;Love Ya Like A Sister|d|8;Loved by the King|h|8;Lovers Quarrel|h|8;Luckiest Guy|d|8;Lugrasimo|h|8;Lumanosimo|h|8;Lunasima|s|20;Lusitana|r|20;Lustria|r|8;Luxurious Roman|d|8;Luxurious Script|h|8;M PLUS 1|s|e7|100-900;M PLUS 1 Code|m|3j|100-700;M PLUS 1p|s|d9;M PLUS 2|s|e7|100-900;M PLUS Code Latin|s|3j|100-700;M PLUS Rounded 1c|s|d9;M PLUS U|s|e7|100-900;Ma Shan Zheng|h|8;Macondo|d|8;Macondo Swash Caps|d|8;Mada|s|e6|200-900;Madimi One|s|8;Magra|s|20;Maiden Orange|r|8;Maitree|r|3i;Major Mono Display|m|8;Mako|s|8;Mali|h|1dvi;Mallanna|s|8;Maname|r|8;Mandali|s|8;Manjari|s|21;Manrope|s|72|200-800;Mansalva|h|8;Manuale|r|2rr0|300-800;Manufacturing Consent|d|8;Marcellus|r|8;Marcellus SC|r|8;Marck Script|h|8;Margarine|d|8;Marhey|d|3g|300-700;Markazi Text|r|3c|400-700;Marko One|r|8;Marmelad|s|8;Martel|r|dq;Martel Sans|s|dq;Martian Mono|m|73|100-800;Marvel|s|si0;Matangi|s|e4|300-900;Mate|r|360;Mate SC|r|8;Matemasie|s|8;Maven Pro|s|e0|400-900;McLaren|d|8;Mea Culpa|h|8;Meddon|h|8;MedievalSharp|d|8;Medula One|d|8;Meera Inimai|s|8;Megrim|d|8;Meie Script|h|8;Menbere|s|3j|100-700;Meow Script|h|8;Merienda|h|e4|300-900;Merriweather|r|5l30|300-900;Merriweather Sans|s|2rr0|300-800;Metal|d|8;Metal Mania|d|8;Metamorphous|d|8;Metrophobic|s|8;Michroma|s|8;Micro 5|d|8;Micro 5 Charted|d|8;Milonga|d|8;Miltonian|d|8;Miltonian Tattoo|d|8;Mina|s|20;Mingzat|s|8;Miniver|d|8;Miranda Sans|s|1bi0|400-700;Miriam Libre|s|3c|400-700;Mirza|r|3c;Miss Fajardose|h|8;Mitr|s|3i;Mochiy Pop One|s|8;Mochiy Pop P One|s|8;Modak|d|8;Modern Antiqua|d|8;Moderustic|s|70|300-800;Mogra|d|8;Mohave|s|1d30|300-700;Moirai One|d|8;Molengo|s|8;Molle|h|35s;Momo Signature|s|8;Momo Trust Display|s|8;Momo Trust Sans|s|72|200-800;Mona Sans|s|5lvi|200-900;Monda|s|3c|400-700;Monofett|m|8;Monomakh|d|8;Monomaniac One|s|8;Monoton|d|8;Monsieur La Doulaise|h|8;Montaga|r|8;Montagu Slab|r|3j|100-700;MonteCarlo|h|8;Montenegrin Gothic One|r|8;Montez|h|8;Montserrat|s|5m9r|100-900;Montserrat Alternates|s|5m9r;Montserrat Underline|s|5m9r|100-900;Moo Lah Lah|d|8;Mooli|s|8;Moon Dance|h|8;Moul|d|8;Moulpali|s|8;Mountains of Christmas|d|20;Mouse Memoirs|s|8;Mozilla Headline|s|3i|200-700;Mozilla Text|s|3i|200-700;Mr Bedfort|h|8;Mr Dafoe|h|8;Mr De Haviland|h|8;Mrs Saint Delafield|h|8;Mrs Sheppards|h|8;Ms Madi|h|8;Mukta|s|72;Mukta Mahee|s|72;Mukta Malar|s|72;Mukta Vaani|s|72;Mulish|s|5lvi|200-1000;Murecho|s|e7|100-900;MuseoModerno|d|5m9r|100-900;My Soul|h|8;Mynerve|h|8;Mystery Quest|d|8;NTR|s|8;Nabla|d|8;Namdhinggo|r|6w;Nanum Brush Script|h|8;Nanum Gothic|s|5k;Nanum Gothic Coding|h|20;Nanum Myeongjo|r|5k;Nanum Pen Script|h|8;Narnoor|s|6w;Nata Sans|s|e7|100-900;National Park|s|72|200-800;Neonderthaw|h|8;Nerko One|h|8;Neucha|h|8;Neuton|r|3bi;New Amsterdam|s|8;New Rocker|d|8;New Tegomin|r|8;News Cycle|s|20;Newsreader|r|2sji|200-800;Niconne|h|8;Niramit|s|1dvi;Nixie One|d|8;Nobile|s|yu0;Nokora|s|e7|100-900;Norican|h|8;Nosifer|d|8;Notable|s|8;Nothing You Could Do|h|8;Noticia Text|r|si0;Noto Color Emoji|s|8;Noto Emoji|s|3g|300-700;Noto Kufi Arabic|s|e7|100-900;Noto Music|s|8;Noto Naskh Arabic|r|3c|400-700;Noto Nastaliq Urdu|r|3c|400-700;Noto Rashi Hebrew|r|e7|100-900;Noto Sans|s|5m9r|100-900;Noto Sans Adlam|s|3c|400-700;Noto Sans Adlam Unjoined|s|3c|400-700;Noto Sans Anatolian Hieroglyphs|s|8;Noto Sans Arabic|s|e7|100-900;Noto Sans Armenian|s|e7|100-900;Noto Sans Avestan|s|8;Noto Sans Balinese|s|3c|400-700;Noto Sans Bamum|s|3c|400-700;Noto Sans Bassa Vah|s|3c|400-700;Noto Sans Batak|s|8;Noto Sans Bengali|s|e7|100-900;Noto Sans Bhaiksuki|s|8;Noto Sans Brahmi|s|8;Noto Sans Buginese|s|8;Noto Sans Buhid|s|8;Noto Sans Canadian Aboriginal|s|e7|100-900;Noto Sans Carian|s|8;Noto Sans Caucasian Albanian|s|8;Noto Sans Chakma|s|8;Noto Sans Cham|s|e7|100-900;Noto Sans Cherokee|s|e7|100-900;Noto Sans Chorasmian|s|8;Noto Sans Coptic|s|8;Noto Sans Cuneiform|s|8;Noto Sans Cypriot|s|8;Noto Sans Cypro Minoan|s|8;Noto Sans Deseret|s|8;Noto Sans Devanagari|s|e7|100-900;Noto Sans Display|s|5m9r|100-900;Noto Sans Duployan|s|20;Noto Sans Egyptian Hieroglyphs|s|8;Noto Sans Elbasan|s|8;Noto Sans Elymaic|s|8;Noto Sans Ethiopic|s|e7|100-900;Noto Sans Georgian|s|e7|100-900;Noto Sans Glagolitic|s|8;Noto Sans Gothic|s|8;Noto Sans Grantha|s|8;Noto Sans Gujarati|s|e7|100-900;Noto Sans Gunjala Gondi|s|3c|400-700;Noto Sans Gurmukhi|s|e7|100-900;Noto Sans HK|s|e7|100-900;Noto Sans Hanifi Rohingya|s|3c|400-700;Noto Sans Hanunoo|s|8;Noto Sans Hatran|s|8;Noto Sans Hebrew|s|e7|100-900;Noto Sans Imperial Aramaic|s|8;Noto Sans Indic Siyaq Numbers|s|8;Noto Sans Inscriptional Pahlavi|s|8;Noto Sans Inscriptional Parthian|s|8;Noto Sans JP|s|e7|100-900;Noto Sans Javanese|s|3c|400-700;Noto Sans KR|s|e7|100-900;Noto Sans Kaithi|s|8;Noto Sans Kannada|s|e7|100-900;Noto Sans Kawi|s|3c|400-700;Noto Sans Kayah Li|s|3c|400-700;Noto Sans Kharoshthi|s|8;Noto Sans Khmer|s|e7|100-900;Noto Sans Khojki|s|8;Noto Sans Khudawadi|s|8;Noto Sans Lao|s|e7|100-900;Noto Sans Lao Looped|s|e7|100-900;Noto Sans Lepcha|s|8;Noto Sans Limbu|s|8;Noto Sans Linear A|s|8;Noto Sans Linear B|s|8;Noto Sans Lisu|s|3c|400-700;Noto Sans Lycian|s|8;Noto Sans Lydian|s|8;Noto Sans Mahajani|s|8;Noto Sans Malayalam|s|e7|100-900;Noto Sans Mandaic|s|8;Noto Sans Manichaean|s|8;Noto Sans Marchen|s|8;Noto Sans Masaram Gondi|s|8;Noto Sans Math|s|8;Noto Sans Mayan Numerals|s|8;Noto Sans Medefaidrin|s|3c|400-700;Noto Sans Meetei Mayek|s|e7|100-900;Noto Sans Mende Kikakui|s|8;Noto Sans Meroitic|s|8;Noto Sans Miao|s|8;Noto Sans Modi|s|8;Noto Sans Mongolian|s|8;Noto Sans Mono|s|e7|100-900;Noto Sans Mro|s|8;Noto Sans Multani|s|8;Noto Sans Myanmar|s|e7|100-900;Noto Sans NKo|s|8;Noto Sans NKo Unjoined|s|3c|400-700;Noto Sans Nabataean|s|8;Noto Sans Nag Mundari|s|3c|400-700;Noto Sans Nandinagari|s|8;Noto Sans New Tai Lue|s|3c|400-700;Noto Sans Newa|s|8;Noto Sans Nushu|s|8;Noto Sans Ogham|s|8;Noto Sans Ol Chiki|s|3c|400-700;Noto Sans Old Hungarian|s|8;Noto Sans Old Italic|s|8;Noto Sans Old North Arabian|s|8;Noto Sans Old Permic|s|8;Noto Sans Old Persian|s|8;Noto Sans Old Sogdian|s|8;Noto Sans Old South Arabian|s|8;Noto Sans Old Turkic|s|8;Noto Sans Oriya|s|e7|100-900;Noto Sans Osage|s|8;Noto Sans Osmanya|s|8;Noto Sans Pahawh Hmong|s|8;Noto Sans Palmyrene|s|8;Noto Sans Pau Cin Hau|s|8;Noto Sans PhagsPa|s|8;Noto Sans Phoenician|s|8;Noto Sans Psalter Pahlavi|s|8;Noto Sans Rejang|s|8;Noto Sans Runic|s|8;Noto Sans SC|s|e7|100-900;Noto Sans Samaritan|s|8;Noto Sans Saurashtra|s|8;Noto Sans Sharada|s|8;Noto Sans Shavian|s|8;Noto Sans Siddham|s|8;Noto Sans SignWriting|s|8;Noto Sans Sinhala|s|e7|100-900;Noto Sans Sogdian|s|8;Noto Sans Sora Sompeng|s|3c|400-700;Noto Sans Soyombo|s|8;Noto Sans Sundanese|s|3c|400-700;Noto Sans Sunuwar|s|8;Noto Sans Syloti Nagri|s|8;Noto Sans Symbols|s|e7|100-900;Noto Sans Symbols 2|s|8;Noto Sans Syriac|s|e7|100-900;Noto Sans Syriac Eastern|s|e7|100-900;Noto Sans Syriac Western|s|e7|100-900;Noto Sans TC|s|e7|100-900;Noto Sans Tagalog|s|8;Noto Sans Tagbanwa|s|8;Noto Sans Tai Le|s|8;Noto Sans Tai Tham|s|3c|400-700;Noto Sans Tai Viet|s|8;Noto Sans Takri|s|8;Noto Sans Tamil|s|e7|100-900;Noto Sans Tamil Supplement|s|8;Noto Sans Tangsa|s|3c|400-700;Noto Sans Telugu|s|e7|100-900;Noto Sans Thaana|s|e7|100-900;Noto Sans Thai|s|e7|100-900;Noto Sans Thai Looped|s|e7|100-900;Noto Sans Tifinagh|s|8;Noto Sans Tirhuta|s|8;Noto Sans Ugaritic|s|8;Noto Sans Vai|s|8;Noto Sans Vithkuqi|s|3c|400-700;Noto Sans Wancho|s|8;Noto Sans Warang Citi|s|8;Noto Sans Yi|s|8;Noto Sans Zanabazar Square|s|8;Noto Serif|r|5m9r|100-900;Noto Serif Ahom|r|8;Noto Serif Armenian|r|e7|100-900;Noto Serif Balinese|r|8;Noto Serif Bengali|r|e7|100-900;Noto Serif Devanagari|r|e7|100-900;Noto Serif Display|r|5m9r|100-900;Noto Serif Dives Akuru|r|8;Noto Serif Dogra|r|8;Noto Serif Ethiopic|r|e7|100-900;Noto Serif Georgian|r|e7|100-900;Noto Serif Grantha|r|8;Noto Serif Gujarati|r|e7|100-900;Noto Serif Gurmukhi|r|e7|100-900;Noto Serif HK|r|e6|200-900;Noto Serif Hebrew|r|e7|100-900;Noto Serif Hentaigana|r|e6|200-900;Noto Serif JP|r|e6|200-900;Noto Serif KR|r|e6|200-900;Noto Serif Kannada|r|e7|100-900;Noto Serif Khitan Small Script|r|8;Noto Serif Khmer|r|e7|100-900;Noto Serif Khojki|r|3c|400-700;Noto Serif Lao|r|e7|100-900;Noto Serif Makasar|r|8;Noto Serif Malayalam|r|e7|100-900;Noto Serif Myanmar|r|e7;Noto Serif NP Hmong|r|3c|400-700;Noto Serif Old Uyghur|r|8;Noto Serif Oriya|r|3c|400-700;Noto Serif Ottoman Siyaq|r|8;Noto Serif SC|r|e6|200-900;Noto Serif Sinhala|r|e7|100-900;Noto Serif TC|r|e6|200-900;Noto Serif Tamil|r|5m9r|100-900;Noto Serif Tangut|r|8;Noto Serif Telugu|r|e7|100-900;Noto Serif Thai|r|e7|100-900;Noto Serif Tibetan|r|e7|100-900;Noto Serif Todhri|r|8;Noto Serif Toto|r|3c|400-700;Noto Serif Vithkuqi|r|3c|400-700;Noto Serif Yezidi|r|3c|400-700;Noto Traditional Nushu|s|3g|300-700;Noto Znamenny Musical Notation|s|8;Nova Cut|d|8;Nova Flat|d|8;Nova Mono|m|8;Nova Oval|d|8;Nova Round|d|8;Nova Script|d|8;Nova Slim|d|8;Nova Square|d|8;Numans|s|8;Nunito|s|5lvi|200-1000;Nunito Sans|s|5lvi|200-1000;Nuosu SIL|s|8;Odibee Sans|d|8;Odor Mean Chey|r|8;Offside|d|8;Oi|d|8;Ojuju|s|72|200-800;Old Standard TT|r|37s;Oldenburg|d|8;Ole|h|8;Oleo Script|d|20;Oleo Script Swash Caps|d|20;Onest|s|e7|100-900;Oooh Baby|h|8;Open Sans|s|2rr0|300-800;Oranienbaum|r|8;Orbit|s|8;Orbitron|s|e0|400-900;Oregano|d|360;Orelega One|d|8;Orienta|s|8;Original Surfer|d|8;Oswald|s|3i|200-700;Outfit|s|e7|100-900;Over the Rainbow|h|8;Overlock|d|3lu0;Overlock SC|d|8;Overpass|s|5m9r|100-900;Overpass Mono|m|3g|300-700;Ovo|r|8;Oxanium|d|72|200-800;Oxygen|s|24;Oxygen Mono|m|8;PT Mono|m|8;PT Sans|s|si0;PT Sans Caption|s|20;PT Sans Narrow|s|20;PT Serif|r|si0;PT Serif Caption|r|360;Pacifico|h|8;Padauk|s|20;Padyakke Expanded One|r|8;Palanquin|s|3j;Palanquin Dark|s|3c;Palette Mosaic|d|8;Pangolin|h|8;Paprika|d|8;Parastoo|r|3c|400-700;Parisienne|h|8;Parkinsans|s|70|300-800;Passero One|d|8;Passion One|d|94;Passions Conflict|h|8;Pathway Extreme|s|5m9r|100-900;Pathway Gothic One|s|8;Patrick Hand|h|8;Patrick Hand SC|h|8;Pattaya|s|8;Patua One|d|8;Pavanam|s|8;Paytone One|s|8;Peddana|r|8;Peralta|r|8;Permanent Marker|h|8;Petemoss|h|8;Petit Formal Script|h|8;Petrona|r|5m9r|100-900;Phetsarath|s|20;Philosopher|s|si0;Phudu|d|e4|300-900;Piazzolla|r|5m9r|100-900;Piedra|d|8;Pinyon Script|h|8;Pirata One|d|8;Pixelify Sans|d|3c|400-700;Plaster|d|8;Platypi|r|2rr0|300-800;Play|s|20;Playball|d|8;Playfair|r|5l30|300-900;Playfair Display|r|5ji0|400-900;Playfair Display SC|r|3lu0;Playpen Sans|h|73|100-800;Playpen Sans Arabic|h|73|100-800;Playpen Sans Deva|h|73|100-800;Playpen Sans Hebrew|h|73|100-800;Playpen Sans Thai|h|73|100-800;Playwrite AR|h|f|100-400;Playwrite AR Guides|h|8;Playwrite AT|h|5xr|100-400;Playwrite AT Guides|h|360;Playwrite AU NSW|h|f|100-400;Playwrite AU NSW Guides|h|8;Playwrite AU QLD|h|f|100-400;Playwrite AU QLD Guides|h|8;Playwrite AU SA|h|f|100-400;Playwrite AU SA Guides|h|8;Playwrite AU TAS|h|f|100-400;Playwrite AU TAS Guides|h|8;Playwrite AU VIC|h|f|100-400;Playwrite AU VIC Guides|h|8;Playwrite BE VLG|h|f|100-400;Playwrite BE VLG Guides|h|8;Playwrite BE WAL|h|f|100-400;Playwrite BE WAL Guides|h|8;Playwrite BR|h|f|100-400;Playwrite BR Guides|h|8;Playwrite CA|h|f|100-400;Playwrite CA Guides|h|8;Playwrite CL|h|f|100-400;Playwrite CL Guides|h|8;Playwrite CO|h|f|100-400;Playwrite CO Guides|h|8;Playwrite CU|h|f|100-400;Playwrite CU Guides|h|8;Playwrite CZ|h|f|100-400;Playwrite CZ Guides|h|8;Playwrite DE Grund|h|f|100-400;Playwrite DE Grund Guides|h|8;Playwrite DE LA|h|f|100-400;Playwrite DE LA Guides|h|8;Playwrite DE SAS|h|f|100-400;Playwrite DE SAS Guides|h|8;Playwrite DE VA|h|f|100-400;Playwrite DE VA Guides|h|8;Playwrite DK Loopet|h|f|100-400;Playwrite DK Loopet Guides|h|8;Playwrite DK Uloopet|h|f|100-400;Playwrite DK Uloopet Guides|h|8;Playwrite ES|h|f|100-400;Playwrite ES Deco|h|f|100-400;Playwrite ES Deco Guides|h|8;Playwrite ES Guides|h|8;Playwrite FR Moderne|h|f|100-400;Playwrite FR Moderne Guides|h|8;Playwrite FR Trad|h|f|100-400;Playwrite FR Trad Guides|h|8;Playwrite GB J|h|5xr|100-400;Playwrite GB J Guides|h|360;Playwrite GB S|h|5xr|100-400;Playwrite GB S Guides|h|360;Playwrite HR|h|f|100-400;Playwrite HR Guides|h|8;Playwrite HR Lijeva|h|f|100-400;Playwrite HR Lijeva Guides|h|8;Playwrite HU|h|f|100-400;Playwrite HU Guides|h|8;Playwrite ID|h|f|100-400;Playwrite ID Guides|h|8;Playwrite IE|h|f|100-400;Playwrite IE Guides|h|8;Playwrite IN|h|f|100-400;Playwrite IN Guides|h|8;Playwrite IS|h|f|100-400;Playwrite IS Guides|h|8;Playwrite IT Moderna|h|f|100-400;Playwrite IT Moderna Guides|h|8;Playwrite IT Trad|h|f|100-400;Playwrite IT Trad Guides|h|8;Playwrite MX|h|f|100-400;Playwrite MX Guides|h|8;Playwrite NG Modern|h|f|100-400;Playwrite NG Modern Guides|h|8;Playwrite NL|h|f|100-400;Playwrite NL Guides|h|8;Playwrite NO|h|f|100-400;Playwrite NO Guides|h|8;Playwrite NZ|h|f|100-400;Playwrite NZ Basic|h|f|100-400;Playwrite NZ Basic Guides|h|8;Playwrite NZ Guides|h|8;Playwrite PE|h|f|100-400;Playwrite PE Guides|h|8;Playwrite PL|h|f|100-400;Playwrite PL Guides|h|8;Playwrite PT|h|f|100-400;Playwrite PT Guides|h|8;Playwrite RO|h|f|100-400;Playwrite RO Guides|h|8;Playwrite SK|h|f|100-400;Playwrite SK Guides|h|8;Playwrite TZ|h|f|100-400;Playwrite TZ Guides|h|8;Playwrite US Modern|h|f|100-400;Playwrite US Modern Guides|h|8;Playwrite US Trad|h|f|100-400;Playwrite US Trad Guides|h|8;Playwrite VN|h|f|100-400;Playwrite VN Guides|h|8;Playwrite ZA|h|f|100-400;Playwrite ZA Guides|h|8;Pliant|s|5m9r|100-900;Plus Jakarta Sans|s|2sji|200-800;Pochaevsk|d|8;Podkova|r|6w|400-800;Poetsen One|d|8;Poiret One|d|8;Poller One|d|8;Poltawski Nowy|r|1bi0|400-700;Poly|r|360;Pompiere|d|8;Ponnala|d|8;Ponomar|d|8;Pontano Sans|s|3g|300-700;Poor Story|d|8;Poppins|s|5m9r;Port Lligat Sans|s|8;Port Lligat Slab|r|8;Potta One|d|8;Pragati Narrow|s|20;Praise|h|8;Prata|r|8;Preahvihear|s|8;Press Start 2P|d|8;Pridi|r|3i;Princess Sofia|h|8;Prociono|r|8;Prompt|s|5m9r;Prosto One|d|8;Protest Guerrilla|d|8;Protest Revolution|d|8;Protest Riot|d|8;Protest Strike|d|8;Proza Libre|s|2q60;Public Sans|s|5m9r|100-900;Puppies Play|h|8;Puritan|s|si0;Purple Purse|d|8;Qahiri|s|8;Quando|r|8;Quantico|s|si0;Quattrocento|r|20;Quattrocento Sans|s|si0;Questrial|s|8;Quicksand|s|3g|300-700;Quintessential|h|8;Qwigley|h|8;Qwitcher Grypen|h|20;REM|s|5m9r|100-900;Racing Sans One|d|8;Radio Canada|s|1d30|300-700;Radio Canada Big|s|1bi0|400-700;Radley|r|360;Rajdhani|s|3g;Rakkas|d|8;Raleway|s|5m9r|100-900;Raleway Dots|d|8;Ramabhadra|s|8;Ramaraja|r|8;Rambla|s|si0;Rammetto One|d|8;Rampart One|d|8;Ramsina|r|8;Ranchers|d|8;Rancho|h|8;Ranga|d|20;Rasa|r|1d30|300-700;Rationale|s|8;Ravi Prakash|d|8;Readex Pro|s|3i|160-700;Recursive|s|e4|300-1000;Red Hat Display|s|5l30|300-900;Red Hat Mono|m|1d30|300-700;Red Hat Text|s|1d30|300-700;Red Rose|d|3g|300-700;Redacted|d|8;Redacted Script|d|24;Reddit Mono|m|e6|200-900;Reddit Sans|s|5lvi|200-900;Reddit Sans Condensed|s|e6|200-900;Redressed|h|8;Reem Kufi|s|3c|400-700;Reem Kufi Fun|s|3c|400-700;Reem Kufi Ink|s|8;Reenie Beanie|h|8;Reggae One|d|8;Rethink Sans|s|2q60|400-800;Revalia|d|8;Rhodium Libre|r|8;Ribeye|d|8;Ribeye Marrow|d|8;Righteous|d|8;Risque|d|8;Road Rage|d|8;Roboto|s|5m9r|100-900;Roboto Condensed|s|5m9r|100-900;Roboto Flex|s|e7|100-1000;Roboto Mono|m|1e9r|100-700;Roboto Serif|r|5m9r|100-900;Roboto Slab|r|e7|100-900;Rochester|h|8;Rock 3D|d|8;Rock Salt|h|8;RocknRoll One|s|8;Rokkitt|r|5m9r|100-900;Romanesco|h|8;Ropa Sans|s|360;Rosario|s|1d30|300-700;Rosarivo|r|360;Rouge Script|h|8;Rowdies|d|24;Rozha One|r|8;Rubik|s|5l30|300-900;Rubik 80s Fade|d|8;Rubik Beastly|d|8;Rubik Broken Fax|d|8;Rubik Bubbles|d|8;Rubik Burned|d|8;Rubik Dirt|d|8;Rubik Distressed|d|8;Rubik Doodle Shadow|d|8;Rubik Doodle Triangles|d|8;Rubik Gemstones|d|8;Rubik Glitch|d|8;Rubik Glitch Pop|d|8;Rubik Iso|d|8;Rubik Lines|d|8;Rubik Maps|d|8;Rubik Marker Hatch|d|8;Rubik Maze|d|8;Rubik Microbe|d|8;Rubik Mono One|s|8;Rubik Moonrocks|d|8;Rubik Pixels|d|8;Rubik Puddles|d|8;Rubik Scribble|d|8;Rubik Spray Paint|d|8;Rubik Storm|d|8;Rubik Vinyl|d|8;Rubik Wet Paint|d|8;Ruda|s|e0|400-900;Rufina|r|20;Ruge Boogie|h|8;Ruluko|s|8;Rum Raisin|s|8;Ruslan Display|d|8;Russo One|s|8;Ruthie|h|8;Ruwudu|r|3c;Rye|d|8;SN Pro|s|5lvi|200-900;STIX Two Math|r|8;STIX Two Text|r|1bi0|400-700;SUSE|s|5m9r|100-900;SUSE Mono|s|2sxr|100-800;Sacramento|h|8;Sahitya|r|20;Sail|d|8;Saira|s|5m9r|100-900;Saira Condensed|s|e7;Saira Extra Condensed|s|e7;Saira Semi Condensed|s|e7;Saira Stencil|d|5m9r|100-900;Salsa|d|8;Sanchez|r|360;Sancreek|d|8;Sankofa Display|s|8;Sansation|s|u30;Sansita|s|50i0;Sansita Swashed|d|e4|300-900;Sarabun|s|2sxr;Sarala|s|20;Sarina|d|8;Sarpanch|s|e0;Sassy Frass|h|8;Satisfy|h|8;Savate|s|5lvi|200-900;Sawarabi Gothic|s|8;Sawarabi Mincho|r|8;Scada|s|si0;Scheherazade New|r|3c;Schibsted Grotesk|s|5ji0|400-900;Schoolbell|h|8;Science Gothic|s|e7|100-900;Scope One|r|8;Scoutie Sans|s|2sji|200-800;Seaweed Script|d|8;Secular One|s|8;Sedan|r|360;Sedan SC|r|8;Sedgwick Ave|h|8;Sedgwick Ave Display|h|8;Sekuya|d|8;Sen|s|6w|400-800;Send Flowers|h|8;Sevillana|d|8;Seymour One|s|8;Shadows Into Light|h|8;Shadows Into Light Two|h|8;Shafarik|d|8;Shalimar|h|8;Shantell Sans|d|2rr0|300-800;Shanti|s|8;Share|s|si0;Share Tech|s|8;Share Tech Mono|m|8;Shippori Antique|s|8;Shippori Antique B1|s|8;Shippori Mincho|r|6w;Shippori Mincho B1|r|6w;Shizuru|d|8;Shojumaru|d|8;Short Stack|h|8;Shrikhand|d|8;Siemreap|s|8;Sigmar|d|8;Sigmar One|d|8;Signika|s|3g|300-700;Signika Negative|s|3g|300-700;Silkscreen|d|20;Simonetta|d|2wi0;Single Day|d|8;Sintony|s|20;Sirin Stencil|d|8;Sirivennela|s|8;Six Caps|s|8;Sixtyfour|m|8;Sixtyfour Convergence|m|8;Skranji|d|20;Slabo 13px|r|8;Slabo 27px|r|8;Slackey|d|8;Slackside One|h|8;Smokum|d|8;Smooch|h|8;Smooch Sans|s|e7|100-900;Smythe|d|8;Sniglet|d|3s;Snippet|s|8;Snowburst One|d|8;Sofadi One|d|8;Sofia|h|8;Sofia Sans|s|5m9r|1-1000;Sofia Sans Condensed|s|5m9r|1-1000;Sofia Sans Extra Condensed|s|5m9r|1-1000;Sofia Sans Semi Condensed|s|5m9r|1-1000;Solitreo|h|8;Solway|r|64;Sometype Mono|m|1bi0|400-700;Song Myung|r|8;Sono|s|72|200-800;Sonsie One|d|8;Sora|s|73|100-800;Sorts Mill Goudy|r|360;Sour Gummy|s|5m9r|100-900;Source Code Pro|m|5lvi|200-900;Source Sans 3|s|5lvi|200-900;Source Serif 4|r|5lvi|200-900;Space Grotesk|s|3g|300-700;Space Mono|m|si0;Special Elite|d|8;Special Gothic|s|3c|400-700;Special Gothic Condensed One|s|8;Special Gothic Expanded One|s|8;Spectral|r|2sji;Spectral SC|r|2sji;Spicy Rice|d|8;Spinnaker|s|8;Spirax|d|8;Splash|h|8;Spline Sans|s|3g|300-700;Spline Sans Mono|m|1d30|300-700;Squada One|d|8;Square Peg|h|8;Sree Krushnadevaraya|r|8;Sriracha|h|8;Srisakdi|d|20;Staatliches|d|8;Stack Sans Headline|s|3i|200-700;Stack Sans Notch|s|3i|200-700;Stack Sans Text|s|3i|200-700;Stalemate|h|8;Stalinist One|d|8;Stardos Stencil|d|20;Stick|s|8;Stick No Bills|s|72|200-800;Stint Ultra Condensed|r|8;Stint Ultra Expanded|r|8;Stoke|r|c;Story Script|s|8;Strait|s|8;Strichpunkt Sans|s|e0|400-900;Style Script|h|8;Stylish|s|8;Sue Ellen Francisco|h|8;Suez One|r|8;Sulphur Point|s|24;Sumana|r|20;Sunflower|s|2c;Sunshiney|h|8;Supermercado One|d|8;Sura|r|20;Suranna|r|8;Suravaram|r|8;Suwannaphum|r|99;Swanky and Moo Moo|h|8;Syncopate|s|20;Syne|s|6w|400-800;Syne Mono|m|8;Syne Tactile|d|8;TASA Explorer|s|6w|400-800;TASA Orbiter|s|6w|400-800;Tac One|s|8;Tagesschrift|d|8;Tai Heritage Pro|r|20;Tajawal|s|da;Tangerine|h|20;Tapestry|h|8;Taprom|d|8;Tauri|s|8;Taviraj|r|5m9r;Teachers|s|2q60|400-800;Teko|s|3g|300-700;Tektur|d|e0|400-900;Telex|s|8;Tenali Ramakrishna|s|8;Tenor Sans|s|8;Text Me One|s|8;Texturina|r|5m9r|100-900;Thasadith|s|si0;The Girl Next Door|h|8;The Nautigal|h|20;Tienne|r|94;TikTok Sans|s|e4|300-900;Tillana|d|6w;Tilt Neon|d|8;Tilt Prism|d|8;Tilt Warp|d|8;Timmana|s|8;Tinos|r|si0;Tiny5|s|8;Tiro Bangla|r|360;Tiro Devanagari Hindi|r|360;Tiro Devanagari Marathi|r|360;Tiro Devanagari Sanskrit|r|360;Tiro Gurmukhi|r|360;Tiro Kannada|r|360;Tiro Tamil|r|360;Tiro Telugu|r|360;Tirra|s|e0;Titan One|d|8;Titillium Web|s|17qm;Tomorrow|s|5m9r;Tourney|d|5m9r|100-900;Trade Winds|d|8;Train One|d|8;Triodion|d|8;Trirong|r|5m9r;Trispace|s|73|100-800;Trocchi|r|8;Trochut|d|37s;Truculenta|s|e7|100-900;Trykker|r|8;Tsukimi Rounded|s|3g;Tuffy|s|si0;Tulpen One|d|8;Turret Road|d|66;Twinkle Star|h|8;Ubuntu|s|10f0;Ubuntu Condensed|s|8;Ubuntu Mono|m|si0;Ubuntu Sans|s|2sxr|100-800;Ubuntu Sans Mono|m|1bi0|400-700;Uchen|r|8;Ultra|r|8;Unbounded|s|e6|200-900;Uncial Antiqua|d|8;Underdog|d|8;Unica One|d|8;UnifrakturCook|d|1s;UnifrakturMaguntia|d|8;Unkempt|d|20;Unlock|d|8;Unna|r|si0;UoqMunThenKhung|r|8;Updock|h|8;Urbanist|s|5m9r|100-900;VT323|m|8;Valley Sans|s|5m9r|100-900;Vampiro One|d|8;Varela|s|8;Varela Round|s|8;Varta|s|3g|300-700;Vast Shadow|r|8;Vazirmatn|s|e7|100-900;Vend Sans|s|1d30|300-700;Vesper Libre|r|9k;Viaoda Libre|d|8;Vibes|d|8;Vibur|h|8;Victor Mono|m|1e9r|100-700;Vidaloka|r|8;Viga|s|8;Vina Sans|d|8;Voces|s|8;Volkhov|r|si0;Vollkorn|r|5ji0|400-900;Vollkorn SC|r|a0;Voltaire|s|8;Vujahday Script|h|8;WDXL Lubrifont JP N|s|8;WDXL Lubrifont SC|s|8;WDXL Lubrifont TC|s|8;Waiting for the Sunrise|h|8;Wallpoet|d|8;Walter Turncoat|h|8;Warnes|d|8;Water Brush|h|8;Waterfall|h|8;Wavefont|d|e7|4-1000;Wellfleet|r|8;Wendy One|s|8;Whisper|h|8;WindSong|h|o;Winky Rough|s|5l30|300-900;Winky Sans|s|5l30|300-900;Wire One|s|8;Wittgenstein|r|5ji0|400-900;Wix Madefor Display|s|6w|400-800;Wix Madefor Text|s|2q60|400-800;Work Sans|s|5m9r|100-900;Workbench|m|8;Xanh Mono|m|360;Yaldevi|s|3i|200-700;Yanone Kaffeesatz|s|3i|200-700;Yantramanav|s|9p;Yarndings 12|d|8;Yarndings 12 Charted|d|8;Yarndings 20|d|8;Yarndings 20 Charted|d|8;Yatra One|d|8;Yellowtail|h|8;Yeon Sung|d|8;Yeseva One|d|8;Yesteryear|h|8;Yomogi|h|8;Young Serif|r|8;Yrsa|r|1d30|300-700;Ysabeau|s|5m9r|1-1000;Ysabeau Infant|s|5m9r|1-1000;Ysabeau Office|s|5m9r|1-1000;Ysabeau SC|s|e7|1-1000;Yuji Boku|r|8;Yuji Hentaigana Akari|h|8;Yuji Hentaigana Akebono|h|8;Yuji Mai|r|8;Yuji Syuku|r|8;Yusei Magic|s|8;Yuyu|h|8;Yuyu Short|h|8;ZCOOL KuaiLe|s|8;ZCOOL QingKe HuangYou|s|8;ZCOOL XiaoWei|s|8;Zain|s|53i;Zalando Sans|s|5lvi|200-900;Zalando Sans Expanded|s|5lvi|200-900;Zalando Sans SemiExpanded|s|5lvi|200-900;Zen Antique|r|8;Zen Antique Soft|r|8;Zen Dots|d|8;Zen Kaku Gothic Antique|s|9o;Zen Kaku Gothic New|s|9o;Zen Kurenaido|s|8;Zen Loop|d|360;Zen Maru Gothic|s|9o;Zen Old Mincho|r|ag;Zen Tokyo Zoo|d|8;Zeyada|h|8;Zhi Mang Xing|h|8;Zilla Slab|r|1d30;Zilla Slab Highlight|r|20';
+let GF = null;
+function gfLookup(fam) {
+  if (!GF) {
+    GF = {};
+    GF_DATA.split(';').forEach(r => {
+      const p = r.split('|'), rg = p[3] ? p[3].split('-').map(Number) : null;
+      GF[p[0].toLowerCase()] = { family: p[0], cat: p[1], mask: parseInt(p[2], 36), min: rg ? rg[0] : 0, max: rg ? rg[1] : 0 };
+    });
+  }
+  return GF[String(fam || '').trim().toLowerCase()] || null;
 }
 const FONT_FMT = { woff2: ['font/woff2', 'woff2'], woff: ['font/woff', 'woff'], ttf: ['font/ttf', 'truetype'], otf: ['font/otf', 'opentype'] };
 async function loadFontUploads(families) {
@@ -1302,13 +1371,9 @@ async function planFonts(ctx, lang, wantBytes, fast) {
   const fams = Object.keys(ctx.fonts);
   if (!fams.length) return plan;
   const uploads = await loadFontUploads(fams);
-  // look up all families in parallel (Dev Mode codegen has a 3 s budget: cap at ~1.2 s, lookups keep running and are cached)
-  const checks = await Promise.all(fams.map(fam => {
-    if (systemKind(fam)) return null;
-    const keys = sortKeys(Object.keys(ctx.fonts[fam]));
-    const fb = () => { const known = POPULAR_GOOGLE.indexOf(fam.toLowerCase()) > -1; return { google: known, ok: known ? keys : [], offline: true }; };
-    return (fast ? timed(googleCheck(fam, keys), 1200) : googleCheck(fam, keys)).catch(fb);
-  }));
+  // local catalog lookup: instant, and works offline
+  const checks = fams.map(fam => systemKind(fam) ? null : googleCheck(fam, sortKeys(Object.keys(ctx.fonts[fam]))));
+  void fast;
   for (const [fi, fam] of fams.entries()) {
     const keys = sortKeys(Object.keys(ctx.fonts[fam]));
     const info = { family: fam, kind: fontKind(fam), variants: [] };
@@ -1316,8 +1381,8 @@ async function planFonts(ctx, lang, wantBytes, fast) {
     let g = { google: false, ok: [] };
     if (sys) { info.source = 'system'; info.kind = sys; }
     else {
-      g = checks[fi]; info.source = g.google ? 'google' : 'custom'; if (g.offline) info.offline = true; }
-    if (info.source === 'google') plan.google.push({ family: fam, keys: g.ok });
+      g = checks[fi]; info.source = g.google ? 'google' : 'custom'; }
+    if (info.source === 'google') plan.google.push({ family: g.family || fam, keys: g.ok });
     keys.forEach(k => {
       const it = k[0] === '1', w = +k.split(',')[1], style = ctx.fonts[fam][k];
       const up = uploads[fam + '|' + k];
@@ -1329,7 +1394,7 @@ async function planFonts(ctx, lang, wantBytes, fast) {
         const f = FONT_FMT[up.ext] || FONT_FMT.woff2;
         const file = 'fonts/' + slug(fam) + '-' + w + (it ? '-italic' : '') + '.' + up.ext;
         if (lang === 'html-single') src.push('url(data:' + f[0] + ';base64,' + figma.base64Encode(up.bytes) + ') format("' + f[1] + '")');
-        else { src.push('url("' + (/^react/.test(lang) ? './' : '') + file + '") format("' + f[1] + '")'); if (wantBytes) plan.files.push({ name: file, bytes: up.bytes }); }
+        else { src.push('url("' + (/^(react|vue|svelte)/.test(lang) ? './' : '') + file + '") format("' + f[1] + '")'); if (wantBytes) plan.files.push({ name: file, bytes: up.bytes }); }
       }
       plan.faces.push('@font-face {\n  font-family: "' + fam + '";\n  src: ' + src.join(',\n       ') + ';\n  font-weight: ' + w + ';\n  font-style: ' + (it ? 'italic' : 'normal') + ';\n  font-display: swap;\n}');
     });
@@ -1382,7 +1447,8 @@ async function inlineAssets(root, ctx, budget) {
       const bytes = await n.exportAsync(o);
       if (used + bytes.length > budget) continue;
       used += bytes.length;
-      a.src = 'data:' + DATA_MIME[fmt] + ';base64,' + figma.base64Encode(bytes);
+      if (fmt === 'SVG') { const m = cleanSvg(utf8(bytes)); if (m) a.svg = m; else a.src = 'data:' + DATA_MIME[fmt] + ';base64,' + figma.base64Encode(bytes); }
+      else a.src = 'data:' + DATA_MIME[fmt] + ';base64,' + figma.base64Encode(bytes);
     } catch (e) { /* leave as file reference */ }
   }
   // 2) image fills on containers (Figma's CSS says url(<path-to-image>))
@@ -1398,12 +1464,44 @@ async function inlineAssets(root, ctx, budget) {
       if (used + bytes.length > budget) continue;
       used += bytes.length;
       const mime = bytes[0] === 0xFF ? 'image/jpeg' : bytes[0] === 0x47 ? 'image/gif' : 'image/png';
-      const uri = 'url(data:' + mime + ';base64,' + figma.base64Encode(bytes) + ')';
+      const uri = 'var(' + embedImage(ctx, 'fill', 'url(data:' + mime + ';base64,' + figma.base64Encode(bytes) + ')') + ')';
       ['background', 'background-image'].forEach(k => { if (e.css[k]) e.css[k] = e.css[k].replace(/url\(<path-to-image>\)/g, uri); });
       if (e.css.background && !/\b(cover|contain)\b/.test(e.css.background)) e.css['background-size'] = paint.scaleMode === 'FIT' ? 'contain' : 'cover';
     } catch (e2) { /* ignore */ }
   }
+  // 3) raster images become CSS backgrounds (data URI lives once, at the end of the stylesheet)
+  walk(root, e => {
+    if (e.kind !== 'img' || !e.asset.src) return;
+    const alt = e.attrs.alt;
+    e.kind = 'box'; e.tag = 'div'; e.children = [];
+    e.attrs = alt ? { role: 'img', 'aria-label': alt } : { 'aria-hidden': 'true' };
+    e.css['background-image'] = 'var(' + embedImage(ctx, e.asset.file.replace(/\.\w+$/, ''), 'url(' + e.asset.src + ')') + ')';
+    e.css['background-size'] = 'contain'; e.css['background-position'] = 'center'; e.css['background-repeat'] = 'no-repeat';
+  });
   return used;
+}
+/** UTF-8 bytes to string. */
+function utf8(bytes) {
+  let b = '';
+  for (let i = 0; i < bytes.length; i += 8192) b += String.fromCharCode.apply(null, bytes.subarray(i, i + 8192));
+  try { return decodeURIComponent(escape(b)); } catch (e) { return b; }
+}
+/** Exported SVG to inline-able markup: no XML header/comments, size comes from CSS. */
+function cleanSvg(text) {
+  let t = String(text).replace(/<\?xml[^>]*\?>/g, '').replace(/<[!]--[\s\S]*?--[>]/g, '').trim();
+  if (!/^<svg\b/.test(t) || t.length > 200000 || /<script\b|\son[a-z]+\s*=/i.test(t)) return null;
+  t = t.replace(/^<svg\b([^>]*)>/, (m, attrs) => '<svg' + attrs.replace(/\s(width|height)="[^"]*"/g, '') + '>');
+  return t;
+}
+/** Registers a data URI under a CSS custom property name, deduplicated. */
+function embedImage(ctx, name, value) {
+  ctx.embed = ctx.embed || { names: {}, list: [], byValue: {} };
+  if (ctx.embed.byValue[value]) return ctx.embed.byValue[value];
+  const base = '--img-' + (slug(name) || 'image');
+  let n = base, i = 1;
+  while (ctx.embed.names[n]) n = base + '-' + (++i);
+  ctx.embed.names[n] = 1; ctx.embed.byValue[value] = n; ctx.embed.list.push({ name: n, value: value });
+  return n;
 }
 function singleHtml(node, root, ctx, unit, base, note) {
   return '<!DOCTYPE html>\n<html lang="en">\n<head>\n  <meta charset="UTF-8" />\n  <meta name="viewport" content="width=device-width, initial-scale=1.0" />\n  <title>' + escHtml(node.name) + '</title>\n' +
@@ -1422,7 +1520,7 @@ function singleHtml(node, root, ctx, unit, base, note) {
 async function generateCode(node, lang, unit, base, maxNodes, opts) {
   opts = opts || {};
   const ctx = { count: 0, max: maxNodes || 600, truncated: false, maxFont: 0, assets: [], assetByKey: {}, assetNames: {}, vars: {}, classes: {}, order: [], weights: {}, usedTitle: false, rootWidth: node.width,
-    varIds: {}, themes: {}, tokenInfo: {}, imports: {}, fonts: {}, react: /^react/.test(lang), mappings: /^react/.test(lang) ? loadMappings() : {} };
+    varIds: {}, themes: {}, tokenInfo: {}, imports: {}, fonts: {}, react: /^react-(tailwind|css)$/.test(lang), mappings: /^react-(tailwind|css)$/.test(lang) ? loadMappings() : {} };
   const root = await buildRaw(node, ctx, true);
   if (!root) return { files: [{ name: 'empty.txt', lang: 'text', code: 'Nothing visible to generate.' }], assets: [] };
   structurePass(root, null, ctx, null);
@@ -1446,10 +1544,22 @@ async function generateCode(node, lang, unit, base, maxNodes, opts) {
   const note = ctx.truncated ? 'Output truncated after ' + ctx.max + ' layers — select a smaller frame for full code.' : '';
   const files = [];
 
-  if (lang === 'swiftui' || lang === 'compose') {
+  if (lang === 'swiftui' || lang === 'compose' || lang === 'flutter') {
     const defs = extractComponents(root, ctx);
     if (lang === 'swiftui') files.push({ name: Comp + '.swift', lang: 'swift', code: (note ? '// ' + note + '\n' : '') + generateSwift(root, defs, ctx, Comp) });
+    else if (lang === 'flutter') files.push({ name: slug(rootName).replace(/-/g, '_') + '.dart', lang: 'dart', code: (note ? '// ' + note + '\n' : '') + generateFlutter(root, defs, ctx, Comp) });
     else files.push({ name: Comp + '.kt', lang: 'kotlin', code: (note ? '// ' + note + '\n' : '') + generateCompose(root, defs, ctx, Comp) });
+  } else if (lang === 'react-native') {
+    const defs = extractComponents(root, ctx);
+    files.push({ name: Comp + '.jsx', lang: 'jsx', code: (note ? '// ' + note + '\n' : '') + generateRN(root, defs, ctx, Comp) });
+  } else if (lang === 'vue' || lang === 'svelte') {
+    const raw = renderHTML(root, lang === 'vue' ? 1 : 0);
+    // {{ }} (Vue) and { } (Svelte) are template expressions: design text must never reach them
+    const markup = lang === 'vue' ? raw.replace(/\{\{/g, '{&#123;') : raw.replace(/[{}]/g, c => c === '{' ? '&#123;' : '&#125;');
+    const style = '<style>\n' + stylesheet(ctx, root.cls, unit, base, fontCss(ctx.fontPlan, true)) + '</style>\n';
+    const cmt = note ? '<!' + '-- ' + note + ' --' + '>\n' : '';
+    if (lang === 'vue') files.push({ name: Comp + '.vue', lang: 'vue', code: cmt + '<template>\n' + markup + '\n</template>\n\n' + style });
+    else files.push({ name: Comp + '.svelte', lang: 'svelte', code: cmt + markup + '\n\n' + style });
   } else if (lang === 'html-single') {
     files.push({ name: rootName + '.html', lang: 'html', code: singleHtml(node, root, ctx, unit, base, note) });
   } else if (lang === 'html-css') {
@@ -1461,7 +1571,7 @@ async function generateCode(node, lang, unit, base, maxNodes, opts) {
   } else {
     const mode = lang === 'react-tailwind' ? 'tw' : 'css';
     const defs = extractComponents(root, ctx);
-    const imports = Object.keys(ctx.imports).map(p => "import { " + Object.keys(ctx.imports[p]).join(', ') + " } from '" + p + "';")
+    const imports = Object.keys(ctx.imports).map(p => "import { " + Object.keys(ctx.imports[p]).join(', ') + " } from " + jsQuote(p) + ";")
       .concat(ctx.assets.map(a => "import " + a.varName + " from './assets/" + a.file + "';"));
     if (mode === 'css') imports.push("import './" + Comp + ".css';");
     else if (Object.keys(ctx.vars).length || fontCss(ctx.fontPlan, true)) imports.push("import './tokens.css';");
@@ -1478,7 +1588,7 @@ async function generateCode(node, lang, unit, base, maxNodes, opts) {
   }
   return {
     files: files,
-    assets: ctx.assets.filter(a => !a.src).map(a => ({ id: a.id, file: a.file, format: a.format, scale: a.scale })),
+    assets: ctx.assets.filter(a => !a.src && !a.svg).map(a => ({ id: a.id, file: a.file, format: a.format, scale: a.scale })),
     fonts: fontPlan.families,
     fontFiles: opts.withFonts ? fontPlan.files : undefined,
     preview: { w: round(node.width), h: round(node.height), inlinedKB: Math.round(inlined / 1024) },
@@ -1612,6 +1722,57 @@ function nodeSig(n) {
   }
   return [hashStr(g), hashStr(st), tx ? hashStr(tx) : ''];
 }
+/* Compact, human-readable values stored next to the hashes so the Changes panel can
+   show "before → after". Hashes stay the source of truth for *whether* something
+   changed (they cover more than these values); values only explain *what*. Only
+   non-default values are stored, to keep snapshots small. */
+const VAL_LABELS = { pos: 'Position', size: 'Size', rot: 'Rotation', vis: 'Visible', op: 'Opacity', fill: 'Fill', stroke: 'Stroke', rad: 'Radius', fx: 'Effects', lay: 'Layout', pad: 'Padding', font: 'Font', align: 'Text align', text: 'Text' };
+function paintVal(paints) {
+  if (isMixed(paints)) return 'mixed';
+  if (!Array.isArray(paints)) return '';
+  const vis = paints.filter(p => p && p.visible !== false);
+  if (!vis.length) return '';
+  const one = p => p.type === 'SOLID' && p.color ? colorHex(p.color, p.opacity) : p.type === 'IMAGE' ? 'image' : p.type === 'VIDEO' ? 'video' : String(p.type || '').toLowerCase().replace(/_/g, ' ').replace('gradient ', '') + ' gradient';
+  return vis.slice(0, 3).map(one).join(' + ') + (vis.length > 3 ? ' +' + (vis.length - 3) : '');
+}
+function nodeVals(n) {
+  const v = {};
+  const r1 = x => isMixed(x) ? 'mixed' : String(round(x, 1));
+  try {
+    v.pos = r1(n.x) + ', ' + r1(n.y);
+    v.size = r1(n.width) + ' × ' + r1(n.height);
+    if (n.rotation) v.rot = r1(n.rotation) + '°';
+    if (n.visible === false) v.vis = 'hidden';
+    if ('opacity' in n && n.opacity !== 1 && typeof n.opacity === 'number') v.op = Math.round(n.opacity * 100) + '%';
+    if ('fills' in n && n.type !== 'TEXT') { const f = paintVal(n.fills); if (f) v.fill = f; }
+    if ('strokes' in n) { const st = paintVal(n.strokes); if (st) v.stroke = st + ' · ' + r1(n.strokeWeight); }
+    if ('cornerRadius' in n && n.cornerRadius) v.rad = isMixed(n.cornerRadius) ? [n.topLeftRadius, n.topRightRadius, n.bottomRightRadius, n.bottomLeftRadius].map(r1).join(' ') : r1(n.cornerRadius);
+    if ('effects' in n && Array.isArray(n.effects)) { const e = n.effects.filter(x => x && x.visible !== false); if (e.length) v.fx = e.map(x => String(x.type).toLowerCase().replace(/_/g, ' ') + (x.radius ? ' ' + r1(x.radius) : '')).join(', '); }
+    if ('layoutMode' in n && n.layoutMode && n.layoutMode !== 'NONE') {
+      v.lay = (n.layoutMode === 'VERTICAL' ? 'column' : n.layoutMode === 'GRID' ? 'grid' : 'row') + (n.layoutWrap === 'WRAP' ? ' wrap' : '') + ' · gap ' + (n.primaryAxisAlignItems === 'SPACE_BETWEEN' ? 'auto' : r1(n.itemSpacing)) + ' · ' + String(n.primaryAxisAlignItems || '').toLowerCase() + '/' + String(n.counterAxisAlignItems || '').toLowerCase();
+      v.pad = [n.paddingTop, n.paddingRight, n.paddingBottom, n.paddingLeft].map(r1).join(' ');
+    }
+    if (n.type === 'TEXT') {
+      const fnm = n.fontName;
+      const lh = n.lineHeight;
+      v.font = (isMixed(fnm) ? 'mixed' : fnm.family + ' ' + fnm.style) + ' · ' + r1(n.fontSize) + (lh && !isMixed(lh) && lh.unit && lh.unit !== 'AUTO' ? '/' + r1(lh.value) + (lh.unit === 'PERCENT' ? '%' : '') : '');
+      const f = paintVal(n.fills); if (f) v.font += ' · ' + f;
+      if (n.textAlignHorizontal && n.textAlignHorizontal !== 'LEFT') v.align = String(n.textAlignHorizontal).toLowerCase();
+      const t = String(n.characters || '').replace(/\s+/g, ' ');
+      v.text = t.length > 80 ? t.slice(0, 79) + '…' : t;
+    }
+  } catch (e) { return null; }
+  return v;
+}
+function valDiff(a, b) {
+  if (!a || !b) return [];
+  const out = [];
+  Object.keys(VAL_LABELS).forEach(k => {
+    const x = a[k] === undefined ? '' : a[k], y = b[k] === undefined ? '' : b[k];
+    if (x !== y) out.push({ prop: VAL_LABELS[k], before: x || (k === 'vis' ? 'visible' : '—'), after: y || (k === 'vis' ? 'visible' : '—') });
+  });
+  return out;
+}
 const SNAP_LIMIT = 2500;
 /* Figma caps each plugin-data entry at 100 kB (enforced since March 2025), so large
    values are split across "<key>:0..n" entries. 30k UTF-16 units is < 90 kB even
@@ -1638,7 +1799,8 @@ function snapshot(root, limit) {
     if (count >= limit) { map.__partial = 1; return; }
     count++;
     const s = nodeSig(n);
-    map[n.id] = [String(n.name).slice(0, 40), s[0], s[1], s[2]];
+    const v = nodeVals(n);
+    map[n.id] = v ? [String(n.name).slice(0, 40), s[0], s[1], s[2], v] : [String(n.name).slice(0, 40), s[0], s[1], s[2]];
     if ('children' in n) n.children.forEach(walk);
   })(root);
   return map;
@@ -1668,7 +1830,10 @@ function diffBaseline(target) {
     if (a[2] !== b[2]) parts.push('style');
     if (a[3] !== b[3]) parts.push('text');
     if (a[0] !== b[0]) parts.push('renamed');
-    if (parts.length) changes.push({ id: id, name: b[0], kind: 'changed', parts: parts });
+    if (!parts.length) return;
+    const detail = valDiff(a[4], b[4]);
+    if (a[0] !== b[0]) detail.unshift({ prop: 'Name', before: a[0], after: b[0] });
+    changes.push({ id: id, name: b[0], kind: 'changed', parts: parts, detail: detail.slice(0, 8) });
   });
   // When a snapshot hit the layer cap, layers past it are unknown, not added/removed.
   if (partial) {
@@ -1676,7 +1841,7 @@ function diffBaseline(target) {
   } else {
     Object.keys(base).forEach(id => { if (!now[id]) changes.push({ id: null, name: base[id][0], kind: 'removed', parts: [] }); });
   }
-  const res = { at: target.getSharedPluginData(NS, 'baselineAt'), partial: partial, limit: SNAP_LIMIT, count: changes.length, changes: changes.slice(0, 150), containerId: target.id, containerName: target.name };
+  const res = { at: target.getSharedPluginData(NS, 'baselineAt'), partial: partial, values: Object.keys(base).some(k => base[k] && base[k][4]), limit: SNAP_LIMIT, count: changes.length, changes: changes.slice(0, 150), containerId: target.id, containerName: target.name };
   diffCache[target.id] = res;
   return res;
 }
@@ -1686,7 +1851,11 @@ function loadMappings() {
   const out = {};
   try {
     figma.root.getSharedPluginDataKeys(NS).filter(k => k.indexOf('map:') === 0).forEach(k => {
-      try { out[k.slice(4)] = JSON.parse(figma.root.getSharedPluginData(NS, k)); } catch (e) { /* ignore */ }
+      try {
+        // file data can be written by anyone who edits the file (or another plugin): re-validate
+        const m = JSON.parse(figma.root.getSharedPluginData(NS, k));
+        if (m && MAP_NAME_RE.test(m.name) && MAP_PATH_RE.test(m.path)) out[k.slice(4)] = { name: m.name, path: m.path, at: String(m.at || '') };
+      } catch (e) { /* ignore */ }
     });
   } catch (e) { /* ignore */ }
   return out;
@@ -1707,7 +1876,7 @@ function connectSnippet(map, props) {
   const attrs = mp.attrs.map(a => a.kind === 'bool' ? ' ' + a.name : ' ' + a.name + '=' + jsxStr(a.value)).join('');
   const open = '<' + map.name + attrs;
   const body = mp.children !== null ? open + '>\n  ' + jsxTextNode(mp.children) + '\n</' + map.name + '>' : open + ' />';
-  return "import { " + map.name + " } from '" + map.path + "';\n\n" + body;
+  return "import { " + map.name + " } from " + jsQuote(map.path) + ";\n\n" + body;
 }
 
 /* ---------- layers (breadcrumb + children) ---------- */
@@ -1831,6 +2000,8 @@ const tokenId = t => camel(String(t).replace(/^--/, ''));
 const SW_WEIGHT = { 100: 'ultraLight', 200: 'thin', 300: 'light', 400: 'regular', 500: 'medium', 600: 'semibold', 700: 'bold', 800: 'heavy', 900: 'black' };
 /* Unicode bidi controls are escaped so generated code can't hide "Trojan Source" text. */
 const BIDI_RE = /[\u202A-\u202E\u2066-\u2069]/g;
+/** Single-quoted JS string literal (for import paths). */
+function jsQuote(s) { return "'" + String(s).replace(/[\\'\n\r\u2028\u2029]/g, c => c === '\n' ? '\\n' : c === '\r' ? '\\r' : '\\' + (c === '\u2028' ? 'u2028' : c === '\u2029' ? 'u2029' : c)) + "'"; }
 function swStr(s) {
   return '"' + String(s).replace(/[\\"\u0000-\u001f\u007f\u202A-\u202E\u2066-\u2069]/g, c =>
     c === '\\' ? '\\\\' : c === '"' ? '\\"' : c === '\n' ? '\\n' : c === '\t' ? '\\t' : c === '\r' ? '\\r' : '\\u{' + c.charCodeAt(0).toString(16) + '}') + '"';
@@ -1858,7 +2029,7 @@ function swFrame(P, align) {
   return ['.frame(' + parts.join(', ') + ')'];
 }
 function swTextChunk(text, P, extra, ctx) {
-  let s = 'Text(' + swStr(text) + ')';
+  const s = 'Text(' + swStr(text) + ')';
   const mods = [];
   if (extra) {
     if (extra['font-weight']) mods.push('.fontWeight(.' + (SW_WEIGHT[parseInt(extra['font-weight'], 10)] || 'regular') + ')');
@@ -2054,7 +2225,7 @@ function ktNode(el, parent, d, ctx, inDef, isRoot) {
   const comp = P.dir === 'row' ? 'Row' : P.dir === 'z' ? 'Box' : 'Column';
   const kids = el.children.map(c => ktNode(c, el, d + 1, ctx, inDef, false)).join('\n');
   const argStr = '(' + (args.length ? '\n' + args.map(a => pad + '    ' + a).join(',\n') + ',\n' + pad : '') + ')';
-  let call = !el.children.length ? pad + 'Box' + argStr : pad + comp + argStr + ' {\n' + kids + '\n' + pad + '}';
+  const call = !el.children.length ? pad + 'Box' + argStr : pad + comp + argStr + ' {\n' + kids + '\n' + pad + '}';
   return call;
 }
 function generateCompose(root, defs, ctx, name) {
@@ -2084,6 +2255,665 @@ function generateCompose(root, defs, ctx, name) {
   ].filter(Boolean).map(i => 'import ' + i).join('\n');
   const assets = ctx.assets.length ? '\n\n// Drawables: import into res/drawable (SVG → Vector Asset): ' + ctx.assets.map(a => drawableName(a.file)).join(', ') : '';
   return imports + '\n\n' + defCode.concat([main]).join('\n\n') + '\n\n@Preview(showBackground = true)\n@Composable\nprivate fun ' + name + 'Preview() {\n    ' + name + '()\n}' + tokens + assets + '\n';
+}
+
+/* ---------- React Native ---------- */
+function rnStr(s) {
+  return JSON.stringify(String(s)).replace(/[\u2028\u2029\u202a-\u202e\u2066-\u2069]/g, c => '\\u' + c.charCodeAt(0).toString(16).toUpperCase().padStart(4, '0'));
+}
+function rnRawColor(c) {
+  const a = c.a === undefined ? 1 : c.a;
+  if (a < 1) return "'rgba(" + to255(c.r) + ', ' + to255(c.g) + ', ' + to255(c.b) + ', ' + n2(a) + ")'";
+  return "'#" + hex2(c.r) + hex2(c.g) + hex2(c.b) + "'";
+}
+function rnColor(c, ctx) {
+  if (!c) return null;
+  if (c.token && ctx.tokenUse) { ctx.tokenUse[c.token] = c; return 'colors.' + tokenId(c.token); }
+  return rnRawColor(c);
+}
+const rnQ = s => "'" + s + "'";
+function rnStyleRef(ctx, el, pairs) {
+  if (!pairs.length) return null;
+  const reg = ctx.rnStyles = ctx.rnStyles || { byBody: {}, names: {}, order: [] };
+  const body = pairs.map(p => p[0] + ': ' + p[1]).join(', ');
+  if (reg.byBody[body]) return 'styles.' + reg.byBody[body];
+  const base = camel(el.cls || el.base || 'node').replace(/[^A-Za-z0-9_]/g, '_');
+  let name = base, i = 1;
+  while (reg.names[name]) name = base + (++i);
+  reg.names[name] = 1; reg.byBody[body] = name; reg.order.push({ name: name, pairs: pairs });
+  return 'styles.' + name;
+}
+function rnLayoutPairs(P, parentDir, s) {
+  if (parentDir) {
+    const mainFill = parentDir === 'row' ? P.fillW : P.fillH, crossFill = parentDir === 'row' ? P.fillH : P.fillW;
+    if (P.grow || mainFill) s.push(['flex', '1']);
+    if (crossFill) s.push(['alignSelf', rnQ('stretch')]);
+  } else {
+    if (P.fillW) s.push(['width', rnQ('100%')]);
+    if (P.fillH) s.push(['height', rnQ('100%')]);
+  }
+}
+function rnBoxPairs(el, P, parentDir, ctx) {
+  const s = [];
+  if (el.children.length && P.dir !== 'z') {
+    if (P.dir === 'row') s.push(['flexDirection', rnQ('row')]);
+    const jc = { center: 'center', 'flex-end': 'flex-end', 'space-between': 'space-between' }[P.justify];
+    if (jc) s.push(['justifyContent', rnQ(jc)]);
+    s.push(['alignItems', rnQ({ center: 'center', 'flex-end': 'flex-end', baseline: 'baseline', stretch: 'stretch' }[P.align] || 'flex-start')]);
+    if (P.gap && P.justify !== 'space-between') s.push(['gap', n2(P.gap)]);
+  }
+  const [t, r, b, l] = P.pad;
+  if (t || r || b || l) {
+    if (t === r && r === b && b === l) s.push(['padding', n2(t)]);
+    else if (t === b && l === r) { if (l) s.push(['paddingHorizontal', n2(l)]); if (t) s.push(['paddingVertical', n2(t)]); }
+    else { if (t) s.push(['paddingTop', n2(t)]); if (r) s.push(['paddingRight', n2(r)]); if (b) s.push(['paddingBottom', n2(b)]); if (l) s.push(['paddingLeft', n2(l)]); }
+  }
+  if (P.w !== null) s.push(['width', n2(P.w)]);
+  if (P.h !== null) s.push(['height', n2(P.h)]);
+  rnLayoutPairs(P, parentDir, s);
+  if (P.bg) s.push(['backgroundColor', rnColor(P.bg, ctx)]);
+  if (P.radius) s.push(['borderRadius', n2(P.radius)]);
+  if (P.border && P.border.color) { s.push(['borderWidth', n2(P.border.w)]); s.push(['borderColor', rnColor(P.border.color, ctx)]); }
+  if (el.css.overflow === 'hidden') s.push(['overflow', rnQ('hidden')]);
+  if (P.shadow && P.shadow.color) {
+    const sc = P.shadow.color;
+    s.push(['shadowColor', rnColor(Object.assign({}, sc, { a: 1, token: null }), ctx)]);
+    s.push(['shadowOffset', '{ width: ' + n2(P.shadow.x) + ', height: ' + n2(P.shadow.y) + ' }']);
+    s.push(['shadowOpacity', n2(sc.a === undefined ? 1 : sc.a)]);
+    s.push(['shadowRadius', n2(P.shadow.blur / 2)]);
+    s.push(['elevation', n2(Math.max(1, Math.round(P.shadow.blur / 2)))]);
+  }
+  if (P.opacity < 1) s.push(['opacity', n2(P.opacity)]);
+  if (P.abs) { s.push(['position', rnQ('absolute')]); s.push(['left', n2(P.abs.x)]); s.push(['top', n2(P.abs.y)]); }
+  return s;
+}
+function rnTextPairs(el, P, parentDir, ctx) {
+  const s = [];
+  if (P.family && !SYSTEM_FONTS.sans.test(P.family) && !SYSTEM_FONTS.serif.test(P.family) && !SYSTEM_FONTS.mono.test(P.family)) s.push(['fontFamily', rnStr(P.family).replace(/^"|"$/g, "'")]);
+  s.push(['fontSize', n2(P.size)]);
+  if (P.weight !== 400) s.push(['fontWeight', rnQ(String(P.weight))]);
+  if (el.css['font-style'] === 'italic') s.push(['fontStyle', rnQ('italic')]);
+  if (P.color) s.push(['color', rnColor(P.color, ctx)]);
+  if (P.lh) s.push(['lineHeight', n2(P.lh)]);
+  if (P.ls) s.push(['letterSpacing', n2(P.ls)]);
+  if (P.talign === 'center' || P.talign === 'right') s.push(['textAlign', rnQ(P.talign)]);
+  if (P.w !== null) s.push(['width', n2(P.w)]);
+  rnLayoutPairs(P, parentDir, s);
+  if (P.opacity < 1) s.push(['opacity', n2(P.opacity)]);
+  if (P.abs) { s.push(['position', rnQ('absolute')]); s.push(['left', n2(P.abs.x)]); s.push(['top', n2(P.abs.y)]); }
+  return s;
+}
+function rnRunStyle(css, ctx) {
+  const p = [];
+  if (css['font-weight']) p.push('fontWeight: ' + rnQ(String(parseInt(css['font-weight'], 10) || 400)));
+  if (css['font-style'] === 'italic') p.push("fontStyle: 'italic'");
+  if (css.color) { const col = parseColorStr(css.color, ctx); if (col) p.push('color: ' + rnColor(col, ctx)); }
+  if (css['text-decoration'] === 'underline') p.push("textDecorationLine: 'underline'");
+  if (css['text-decoration'] === 'line-through') p.push("textDecorationLine: 'line-through'");
+  return p;
+}
+function rnNode(el, parent, d, ctx, inDef) {
+  const pad = '  '.repeat(d);
+  const use = n => { ctx.rnUse[n] = 1; return n; };
+  if (el.usage && !inDef) {
+    const props = el.usage.values.map(v => ' ' + v.name + '={' + (v.kind === 'img' ? v.value : rnStr(v.value)) + '}').join('');
+    return pad + '<' + el.usage.def.name + props + ' />';
+  }
+  const P = nprops(el, parent, ctx);
+  const pdRaw = parent ? nprops(parent, null, ctx).dir : null;
+  const pd = pdRaw === 'z' ? null : pdRaw;
+  if (el.kind === 'text') {
+    const ref = rnStyleRef(ctx, el, rnTextPairs(el, P, pd, ctx));
+    let inner;
+    if (el.prop) inner = '{' + el.prop + '}';
+    else if (el.runs) {inner = el.runs.map(r => {
+      const st = r.css ? rnRunStyle(r.css, ctx) : [];
+      return st.length ? '<Text style={{ ' + st.join(', ') + ' }}>{' + rnStr(r.text) + '}</Text>' : '{' + rnStr(r.text) + '}';
+    }).join('');}
+    else inner = '{' + rnStr(el.text) + '}';
+    return pad + '<' + use('Text') + (ref ? ' style={' + ref + '}' : '') + '>' + inner + '</Text>';
+  }
+  if (el.kind === 'img') {
+    const w = npx(el.css.width) || 24, h = npx(el.css.height) || 24;
+    const isSvg = el.asset.format === 'SVG';
+    const pairs = [];
+    rnLayoutPairs(P, pd, pairs);
+    if (P.abs) { pairs.push(['position', rnQ('absolute')]); pairs.push(['left', n2(P.abs.x)]); pairs.push(['top', n2(P.abs.y)]); }
+    const a11y = el.attrs.alt ? ' accessibilityLabel={' + rnStr(el.attrs.alt) + '}' : ' accessible={false}';
+    if (isSvg) {
+      const comp = el.prop ? pascal(el.prop) : pascal(el.asset.varName);
+      const ref = rnStyleRef(ctx, el, pairs);
+      return pad + '<' + comp + ' width={' + n2(w) + '} height={' + n2(h) + '}' + (ref ? ' style={' + ref + '}' : '') + a11y + ' />';
+    }
+    const ref = rnStyleRef(ctx, el, [['width', n2(w)], ['height', n2(h)]].concat(pairs));
+    return pad + '<' + use('Image') + ' source={' + (el.prop || el.asset.varName) + '} style={' + ref + '} resizeMode="contain"' + a11y + ' />';
+  }
+  const btn = el.tag === 'button';
+  const comp = use(btn ? 'Pressable' : 'View');
+  const ref = rnStyleRef(ctx, el, rnBoxPairs(el, P, pd, ctx));
+  const attrs = (ref ? ' style={' + ref + '}' : '') + (btn ? ' accessibilityRole="button" onPress={() => {}}' : '');
+  if (!el.children.length) return pad + '<' + comp + attrs + ' />';
+  return pad + '<' + comp + attrs + '>\n' + el.children.map(c => rnNode(c, el, d + 1, ctx, inDef)).join('\n') + '\n' + pad + '</' + comp + '>';
+}
+function generateRN(root, defs, ctx, name) {
+  ctx.tokenUse = {}; ctx.rnUse = {}; ctx.rnStyles = null;
+  const defCode = defs.map(def => {
+    const leafs = leaves(def.tpl, []);
+    const args = def.props.length ? '{ ' + def.props.map(p => p.kind === 'img' && leafs[p.idx].asset.format === 'SVG' ? p.name + ': ' + pascal(p.name) : p.name).join(', ') + ' }' : '';
+    return 'function ' + def.name + '(' + args + ') {\n  return (\n' + rnNode(def.tpl, def.tpl.parent, 2, ctx, true) + '\n  );\n}';
+  });
+  const main = 'export default function ' + name + '() {\n  return (\n' + rnNode(root, null, 2, ctx, false) + '\n  );\n}';
+  const reg = ctx.rnStyles || { order: [] };
+  const styles = 'const styles = StyleSheet.create({\n' + reg.order.map(o => '  ' + o.name + ': {\n' + o.pairs.map(p => '    ' + p[0] + ': ' + p[1] + ',').join('\n') + '\n  },').join('\n') + '\n});';
+  const comps = ['View', 'Text', 'Image', 'Pressable'].filter(c => ctx.rnUse[c]).concat(['StyleSheet']);
+  const imports = ["import { " + comps.join(', ') + " } from 'react-native';"];
+  let hasSvg = false;
+  ctx.assets.forEach(a => {
+    if (a.format === 'SVG') { hasSvg = true; imports.push('import ' + pascal(a.varName) + " from './assets/" + a.file + "';"); }
+    else imports.push('import ' + a.varName + " from './assets/" + a.file + "';");
+  });
+  const used = Object.keys(ctx.tokenUse);
+  let colors = '';
+  if (used.length) {
+    colors = '// Design tokens (from Figma variables)\nconst colors = {\n' + used.map(t => '  ' + tokenId(t) + ': ' + rnRawColor(ctx.tokenUse[t]) + ',').join('\n') + '\n};\n\n';
+    const dark = used.filter(t => ctx.tokenInfo[t] && Object.keys(ctx.tokenInfo[t].modes).some(m => /dark/i.test(m)));
+    if (dark.length) {colors += '// Dark mode values: pick colors / colorsDark with useColorScheme()\nconst colorsDark = {\n' + dark.map(t => {
+      const ti = ctx.tokenInfo[t], dk = ti.modes[Object.keys(ti.modes).find(m => /dark/i.test(m))];
+      return '  ' + tokenId(t) + ': ' + rnRawColor(typeof dk === 'object' ? dk : ctx.tokenUse[t]) + ',';
+    }).join('\n') + '\n};\n\n';}
+  }
+  const note = hasSvg ? '// SVG assets use react-native-svg + react-native-svg-transformer (or export them as PNG).\n' : '';
+  return imports.join('\n') + '\n' + note + '\n' + colors + defCode.concat([main]).join('\n\n') + '\n\n' + styles + '\n';
+}
+
+/* ---------- Flutter (Dart) ---------- */
+function dtStr(s) {
+  return "'" + String(s).replace(/[\\'$\u0000-\u001f\u007f\u2028\u2029\u202a-\u202e\u2066-\u2069]/g, c =>
+    c === '\\' ? '\\\\' : c === "'" ? "\\'" : c === '$' ? '\\$' : c === '\n' ? '\\n' : c === '\r' ? '\\r' : c === '\t' ? '\\t' : '\\u{' + c.charCodeAt(0).toString(16) + '}') + "'";
+}
+function dtRawColor(c) {
+  const h = v => to255(v).toString(16).padStart(2, '0').toUpperCase();
+  return 'Color(0x' + h(c.a === undefined ? 1 : c.a) + h(c.r) + h(c.g) + h(c.b) + ')';
+}
+function dtColor(c, ctx) {
+  if (!c) return null;
+  if (c.token && ctx.tokenUse) { ctx.tokenUse[c.token] = c; return 'AppColors.' + tokenId(c.token); }
+  return dtRawColor(c);
+}
+/** Widget call. Args are 'key: value' strings; the widget "starts" at depth d (first line unindented). */
+function dtCall(name, args, d) {
+  const pad = '  '.repeat(d);
+  return name + '(\n' + args.map(a => pad + '  ' + a + ',').join('\n') + '\n' + pad + ')';
+}
+function dtList(items, d) {
+  // items are widgets started at depth d + 2 (list lives in an argument line at depth d + 1)
+  const pad = '  '.repeat(d + 1);
+  return '[\n' + items.map(i => pad + '  ' + i + ',').join('\n') + '\n' + pad + ']';
+}
+function dtTextStyle(P, el, ctx, css) {
+  const a = [];
+  const c = css || el.css;
+  if (!css && P.family && !SYSTEM_FONTS.sans.test(P.family) && !SYSTEM_FONTS.serif.test(P.family) && !SYSTEM_FONTS.mono.test(P.family)) a.push('fontFamily: ' + dtStr(P.family));
+  if (!css) a.push('fontSize: ' + n2(P.size));
+  const w = css ? parseInt(css['font-weight'], 10) : P.weight;
+  if (w && (css || w !== 400)) a.push('fontWeight: FontWeight.w' + (Math.round(w / 100) * 100 || 400));
+  if (c['font-style'] === 'italic') a.push('fontStyle: FontStyle.italic');
+  const col = css ? (css.color ? parseColorStr(css.color, ctx) : null) : P.color;
+  if (col) a.push('color: ' + dtColor(col, ctx));
+  if (!css && P.lh && P.size) a.push('height: ' + n2(P.lh / P.size));
+  if (!css && P.ls) a.push('letterSpacing: ' + n2(P.ls));
+  if (c['text-decoration'] === 'underline') a.push('decoration: TextDecoration.underline');
+  if (c['text-decoration'] === 'line-through') a.push('decoration: TextDecoration.lineThrough');
+  return a.length ? 'TextStyle(' + a.join(', ') + ')' : null;
+}
+const DT_MAIN = { 'flex-start': 'start', center: 'center', 'flex-end': 'end', 'space-between': 'spaceBetween' };
+const DT_CROSS = { 'flex-start': 'start', center: 'center', 'flex-end': 'end', stretch: 'stretch' };
+function dtNode(el, parent, d, ctx, inDef) {
+  const P = nprops(el, parent, ctx);
+  const pdRaw = parent ? nprops(parent, null, ctx).dir : null;
+  const pd = pdRaw === 'z' ? null : pdRaw;
+  if (el.usage && !inDef) {
+    return dtCall(el.usage.def.name, el.usage.values.map(v => v.name + ': ' + dtStr(v.kind === 'img' ? 'assets/' + v.file : v.value)), d);
+  }
+  // wrappers, outermost first
+  const wraps = [];
+  if (P.abs) wraps.push({ name: 'Positioned', args: ['left: ' + n2(P.abs.x), 'top: ' + n2(P.abs.y)] });
+  else if (pd) {
+    const mainFill = pd === 'row' ? P.fillW : P.fillH;
+    if (P.grow || mainFill) wraps.push({ name: 'Expanded', args: [] });
+  }
+  if (P.opacity < 1) wraps.push({ name: 'Opacity', args: ['opacity: ' + n2(P.opacity)] });
+  if (el.tag === 'button' && el.kind === 'box') { ctx.dtInk = true; wraps.push({ name: 'InkWell', args: ['onTap: () {} /* TODO: onTap */'] }); }
+  const inner = d + wraps.length;
+  const crossW = pd === 'col' && P.fillW || (!pd && P.fillW), crossH = pd === 'row' && P.fillH || (!pd && P.fillH);
+  let w;
+  if (el.kind === 'text') {
+    const sized = P.w !== null && !P.abs;
+    const td = sized ? inner + 1 : inner;
+    const style = dtTextStyle(P, el, ctx);
+    const args = [];
+    let head;
+    if (el.runs && !el.prop) {
+      const spans = el.runs.map(r => {
+        const st = r.css ? dtTextStyle(P, el, ctx, r.css) : null;
+        return 'TextSpan(text: ' + dtStr(r.text) + (st ? ', style: ' + st : '') + ')';
+      });
+      args.push('TextSpan(children: [' + spans.join(', ') + '])');
+      head = 'Text.rich';
+    } else if (!el.prop) { args.push(dtStr(el.text)); head = 'Text'; }
+    else { args.push(el.prop); head = 'Text'; }
+    if (style) args.push('style: ' + style);
+    if (P.talign === 'center') args.push('textAlign: TextAlign.center');
+    if (P.talign === 'right') args.push('textAlign: TextAlign.right');
+    w = dtCall(head, args, td);
+    if (sized) w = dtCall('SizedBox', ['width: ' + n2(P.w), 'child: ' + w], inner);
+  } else if (el.kind === 'img') {
+    const iw = npx(el.css.width) || 24, ih = npx(el.css.height) || 24;
+    const path = el.prop || dtStr('assets/' + el.asset.file);
+    const svg = el.asset.format === 'SVG';
+    if (svg) ctx.dtSvg = true;
+    const args = [path, 'width: ' + n2(iw), 'height: ' + n2(ih)];
+    if (!svg) args.push('fit: BoxFit.contain');
+    args.push(el.attrs.alt ? (svg ? 'semanticsLabel: ' : 'semanticLabel: ') + dtStr(el.attrs.alt) : 'excludeFromSemantics: true');
+    w = dtCall(svg ? 'SvgPicture.asset' : 'Image.asset', args, inner);
+  } else {
+    const c = [];
+    if (P.w !== null) c.push('width: ' + n2(P.w)); else if (crossW) c.push('width: double.infinity');
+    if (P.h !== null) c.push('height: ' + n2(P.h)); else if (crossH) c.push('height: double.infinity');
+    const [t, r, b, l] = P.pad;
+    if (t || r || b || l) c.push(t === r && r === b && b === l ? 'padding: const EdgeInsets.all(' + n2(t) + ')' : 'padding: const EdgeInsets.fromLTRB(' + [l, t, r, b].map(n2).join(', ') + ')');
+    const deco = [];
+    if (P.bg) deco.push('color: ' + dtColor(P.bg, ctx));
+    if (P.radius) deco.push('borderRadius: BorderRadius.circular(' + n2(P.radius) + ')');
+    if (P.border && P.border.color) deco.push('border: Border.all(color: ' + dtColor(P.border.color, ctx) + ', width: ' + n2(P.border.w) + ')');
+    if (P.shadow && P.shadow.color) deco.push('boxShadow: [BoxShadow(color: ' + dtColor(P.shadow.color, ctx) + ', offset: Offset(' + n2(P.shadow.x) + ', ' + n2(P.shadow.y) + '), blurRadius: ' + n2(P.shadow.blur) + ', spreadRadius: ' + n2(P.shadow.spread) + ')]');
+    if (deco.length) c.push('decoration: BoxDecoration(' + deco.join(', ') + ')');
+    if (el.css.overflow === 'hidden' && P.radius && el.children.length) c.push('clipBehavior: Clip.antiAlias');
+    const cd = c.length ? inner + 1 : inner; // depth where the layout widget starts
+    const kids = el.children.map(k => dtNode(k, el, cd + 2, ctx, inDef));
+    let child = null;
+    if (kids.length) {
+      const a = [];
+      if (P.dir === 'z') {
+        a.push('children: ' + dtList(kids, cd));
+        child = dtCall('Stack', a, cd);
+      } else {
+        const row = P.dir === 'row';
+        const hug = row ? (P.w === null && !P.fillW) : (P.h === null && !P.fillH);
+        if (hug) a.push('mainAxisSize: MainAxisSize.min');
+        if (DT_MAIN[P.justify] && P.justify !== 'flex-start') a.push('mainAxisAlignment: MainAxisAlignment.' + DT_MAIN[P.justify]);
+        a.push('crossAxisAlignment: CrossAxisAlignment.' + (DT_CROSS[P.align] || 'start'));
+        if (P.gap && P.justify !== 'space-between') a.push('spacing: ' + n2(P.gap));
+        a.push('children: ' + dtList(kids, cd));
+        child = dtCall(row ? 'Row' : 'Column', a, cd);
+      }
+    }
+    if (!c.length) w = child || 'SizedBox.shrink()';
+    else { if (child) c.push('child: ' + child); w = dtCall('Container', c, inner); }
+  }
+  for (let i = wraps.length - 1; i >= 0; i--) w = dtCall(wraps[i].name, wraps[i].args.concat(['child: ' + w]), d + i);
+  return w;
+}
+function generateFlutter(root, defs, ctx, name) {
+  ctx.tokenUse = {}; ctx.dtSvg = false; ctx.dtInk = false;
+  const cls = (cname, fields, body) => 'class ' + cname + ' extends StatelessWidget {\n  const ' + cname + '({super.key' + fields.map(f => ', required this.' + f).join('') + '});\n' +
+    (fields.length ? '\n' + fields.map(f => '  final String ' + f + ';').join('\n') + '\n' : '') +
+    '\n  @override\n  Widget build(BuildContext context) {\n    return ' + body + ';\n  }\n}';
+  const defCode = defs.map(def => cls(def.name, def.props.map(p => p.name), dtNode(def.tpl, def.tpl.parent, 2, ctx, true)));
+  const main = cls(name, [], dtNode(root, null, 2, ctx, false));
+  const used = Object.keys(ctx.tokenUse);
+  let tokens = '';
+  if (used.length) {
+    tokens = '\n\n/// Design tokens (from Figma variables)\nclass AppColors {\n  AppColors._();\n' + used.map(t => '  static const ' + tokenId(t) + ' = ' + dtRawColor(ctx.tokenUse[t]) + ';').join('\n') + '\n}';
+    const dark = used.filter(t => ctx.tokenInfo[t] && Object.keys(ctx.tokenInfo[t].modes).some(m => /dark/i.test(m)));
+    if (dark.length) {tokens += '\n\nclass AppColorsDark {\n  AppColorsDark._();\n' + dark.map(t => {
+      const ti = ctx.tokenInfo[t], dk = ti.modes[Object.keys(ti.modes).find(m => /dark/i.test(m))];
+      return '  static const ' + tokenId(t) + ' = ' + dtRawColor(typeof dk === 'object' ? dk : ctx.tokenUse[t]) + ';';
+    }).join('\n') + '\n}';}
+  }
+  const imports = "import 'package:flutter/material.dart';" + (ctx.dtSvg ? "\nimport 'package:flutter_svg/flutter_svg.dart';" : '');
+  const assets = ctx.assets.length ? '\n\n// Assets: add to pubspec.yaml → flutter: assets: [assets/]' + (ctx.dtSvg ? ' (SVGs need the flutter_svg package)' : '') : '';
+  return imports + '\n\n' + defCode.concat([main]).join('\n\n') + tokens + assets + '\n';
+}
+
+/* ------------------------------------------------------------------ */
+/* Accessibility audit: WCAG contrast, touch targets, labels           */
+/* ------------------------------------------------------------------ */
+function relLum(c) {
+  const f = v => v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4);
+  return 0.2126 * f(c.r) + 0.7152 * f(c.g) + 0.0722 * f(c.b);
+}
+function contrastRatio(a, b) {
+  const l1 = relLum(a), l2 = relLum(b);
+  return (Math.max(l1, l2) + 0.05) / (Math.min(l1, l2) + 0.05);
+}
+function blendOver(fg, alpha, bg) {
+  return { r: fg.r * alpha + bg.r * (1 - alpha), g: fg.g * alpha + bg.g * (1 - alpha), b: fg.b * alpha + bg.b * (1 - alpha) };
+}
+/** Top-most visible paint: { color, alpha } for solids, { unknown: type } for gradients/images, null if none. */
+function topSolid(paints) {
+  if (!paints || isMixed(paints) || !paints.length) return null;
+  for (let i = paints.length - 1; i >= 0; i--) {
+    const p = paints[i];
+    if (p.visible === false) continue;
+    if (p.type === 'SOLID') return { color: p.color, alpha: (p.opacity === undefined ? 1 : p.opacity) };
+    return { unknown: p.type };
+  }
+  return null;
+}
+function coversBox(outer, inner) {
+  const t = 1;
+  return outer.x <= inner.x + t && outer.y <= inner.y + t && outer.x + outer.width >= inner.x + inner.width - t && outer.y + outer.height >= inner.y + inner.height - t;
+}
+/** Colour behind a layer: nearest covering sibling below it, then each ancestor's fill. */
+function backgroundBehind(node) {
+  const layers = [];
+  let cur = node;
+  const box = node.absoluteBoundingBox;
+  let guard = 0;
+  while (cur.parent && cur.parent.type !== 'PAGE' && cur.parent.type !== 'DOCUMENT' && guard++ < 40) {
+    const par = cur.parent;
+    const sibs = par.children || [];
+    for (let i = sibs.indexOf(cur) - 1; i >= 0; i--) {
+      const s = sibs[i];
+      if (s.visible === false || !('fills' in s) || s.type === 'TEXT' || s.type === 'LINE') continue; // text is never a background
+      const sb = s.absoluteBoundingBox;
+      if (!sb || !box || !coversBox(sb, box)) continue;
+      const f = topSolid(s.fills);
+      if (!f) continue;
+      if (f.unknown) return { unknown: f.unknown };
+      layers.push(f);
+      if (f.alpha >= 0.999) return composeLayers(layers, null);
+    }
+    if ('fills' in par) {
+      const f = topSolid(par.fills);
+      if (f && f.unknown) return { unknown: f.unknown };
+      if (f) { layers.push(f); if (f.alpha >= 0.999) return composeLayers(layers, null); }
+    }
+    cur = par;
+  }
+  return composeLayers(layers, { r: 1, g: 1, b: 1 });
+}
+function composeLayers(layers, assumed) {
+  let base = assumed || null;
+  let i = layers.length - 1;
+  if (!base) { base = layers[i].color; i--; }
+  for (; i >= 0; i--) base = blendOver(layers[i].color, layers[i].alpha, base);
+  return { color: base, assumed: !!assumed };
+}
+function textFill(n) {
+  let f = topSolid(n.fills);
+  if (!f && isMixed(n.fills)) {
+    try { const segs = n.getStyledTextSegments(['fills']); if (segs && segs[0]) f = topSolid(segs[0].fills); } catch (e) { /* ignore */ }
+  }
+  return f;
+}
+const TARGET_NAME_RE = /(^|[\s\/_\-])(button|btn|cta|tab|chip|checkbox|radio|switch|toggle|link|icon button)([\s\/_\-]|$)/i;
+function isInteractive(n) {
+  try {
+    if (n.reactions && n.reactions.some(r => { const t = r.trigger && r.trigger.type; return t === 'ON_CLICK' || t === 'ON_PRESS' || t === 'ON_DRAG' ? true : false; })) return true;
+  } catch (e) { /* ignore */ }
+  return /^(FRAME|INSTANCE|COMPONENT)$/.test(n.type) && TARGET_NAME_RE.test(n.name || '');
+}
+function a11yAudit(root, limit) {
+  const items = [];
+  let scanned = 0, limited = false;
+  const frameWidth = n => { let c = n; while (c.parent && c.parent.type !== 'PAGE' && c.parent.type !== 'DOCUMENT' && c.parent.type !== 'SECTION') c = c.parent; return c.width || 9999; };
+  const visit = n => {
+    if (n.visible === false) return;
+    if (scanned >= (limit || 400)) { limited = true; return; }
+    scanned++;
+    if (n.type === 'TEXT' && n.characters && String(n.characters).trim()) {
+      const fg = textFill(n), size = isMixed(n.fontSize) ? 16 : n.fontSize;
+      const weight = isMixed(n.fontWeight) ? 400 : (n.fontWeight || 400);
+      if (fg && !fg.unknown) {
+        const bg = backgroundBehind(n);
+        if (bg && !bg.unknown) {
+          const a = Math.min(1, fg.alpha * (n.opacity === undefined ? 1 : n.opacity));
+          const eff = blendOver(fg.color, a, bg.color);
+          const ratio = contrastRatio(eff, bg.color);
+          const large = size >= 24 || (size >= 18.66 && weight >= 700);
+          const need = large ? 3 : 4.5, aaa = large ? 4.5 : 7;
+          items.push({ id: n.id, name: String(n.characters).slice(0, 40), kind: 'contrast', status: ratio >= need ? 'pass' : 'fail', ratio: round(ratio, 2), need: need, aaa: ratio >= aaa, large: large,
+            fg: colorHex(eff), bg: colorHex(bg.color), assumed: bg.assumed, size: size });
+        } else items.push({ id: n.id, name: String(n.characters).slice(0, 40), kind: 'contrast', status: 'unknown', detail: 'Background is a ' + String(bg && bg.unknown || 'gradient/image').toLowerCase() + ' — check contrast manually' });
+      }
+      if (size < 12) items.push({ id: n.id, name: String(n.characters).slice(0, 40), kind: 'size', status: 'warn', detail: 'Text is ' + round(size, 1) + 'px — under 12px is hard to read' });
+    }
+    if (n !== root && isInteractive(n) && 'width' in n) {
+      const w = n.width, h = n.height, min = Math.min(w, h), mobile = frameWidth(n) <= 600;
+      if (min < 24) items.push({ id: n.id, name: n.name, kind: 'target', status: 'fail', w: round(w), h: round(h), detail: round(w) + '×' + round(h) + ' is under the 24×24 minimum (WCAG 2.5.8)' });
+      else if (mobile && min < 44) items.push({ id: n.id, name: n.name, kind: 'target', status: 'warn', w: round(w), h: round(h), detail: round(w) + '×' + round(h) + ' — aim for 44×44 on touch screens' });
+      else items.push({ id: n.id, name: n.name, kind: 'target', status: 'pass', w: round(w), h: round(h), detail: round(w) + '×' + round(h) });
+      let hasText = true;
+      try { hasText = !!(n.findOne && n.findOne(x => x.type === 'TEXT' && x.visible !== false && String(x.characters || '').trim())); } catch (e) { /* assume labelled */ }
+      if (!hasText && 'children' in n) items.push({ id: n.id, name: n.name, kind: 'label', status: 'warn', detail: 'No visible text — give it an accessible name (aria-label / contentDescription)' });
+    }
+    if ('children' in n) n.children.forEach(visit);
+  };
+  visit(root);
+  const counts = { fail: 0, warn: 0, pass: 0, unknown: 0 };
+  items.forEach(i => { counts[i.status]++; });
+  const order = { fail: 0, warn: 1, unknown: 2, pass: 3 };
+  items.sort((a, b) => order[a.status] - order[b.status]);
+  return { items: items.slice(0, 120), counts: counts, scanned: scanned, limited: limited };
+}
+
+/* ------------------------------------------------------------------ */
+/* Design tokens export: variables (all modes) + styles                */
+/* ------------------------------------------------------------------ */
+const UNITLESS_RE = /opacity|alpha|ratio|weight|z-?index|scale|line-?height|leading|count|order|columns?/i;
+function cssIdent(path) { return path.map(p => slug(p)).filter(Boolean).join('-') || 'token'; }
+function cssStr(s) { return '"' + String(s).replace(/[\\"]/g, '\\$&').replace(/\n/g, '\\A ').replace(/[\u0000-\u001f\u007f\u2028\u2029]/g, ' ') + '"'; }
+function safeVarName(web, path) {
+  const m = web && /var\((--[A-Za-z0-9_-]+)/.exec(web);
+  return m ? m[1] : '--' + cssIdent(path);
+}
+async function tokenFromVariable(v) {
+  const coll = await getColl(v.variableCollectionId);
+  const modes = coll ? coll.modes : [{ modeId: Object.keys(v.valuesByMode)[0], name: 'Default' }];
+  const defId = coll ? coll.defaultModeId : modes[0].modeId;
+  const path = String(v.name).split('/').map(s => s.trim()).filter(Boolean);
+  const tok = { source: 'variable', name: v.name, path: path, type: v.resolvedType, collection: coll ? coll.name : '', description: v.description || '', web: (v.codeSyntax && v.codeSyntax.WEB) || '', modes: [] };
+  for (const m of modes) {
+    const raw = v.valuesByMode[m.modeId];
+    const r = await resolveVarValue(raw, m.modeId, 0);
+    let ref = null;
+    if (raw && typeof raw === 'object' && raw.type === 'VARIABLE_ALIAS') {
+      try { const t = await figma.variables.getVariableByIdAsync(raw.id); ref = t ? t.name : null; } catch (e) { /* ignore */ }
+    }
+    tok.modes.push({ name: m.name, isDefault: m.modeId === defId, value: r.value, ref: ref });
+  }
+  return tok;
+}
+function walkTree(node, fn, limit) {
+  let n = 0;
+  (function go(x) { if (n++ >= limit) return; fn(x); if ('children' in x) x.children.forEach(go); })(node);
+}
+async function gatherTokens(scope, node) {
+  const tokens = [];
+  const seen = {};
+  const add = async v => {
+    if (!v || seen[v.id] || v.hiddenFromPublishing) return;
+    seen[v.id] = 1;
+    if (v.resolvedType === 'BOOLEAN') return;
+    try { tokens.push(await tokenFromVariable(v)); } catch (e) { /* skip */ }
+  };
+  if (scope === 'selection' && node) {
+    const ctx = { varIds: {} };
+    walkTree(node, n => collectVarIds(n, ctx), 1500);
+    for (const id of Object.keys(ctx.varIds)) { let v = null; try { v = await figma.variables.getVariableByIdAsync(id); } catch (e) { /* remote */ } await add(v); }
+  } else {
+    let list = [];
+    try { list = await figma.variables.getLocalVariablesAsync(); } catch (e) { /* unavailable */ }
+    for (const v of list.slice(0, 2000)) await add(v);
+  }
+  const styles = { paint: [], text: [] };
+  if (scope !== 'selection') {
+    try {
+      const ps = await figma.getLocalPaintStylesAsync();
+      ps.slice(0, 500).forEach(s => {
+        const f = topSolid(s.paints);
+        if (f && !f.unknown) styles.paint.push({ name: s.name, path: String(s.name).split('/').map(x => x.trim()).filter(Boolean), color: { r: f.color.r, g: f.color.g, b: f.color.b, a: f.alpha } });
+      });
+    } catch (e) { /* unavailable */ }
+    try {
+      const ts = await figma.getLocalTextStylesAsync();
+      ts.slice(0, 500).forEach(s => {
+        const lh = s.lineHeight && s.lineHeight.unit === 'PIXELS' ? s.lineHeight.value + 'px' : s.lineHeight && s.lineHeight.unit === 'PERCENT' ? round(s.lineHeight.value / 100, 3) : null;
+        const ls = s.letterSpacing && s.letterSpacing.value ? (s.letterSpacing.unit === 'PIXELS' ? s.letterSpacing.value + 'px' : round(s.letterSpacing.value / 100, 3) + 'em') : null;
+        styles.text.push({ name: s.name, path: String(s.name).split('/').map(x => x.trim()).filter(Boolean), family: s.fontName.family, weight: styleWeight(s.fontName.style), italic: /italic/i.test(s.fontName.style), size: s.fontSize, lineHeight: lh, letterSpacing: ls });
+      });
+    } catch (e) { /* unavailable */ }
+  }
+  return { tokens: tokens, styles: styles };
+}
+function tokenValue(tok, mode, nameOf, unit, base) {
+  if (mode.ref) return 'var(' + nameOf(mode.ref) + ')';
+  const hint = tok.type === 'FLOAT' && !UNITLESS_RE.test(tok.name) ? 'px' : '';
+  if (tok.type === 'STRING') return mode.value === null || mode.value === undefined ? null : cssStr(mode.value);
+  const v = varValueCss(mode.value, tok.type, hint);
+  return v === null ? null : remify(v, unit, base);
+}
+function twName(tok) {
+  const p = tok.path.slice();
+  const take = re => { const i = p.findIndex(s => re.test(s)); if (i > -1) p.splice(i, 1); return i > -1; };
+  let prefix = '';
+  if (tok.type === 'COLOR') { take(/^colou?rs?$/i); prefix = 'color'; }
+  else if (tok.type === 'FLOAT') {
+    if (take(/radius|rounded|corner/i)) prefix = 'radius';
+    else if (take(/^(spacing|space|gap|padding|margin)$/i)) prefix = 'spacing';
+    else if (take(/font-?size|text-?size|type-?size/i)) prefix = 'text';
+    else if (take(/font-?weight/i)) prefix = 'font-weight';
+    else if (take(/line-?height|leading/i)) prefix = 'leading';
+    else if (take(/letter|tracking/i)) prefix = 'tracking';
+  } else if (tok.type === 'STRING' && take(/font|family/i)) prefix = 'font';
+  const rest = cssIdent(p.length ? p : ['default']);
+  return '--' + (prefix ? prefix + '-' : '') + rest;
+}
+function jsonSet(root, path, leaf) {
+  let o = root;
+  for (let i = 0; i < path.length - 1; i++) {
+    const k = path[i];
+    if (!o[k] || o[k].$value !== undefined) o[k] = Object.create(null);
+    o = o[k];
+  }
+  const last = path[path.length - 1];
+  o[o[last] && o[last].$value === undefined && o[last] ? last + '-default' : last] = leaf;
+}
+function jsonValue(tok, mode, unit, base, refPath) {
+  if (mode.ref) return '{' + refPath(mode.ref) + '}';
+  if (tok.type === 'COLOR') return varValueCss(mode.value, 'COLOR');
+  if (tok.type === 'FLOAT') return UNITLESS_RE.test(tok.name) ? mode.value : remify(round(mode.value, 2) + 'px', unit, base);
+  return mode.value;
+}
+async function buildTokens(format, scope, node, unit, base) {
+  const data = await gatherTokens(scope, node);
+  const toks = data.tokens;
+  const byName = {};
+  toks.forEach(t => { byName[t.name] = t; });
+  const nameOf = format === 'tailwind'
+    ? n => byName[n] ? twName(byName[n]) : '--' + cssIdent(String(n).split('/'))
+    : n => byName[n] ? safeVarName(byName[n].web, byName[n].path) : '--' + cssIdent(String(n).split('/'));
+  const when = scope === 'selection' ? 'tokens used by the selection' : 'all local variables and styles';
+  const stats = { variables: toks.length, styles: data.styles.paint.length + data.styles.text.length, modes: 0 };
+  const head = 'Design tokens — exported from Figma by DevReady (' + when + ')';
+  let text;
+  const modeNames = {};
+  toks.forEach(t => t.modes.forEach(m => { if (!m.isDefault) modeNames[t.collection + '|' + m.name] = 1; }));
+  stats.modes = Object.keys(modeNames).length;
+
+  if (format === 'json') {
+    const root = Object.create(null);
+    const refPath = n => (byName[n] ? byName[n].path : String(n).split('/')).join('.');
+    toks.forEach(t => {
+      const def = t.modes.find(m => m.isDefault) || t.modes[0];
+      if (!def || !t.path.length) return;
+      const v = jsonValue(t, def, unit, base, refPath);
+      if (v === null || v === undefined) return;
+      const leaf = { $type: t.type === 'COLOR' ? 'color' : t.type === 'FLOAT' ? (UNITLESS_RE.test(t.name) ? 'number' : 'dimension') : 'string', $value: v };
+      if (t.description) leaf.$description = t.description;
+      const others = t.modes.filter(m => !m.isDefault);
+      leaf.$extensions = { 'com.figma': { collection: t.collection } };
+      if (others.length) { leaf.$extensions['com.figma'].modes = {}; others.forEach(m => { const mv = jsonValue(t, m, unit, base, refPath); if (mv !== null && mv !== undefined) leaf.$extensions['com.figma'].modes[m.name] = mv; }); }
+      jsonSet(root, t.path, leaf);
+    });
+    data.styles.paint.forEach(s => { if (s.path.length) jsonSet(root, ['style'].concat(s.path), { $type: 'color', $value: varValueCss(s.color, 'COLOR') }); });
+    data.styles.text.forEach(s => {
+      if (!s.path.length) return;
+      const v = { fontFamily: s.family, fontWeight: s.weight, fontSize: remify(s.size + 'px', unit, base) };
+      if (s.lineHeight !== null) v.lineHeight = s.lineHeight;
+      if (s.letterSpacing !== null) v.letterSpacing = s.letterSpacing;
+      jsonSet(root, ['text'].concat(s.path), { $type: 'typography', $value: v });
+    });
+    root.$description = head;
+    text = JSON.stringify(root, null, 2) + '\n';
+  } else if (format === 'scss') {
+    const sn = n => '$' + nameOf(n).replace(/^--/, '');
+    const lines = ['// ' + head, ''];
+    toks.forEach(t => {
+      const def = t.modes.find(m => m.isDefault) || t.modes[0];
+      if (!def) return;
+      const v = tokenValue(t, def, n => sn(n), unit, base);
+      if (v === null) return;
+      const name = sn(t.name);
+      lines.push(name + ': ' + v.replace(/var\((\$[^)]+)\)/g, '$1') + ';');
+      t.modes.filter(m => !m.isDefault).forEach(m => {
+        const mv = tokenValue(t, m, n => sn(n), unit, base);
+        if (mv !== null && mv !== v) lines.push(name + '--' + slug(m.name) + ': ' + mv.replace(/var\((\$[^)]+)\)/g, '$1') + ';');
+      });
+    });
+    if (data.styles.paint.length) { lines.push('', '// Color styles'); data.styles.paint.forEach(s => lines.push('$style-' + cssIdent(s.path) + ': ' + varValueCss(s.color, 'COLOR') + ';')); }
+    if (data.styles.text.length) {
+      lines.push('', '// Text styles');
+      data.styles.text.forEach(s => {
+        const n = '$text-' + cssIdent(s.path);
+        lines.push(n + '-font-family: ' + cssStr(s.family) + ';', n + '-font-size: ' + remify(s.size + 'px', unit, base) + ';', n + '-font-weight: ' + s.weight + ';');
+        if (s.lineHeight !== null) lines.push(n + '-line-height: ' + s.lineHeight + ';');
+        if (s.letterSpacing !== null) lines.push(n + '-letter-spacing: ' + s.letterSpacing + ';');
+      });
+    }
+    text = lines.join('\n') + '\n';
+  } else {
+    // css and tailwind (v4 @theme) share the :root / mode-override structure
+    const tw = format === 'tailwind';
+    const root = [], themes = {};
+    toks.forEach(t => {
+      const def = t.modes.find(m => m.isDefault) || t.modes[0];
+      if (!def) return;
+      const name = nameOf(t.name);
+      const v = tokenValue(t, def, nameOf, unit, base);
+      if (v === null) return;
+      root.push('  ' + name + ': ' + v + ';');
+      t.modes.filter(m => !m.isDefault).forEach(m => {
+        const mv = tokenValue(t, m, nameOf, unit, base);
+        if (mv === null || mv === v) return;
+        const sel = themeSelector(t.collection, m.name, t.modes);
+        (themes[sel] = themes[sel] || []).push('  ' + name + ': ' + mv + ';');
+      });
+    });
+    data.styles.paint.forEach(s => root.push('  ' + (tw ? '--color-' : '--style-') + cssIdent(s.path) + ': ' + varValueCss(s.color, 'COLOR') + ';'));
+    data.styles.text.forEach(s => {
+      const n = cssIdent(s.path);
+      if (tw) {
+        root.push('  --text-' + n + ': ' + remify(s.size + 'px', unit, base) + ';');
+        if (s.lineHeight !== null) root.push('  --text-' + n + '--line-height: ' + s.lineHeight + ';');
+        if (s.letterSpacing !== null) root.push('  --text-' + n + '--letter-spacing: ' + s.letterSpacing + ';');
+        root.push('  --text-' + n + '--font-weight: ' + s.weight + ';');
+      } else {
+        root.push('  --text-' + n + '-font-family: ' + cssStr(s.family) + ';', '  --text-' + n + '-font-size: ' + remify(s.size + 'px', unit, base) + ';', '  --text-' + n + '-font-weight: ' + s.weight + ';');
+        if (s.lineHeight !== null) root.push('  --text-' + n + '-line-height: ' + s.lineHeight + ';');
+        if (s.letterSpacing !== null) root.push('  --text-' + n + '-letter-spacing: ' + s.letterSpacing + ';');
+      }
+    });
+    const parts = ['/* ' + head + ' */'];
+    if (tw) parts.push('@import "tailwindcss";');
+    parts.push((tw ? '@theme' : ':root') + ' {\n' + root.join('\n') + '\n}');
+    Object.keys(themes).forEach(sel => parts.push(sel + ' {\n' + themes[sel].join('\n') + '\n}'));
+    text = parts.join('\n\n') + '\n';
+  }
+  const ext = format === 'json' ? 'json' : format === 'scss' ? 'scss' : 'css';
+  return { text: text, file: (format === 'tailwind' ? 'theme' : 'tokens') + '.' + ext, lang: format === 'json' ? 'json' : 'css', stats: stats, empty: !toks.length && !stats.styles };
 }
 
 /* ---------- Prototype interactions ---------- */
@@ -2300,7 +3130,7 @@ if (figma.mode === 'codegen') {
       if (status) { const cont = await figma.getNodeByIdAsync(status.nodeId); const d = cont && diffBaseline(cont); if (d && d.count) header += ' · ⚠ ' + d.count + ' change' + (d.count > 1 ? 's' : '') + ' since ready'; }
     } catch (e) { /* ignore */ }
     const out = await generateCode(node, event.language, unit, base, 150, { inlineBudget: 400 * 1024, fastFonts: true });
-    const LANG = { html: 'HTML', css: 'CSS', jsx: 'JAVASCRIPT', swift: 'SWIFT', kotlin: 'KOTLIN', text: 'PLAINTEXT' };
+    const LANG = { html: 'HTML', vue: 'HTML', svelte: 'HTML', css: 'CSS', jsx: 'JAVASCRIPT', swift: 'SWIFT', kotlin: 'KOTLIN', dart: 'PLAINTEXT', text: 'PLAINTEXT' };
     const res = out.files.map((f, i) => ({ title: (i === 0 ? header + '  ·  ' : '') + f.name, language: LANG[f.lang] || 'PLAINTEXT', code: f.code }));
     if (out.assets.length) res.push({ title: 'Assets (export from the DevReady panel → Download project)', language: 'PLAINTEXT', code: out.assets.map(a => 'assets/' + a.file + (a.scale > 1 ? '  (@' + a.scale + 'x)' : '')).join('\n') });
     return res;
@@ -2367,6 +3197,10 @@ if (figma.mode === 'codegen') {
     }
     if (my !== reqId) return;
 
+    let a11y = null;
+    try { a11y = a11yAudit(node, 400); } catch (e) { /* audit is best-effort */ }
+    if (my !== reqId) return;
+
     const assets = collectAssets(node, 60);
     // Include the selected node itself as the first asset row
     assets.unshift({ id: node.id, name: node.name, type: node.type, kind: 'selection', w: round(node.width), h: round(node.height) });
@@ -2381,6 +3215,7 @@ if (figma.mode === 'codegen') {
       tailwind: cssToTailwind(css, settings.unit, settings.remBase).join(' '),
       measure: measure,
       changes: changes,
+      a11y: a11y,
       assets: assets
     }, base));
 
@@ -2414,12 +3249,15 @@ if (figma.mode === 'codegen') {
   figma.on('currentpagechange', () => { watchPage(); schedule(); });
   watchPage();
 
-  figma.ui.onmessage = async function (msg) {
+  figma.ui.onmessage = async function (raw) {
+    const msg = validateMsg(raw);
+    if (!msg) return; // unknown message type: ignore
+    if (msg.type === '__invalid') { figma.notify('DevReady: invalid ' + msg.field + ' for ' + msg.of, { error: true }); return; }
     try {
       switch (msg.type) {
         case 'ui-ready': {
           const saved = await figma.clientStorage.getAsync('devready-settings');
-          if (saved) settings = Object.assign({}, DEFAULT_SETTINGS, saved);
+          if (saved) settings = Object.assign({}, DEFAULT_SETTINGS, MSG_SCHEMA.settings.settings(saved) || {});
           schedule();
           break;
         }
@@ -2471,6 +3309,12 @@ if (figma.mode === 'codegen') {
           if (!sel.length) break;
           const out = await generateCode(sel[0], msg.lang, settings.unit, settings.remBase, 600);
           post({ type: 'code', lang: msg.lang, out: out });
+          break;
+        }
+        case 'tokens-export': {
+          const sel = figma.currentPage.selection;
+          const out = await buildTokens(msg.format, msg.scope, sel[0] || null, settings.unit, settings.remBase);
+          post({ type: 'tokens', format: msg.format, scope: msg.scope, out: out });
           break;
         }
         case 'design-shot': {
@@ -2611,7 +3455,7 @@ if (figma.mode === 'codegen') {
           break;
         }
         case 'map-save': {
-          if (!msg.key || !/^[A-Za-z_$][\w$.]*$/.test(msg.name || '')) { figma.notify('Enter a valid component name', { error: true }); break; }
+          // name/path already validated by MSG_SCHEMA (identifier + safe import path)
           figma.root.setSharedPluginData(NS, 'map:' + msg.key, JSON.stringify({ name: msg.name, path: msg.path || './' + msg.name, at: new Date().toISOString() }));
           figma.notify('🔗 Mapped to <' + msg.name + '> — generated code now uses it');
           schedule();
