@@ -1,0 +1,17 @@
+[
+  {
+    "name": "CPath.tsx",
+    "lang": "tsx",
+    "code": "import photoOnloadAlert2Img from './assets/photo-onload-alert-2.png';\nimport './CPath.css';\n\nexport default function CPath() {\n  return (\n    <div className=\"c-path\">\n      <p className=\"c-path__text\">{\"</script><img src=x onerror=alert(1)> \\\"quoted\\\" {braces} $price \\\\(interp) */ --> C:\\\\path\"}</p>\n      <p className=\"c-path__text\">{\"Price: $5 & ${total} \\u0007 ‮right-to-left‬ 😀\"}</p>\n      <img className=\"c-path__image\" src={photoOnloadAlert2Img} alt=\"Photo &quot; onload=&quot;alert(2)\" />\n      <p className=\"c-path__line1-b-indented-b\">line1<br />{\"  <b>indented</b>\"}</p>\n      <p className=\"c-path__text\">{\"{{ constructor.constructor('alert(1)')() }} {#if x}{@html y}{/if}\"}</p>\n    </div>\n  );\n}\n"
+  },
+  {
+    "name": "assets.d.ts",
+    "lang": "ts",
+    "code": "/* Ambient declarations for asset and stylesheet imports. */\ndeclare module '*.css';\ndeclare module '*.png' {\n  const src: string;\n  export default src;\n}\n"
+  },
+  {
+    "name": "CPath.css",
+    "lang": "css",
+    "code": "@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400&display=swap');\n\n/* Scoped reset — Figma has no default margins */\n.c-path, .c-path *, .c-path *::before, .c-path *::after { box-sizing: border-box; }\n.c-path :where(h1, h2, h3, p, ul, li, figure) { margin: 0; padding: 0; }\n.c-path :where(button) { border: 0; background: none; padding: 0; font: inherit; color: inherit; cursor: pointer; }\n.c-path :where(a) { color: inherit; text-decoration: none; }\n.c-path :where(img) { display: block; }\n\n.c-path {\n  display: flex;\n  flex-direction: column;\n  padding: 16px;\n  gap: 8px;\n  font-family: Inter, system-ui, -apple-system, \"Segoe UI\", Roboto, \"Helvetica Neue\", Arial, sans-serif;\n}\n\n.c-path__text {\n  color: #111827;\n  font-size: 14px;\n  font-weight: 400;\n  line-height: 20px;\n  white-space: nowrap;\n}\n\n.c-path__image {\n  width: 40px;\n  height: 40px;\n}\n\n.c-path__line1-b-indented-b {\n  color: #111827;\n  font-size: 14px;\n  font-weight: 400;\n  line-height: 20px;\n  white-space: nowrap;\n}\n"
+  }
+]

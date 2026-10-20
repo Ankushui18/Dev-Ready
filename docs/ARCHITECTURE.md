@@ -115,7 +115,7 @@ Every UI → plugin message is validated in `validateMsg()` before the switch in
 
 Message types (see `MSG_SCHEMA`): `ui-ready`, `settings`, `select`, `mark`, `export`,
 `export-all`, `export-project`, `gen-code`, `tokens-export`, `design-shot`,
-`font-upload`, `font-remove`, `baseline-save`, `measure-native`, `measure-clear`,
+`font-upload`, `font-remove`, `baseline-save`, `baseline-clear`, `measure-native`, `measure-clear`,
 `annotate-add`, `annotate-remove`, `notes-clear`, `goto`, `devres-add`,
 `devres-remove`, `map-save`, `map-remove`, `redlines`, `clear-redlines`, `notify`,
 `resize`.
@@ -157,6 +157,18 @@ constructs node trees via builders (`T`, `AL`, `ABS`, `R`, `ICON`, `COMPONENT`,
 `VARIABLE`). Code generation is invoked directly (`eng.generateCode(...)`), so no
 Figma is needed. `tests/validators.js` parses each output (esbuild for JSX/CSS;
 structural checks for HTML, Swift, Kotlin, Dart, Vue, Svelte).
+
+Beyond per-target assertions, three groups protect the output itself:
+
+| Group | What it proves | Where |
+|---|---|---|
+| **Golden files** | Generated code does not drift silently. A change prints the first differing line of the first differing file | `tests/golden/*.json`, update with `npm test -- --update-golden` |
+| **Generated project build** | The emitted imports actually resolve: the files are written to a temp dir and bundled with esbuild | `generatedProjectBuild()` in `tests/run.js` |
+| **Doc consistency** | The README badge and `docs/test-report.md` match the number of checks the suite ran | `docConsistency()` in `tests/run.js` |
+
+When you add or remove a check, regenerate the report (`npm test -- --report`) — the
+consistency check fails the build otherwise. When the output change is deliberate,
+review the golden diff and run `npm test -- --update-golden`.
 
 If a mock getter is missing, add it to the builders in `harness.js` rather than
 special-casing production code — the mock is deliberately strict.

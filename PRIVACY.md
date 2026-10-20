@@ -47,7 +47,8 @@ The only network traffic comes from the panel's **live HTML preview**, and only 
 
 ## Removing data
 
-- **Change tracking:** clearing a frame's status removes its snapshot. **Mark as reviewed** replaces it with the current design.
+- **Change tracking:** clearing a frame's status removes its snapshot, and **Changes → Clear** deletes it without touching the status. **Mark as reviewed** replaces it with the current design.
+- **Who can read it:** the snapshot is shared plugin data, so it is part of the file. Anyone with edit access to the file, and any other plugin running on it, can read it. The panel says this next to the Changes section, and there is no way for a plugin to make that data private to one person — if a confidential design must not be snapshotted, clear the snapshot when you are done.
 - **Canvas notes:** ⋯ → Remove canvas notes on page.
 - **Local data:** remove the plugin from Figma (Plugins → Manage plugins).
 

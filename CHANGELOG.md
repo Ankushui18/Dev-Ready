@@ -2,6 +2,25 @@
 
 All notable changes to DevReady are listed here. The format follows [Keep a Changelog](https://keepachangelog.com/), and versions follow [SemVer](https://semver.org/).
 
+## [1.4.0] — 2026-10-20
+
+Follow-up to a second audit. Two of its findings were real; one was a stale read.
+
+### Added
+- **Clearing a snapshot is now a first-class action.** Until now the only way to delete a change-tracking snapshot was to unset the frame's dev status. **Changes → Clear** removes every chunk, the chunk count and the timestamp, and a test asserts nothing is left behind.
+- **The panel says where a snapshot lives.** Next to Changes: stored **in this Figma file**, readable by anyone with edit access and by other plugins, with what it contains (layer ids, 40 characters of layer names, colours, sizes, 80 characters of text — no images).
+- **Golden-output tests** (`tests/golden/`, 4 fixture × target pairs): any change in generated code fails with the first changed line, e.g. `Dashboard.tsx:20  - <h2>Weekly insightZ</h2>  + <h2>Weekly insights</h2>`. Update deliberately with `npm test -- --update-golden`.
+- **Generated-project build test:** the React targets are bundled with esbuild from the emitted files, so a missing `./Component.css`, `./tokens.css` or `./assets/icon.svg` fails the suite. Parse-only checks could not catch this.
+- **Documentation-consistency check:** the README badge and `docs/test-report.md` are compared against the number of checks the suite actually ran, so a stale count fails CI.
+
+### Fixed
+- **A test report one release behind.** The second audit reported `docs/test-report.md` saying 110/110 while the README said 133. At the reviewed commit both said 133 (the report was regenerated in 1.3.0); the audit had read a cached page from before that merge. The underlying risk was real — nothing kept the two in step — so the new consistency check now fails the build instead of relying on memory.
+- **141 checks** (was 133: 8 new).
+
+### Not addressed here
+- **Native compilation** (SwiftUI, Compose, Flutter, React Native) still is not compiled in CI. It needs Xcode on a macOS runner and Android/Flutter toolchains; that is a separate, slow job rather than something to bolt onto this suite. The README continues to say these are structurally checked only.
+- **Real Figma testing** (Design Mode, Dev Mode, Inspect → Code, Figma for VS Code) cannot be done from CI or from a repository sandbox. [docs/LAUNCH.md](docs/LAUNCH.md#3-environment-test-matrix) tracks it, and it stays the main release blocker.
+
 ## [1.3.0] — 2026-10-20
 
 A new code target, plus the repository repair and documentation work from the merged

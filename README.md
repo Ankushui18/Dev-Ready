@@ -9,7 +9,7 @@ Inspect specs like Dev Mode, generate real code in 12 targets, see what changed 
   <a href=".github/workflows/ci.yml"><img src="https://github.com/Ankushui18/Dev-Ready/actions/workflows/ci.yml/badge.svg" alt="Tests"></a>
   <img src="https://img.shields.io/badge/license-MIT-green" alt="MIT">
   <img src="https://img.shields.io/badge/Figma-Design%20%2B%20Dev%20Mode-0d99ff" alt="Figma Design + Dev Mode">
-  <img src="https://img.shields.io/badge/tests-133%20passing-brightgreen" alt="133 checks passing">
+  <img src="https://img.shields.io/badge/tests-142%20passing-brightgreen" alt="142 checks passing">
 </p>
 
 ---
@@ -162,7 +162,9 @@ Dev-Ready/
 ```bash
 npm ci
 npm run verify        # layout + Figma sandbox check + ESLint + tests (what CI runs)
-npm test              # 133 checks: 9 fixture designs × 12 code targets, privacy, messages, tracking, tsc
+npm test              # 142 checks: 9 fixtures × 12 targets, privacy, messages, tracking,
+                      # tsc, golden output, and a real bundle of the generated React project
+npm test -- --update-golden   # accept a deliberate change to generated output
 npm run lint          # ESLint, including the script inside ui.html
 npm run test:browser  # Chromium: renders the panel, attacks the preview sandbox (needs Python Playwright)
 ```
@@ -171,6 +173,9 @@ Every push runs [CI](.github/workflows/ci.yml):
 
 - Generated code parses: JSX/CSS with **esbuild**; HTML, Swift, Kotlin, Dart and Vue/Svelte templates with structural checks.
 - **TypeScript output is compiled by `tsc` in strict mode**, so the generated props types and asset declarations actually type-check.
+- **The generated React project is bundled with esbuild**, so every import it emits (`./Component.css`, `./assets/icon.svg`) has to resolve — a parse-only check would miss that.
+- **Golden files** pin the output of four fixture × target pairs, so any drift shows up as a one-line diff (`Dashboard.tsx:20  - <h2>Weekly insightZ</h2>  + …`).
+- **The published counts can't drift:** a check compares the README badge and `docs/test-report.md` against the number of checks the suite actually ran.
 - **Hostile layer names** can't inject markup or break string literals, and design text can't reach `{{ }}`, `{ }` or `$` interpolation.
 - **Every UI → plugin message** is validated against a schema (15 attack cases), and crafted component mappings can't inject code.
 - **Privacy:** no network APIs in `code.js`, private font names never appear in a Google URL, and only Google Fonts are allowed by the manifest.

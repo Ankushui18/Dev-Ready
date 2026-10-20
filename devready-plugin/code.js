@@ -48,7 +48,7 @@ const SETTINGS_SCHEMA = { gate: V.oneOf(['strict', 'off']), unit: V.oneOf(['px',
 const MSG_SCHEMA = {
   'ui-ready': {}, 'measure-native': {}, 'measure-clear': {}, 'notes-clear': {}, 'redlines': {}, 'clear-redlines': {},
   'settings': { settings: v => { if (!v || typeof v !== 'object') return undefined; const o = {}; Object.keys(SETTINGS_SCHEMA).forEach(k => { if (k in v) { const x = SETTINGS_SCHEMA[k](v[k]); if (x !== undefined) o[k] = x; } }); return o; } },
-  'select': { id: V.id }, 'goto': { id: V.id }, 'design-shot': { id: V.id }, 'baseline-save': { id: V.id },
+  'select': { id: V.id }, 'goto': { id: V.id }, 'design-shot': { id: V.id }, 'baseline-save': { id: V.id }, 'baseline-clear': { id: V.id },
   'mark': { id: V.id, status: V.opt(V.oneOf(['READY_FOR_DEV', 'COMPLETED'])), note: V.str(2000) },
   'export': EXPORT_ITEM,
   'export-all': { items: v => Array.isArray(v) ? v.slice(0, 300).map(i => checkFields(i || {}, EXPORT_ITEM)).filter(Boolean) : undefined, zipName: V.opt(V.re(/^[\w .\-]{1,100}\.zip$/, 104)) },
@@ -200,7 +200,7 @@ async function setReady(nodeId, type, note) {
   // Change tracking: snapshot the design when it's handed off
   try {
     if (type === 'READY_FOR_DEV') saveBaseline(target);
-    else if (!type) { writeChunked(target, 'baseline', ''); target.setSharedPluginData(NS, 'baselineAt', ''); diffCache[target.id] = null; }
+    else if (!type) clearBaseline(target);
   } catch (e) { /* ignore */ }
   return { ok: true, native: native, name: target.name };
 }
@@ -1823,6 +1823,12 @@ function saveBaseline(target) {
   target.setSharedPluginData(NS, 'baselineAt', new Date().toISOString());
   diffCache[target.id] = null;
 }
+/* Removes every trace of a snapshot: all chunks, the chunk count and the timestamp. */
+function clearBaseline(target) {
+  writeChunked(target, 'baseline', '');
+  target.setSharedPluginData(NS, 'baselineAt', '');
+  diffCache[target.id] = null;
+}
 const diffCache = {};
 function diffBaseline(target) {
   if (diffCache[target.id]) return diffCache[target.id];
@@ -3365,6 +3371,12 @@ if (figma.mode === 'codegen') {
         case 'font-remove': {
           await figma.clientStorage.deleteAsync('font:' + msg.family + '|' + msg.key);
           figma.notify('Font file removed'); post({ type: 'fonts-updated' });
+          break;
+        }
+        case 'baseline-clear': {
+          const n = await figma.getNodeByIdAsync(msg.id);
+          if (n) { clearBaseline(n); figma.notify('Snapshot removed from this file'); }
+          schedule();
           break;
         }
         case 'baseline-save': {
