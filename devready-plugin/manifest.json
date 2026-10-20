@@ -19,32 +19,48 @@
       "https://fonts.googleapis.com",
       "https://fonts.gstatic.com"
     ],
-    "reasoning": "Loads the design's Google Font so the live HTML preview matches the design. No data is sent."
+    "reasoning": "The HTML preview can load public Google Fonts (e.g. Inter) so text renders in the design's typeface. Only public Google Fonts family names and weights are requested; private, commercial and system font names are never sent, and no design data, text or file information leaves Figma. The plugin's main code makes no network requests. Turn this off with ⋯ → Load Google Fonts in preview."
   },
   "codegenLanguages": [
     {
-      "label": "DevReady \u00b7 React + Tailwind",
+      "label": "DevReady · React + Tailwind",
       "value": "react-tailwind"
     },
     {
-      "label": "DevReady \u00b7 React + CSS",
+      "label": "DevReady · React + CSS",
       "value": "react-css"
     },
     {
-      "label": "DevReady \u00b7 HTML + CSS",
+      "label": "DevReady · HTML + CSS",
       "value": "html-css"
     },
     {
-      "label": "DevReady \u00b7 Single HTML (CSS + assets in one file)",
+      "label": "DevReady · Single HTML (CSS + assets in one file)",
       "value": "html-single"
     },
     {
-      "label": "DevReady \u00b7 SwiftUI",
+      "label": "DevReady · Vue (single-file component)",
+      "value": "vue"
+    },
+    {
+      "label": "DevReady · Svelte",
+      "value": "svelte"
+    },
+    {
+      "label": "DevReady · React Native",
+      "value": "react-native"
+    },
+    {
+      "label": "DevReady · SwiftUI",
       "value": "swiftui"
     },
     {
-      "label": "DevReady \u00b7 Jetpack Compose",
+      "label": "DevReady · Jetpack Compose",
       "value": "compose"
+    },
+    {
+      "label": "DevReady · Flutter (Dart)",
+      "value": "flutter"
     }
   ],
   "codegenPreferences": [
@@ -56,7 +72,9 @@
       "includedLanguages": [
         "react-tailwind",
         "react-css",
-        "html-css"
+        "html-css",
+        "vue",
+        "svelte"
       ]
     },
     {
@@ -77,7 +95,9 @@
       "includedLanguages": [
         "react-tailwind",
         "react-css",
-        "html-css"
+        "html-css",
+        "vue",
+        "svelte"
       ]
     }
   ],

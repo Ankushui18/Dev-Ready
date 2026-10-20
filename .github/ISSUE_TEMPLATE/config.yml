@@ -1,0 +1,11 @@
+blank_issues_enabled: false
+contact_links:
+  - name: How the plugin works
+    url: https://github.com/Ankushui18/Dev-Ready/blob/main/devready-plugin/README.md
+    about: Feature documentation, Dev Mode behaviour, annotations and limits.
+  - name: Common questions
+    url: https://github.com/Ankushui18/Dev-Ready/blob/main/docs/FAQ.md
+    about: Free plans, the gate, fonts, generated code and privacy.
+  - name: Privacy
+    url: https://github.com/Ankushui18/Dev-Ready/blob/main/PRIVACY.md
+    about: What is stored in your file, and the single outbound request (preview fonts).

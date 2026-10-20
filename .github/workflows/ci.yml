@@ -1,0 +1,85 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Test (layout, sandbox, lint, fixtures)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - name: Install
+        run: npm ci
+
+      # Fails fast if files were uploaded into the wrong folder, or a hidden
+      # folder (.github, .gitignore) is missing — the most common upload mistake.
+      - name: Repository layout
+        run: npm run check:layout
+
+      # Figma's plugin sandbox rejects some source text even inside comments.
+      - name: Figma sandbox check
+        run: npm run check
+
+      - name: Lint (including the script inside ui.html)
+        run: npm run lint
+
+      - name: Code generation, privacy and change-tracking tests
+        run: npm test
+
+  browser:
+    name: Browser (panel + preview sandbox)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install Playwright
+        run: |
+          python -m pip install --upgrade pip
+          pip install playwright
+          python -m playwright install --with-deps chromium
+
+      - name: Panel render and preview isolation
+        run: python3 tests/browser.py
+
+  release:
+    name: Release ZIP
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [test, browser]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Build devready-plugin.zip
+        run: node scripts/zip.js
+
+      - name: Create GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "${GITHUB_REF_NAME}" devready-plugin.zip \
+            --title "${GITHUB_REF_NAME}" \
+            --notes "See CHANGELOG.md for what changed. Install: unzip, then in Figma use Plugins → Development → Import plugin from manifest… and pick devready-plugin/manifest.json."

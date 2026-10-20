@@ -2,6 +2,27 @@
 
 All notable changes to DevReady are listed here. The format follows [Keep a Changelog](https://keepachangelog.com/), and versions follow [SemVer](https://semver.org/).
 
+## [Unreleased]
+
+Repository and documentation only — the plugin code is unchanged.
+
+### Fixed
+- **Repository layout restored.** All root files had been uploaded *inside* `devready-plugin/`, including a second, older copy of the plugin in `devready-plugin/devready-plugin/`. The result: GitHub showed no README or license, CI never ran, `npm test` could not work from a fresh clone, and Figma imported the older plugin. Root files are back at the root; `devready-plugin/` now contains only `manifest.json`, `code.js`, `ui.html`, `README.md` and `check-sandbox.js`.
+- **CI restored** (`.github/workflows/ci.yml`): layout check, Figma sandbox check, ESLint, the 110-check suite, the Playwright browser job, and a release job that attaches `devready-plugin.zip` to a tag.
+- Added the missing `.gitignore`.
+
+### Added
+- **`docs/ARCHITECTURE.md`**: where every section of `code.js` and `ui.html` lives, the selection → `state` data flow, the UI ↔ plugin message protocol, storage keys, and where to change what.
+- **`docs/FAQ.md`**: free plans, the gate, Dev Mode, fonts, generated-code mismatches, tokens, privacy.
+- **`docs/NAMING.md`**: name options with trade-offs, a recommendation, and a complete rename checklist.
+- **`.github/ISSUE_TEMPLATE/`** (bug report asking for surface + code target, feature request) and a pull-request checklist.
+- Root `README.md` rewritten as a landing page: what it is, 2-minute install, repository map, docs index, developer workflow.
+
+### Changed
+- `docs/GITHUB_SETUP.md` now describes the correct layout and how to recover if it breaks again, instead of the old "current state is broken" instructions.
+- Refreshed `docs/test-report.md`: **110/110 checks**, 9 fixtures × 10 code targets.
+- Plugin README: complete target list in Dev Mode, catalog size (1,950 families), test counts, and links to the architecture doc.
+
 ## [1.2.0] — 2026-10-20
 
 Closes more of the gap with Figma Dev Mode.

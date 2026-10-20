@@ -1,0 +1,78 @@
+name: Bug report
+description: Something looks wrong — a measurement, generated code, the gate, an export.
+title: "[Bug] "
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting. A reproducible design, or the layer tree, is worth more
+        than a long description.
+
+  - type: dropdown
+    id: surface
+    attributes:
+      label: Where did it happen?
+      options:
+        - Design mode, plugin panel
+        - Dev Mode, Inspect → Plugins
+        - Dev Mode, Inspect → Code section
+        - Figma for VS Code
+        - Downloading / exporting
+        - Install or setup
+    validations:
+      required: true
+
+  - type: dropdown
+    id: target
+    attributes:
+      label: Code target (if the problem is generated code)
+      options:
+        - Not about code generation
+        - React + Tailwind
+        - React + CSS
+        - HTML + CSS
+        - Single-file HTML
+        - Vue
+        - Svelte
+        - React Native
+        - SwiftUI
+        - Jetpack Compose
+        - Flutter
+
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened?
+      description: What you expected, and what you got instead.
+    validations:
+      required: true
+
+  - type: textarea
+    id: repro
+    attributes:
+      label: How to reproduce
+      description: Steps, plus the layer tree (or a link to a small Community file).
+      placeholder: |
+        1. Select frame "Checkout / Mobile"
+        2. Open Code → React + Tailwind
+        3. Expected <button class="...">, got an absolutely positioned div
+    validations:
+      required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: DevReady version
+      description: From CHANGELOG.md or the panel footer.
+      placeholder: 1.2.0
+    validations:
+      required: true
+
+  - type: textarea
+    id: env
+    attributes:
+      label: Figma environment
+      description: App version, plan (Starter / Professional / Org / Enterprise), and seat (Dev / Full) if relevant.
+    validations:
+      required: true

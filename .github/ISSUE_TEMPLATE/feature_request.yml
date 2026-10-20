@@ -1,0 +1,34 @@
+name: Feature request
+description: Suggest a capability, or tell us a handoff step that still hurts.
+title: "[Feature] "
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: What are you trying to do?
+      description: Describe the handoff or inspection task, not the solution.
+    validations:
+      required: true
+
+  - type: textarea
+    id: today
+    attributes:
+      label: What do you do today?
+      description: Dev Mode, copying values by hand, another plugin, a script…
+    validations:
+      required: true
+
+  - type: textarea
+    id: idea
+    attributes:
+      label: What would help?
+      description: Optional. Screenshots of a similar tool are useful.
+
+  - type: checkboxes
+    id: scope
+    attributes:
+      label: Scope check
+      options:
+        - label: This is possible with the Figma plugin API (not a canvas-only Figma feature such as hover-to-measure).
+        - label: I checked the Known limits section of the README.
