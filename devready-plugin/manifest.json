@@ -31,6 +31,14 @@
       "value": "react-css"
     },
     {
+      "label": "DevReady · React + TypeScript",
+      "value": "react-ts"
+    },
+    {
+      "label": "DevReady · React + TypeScript + Tailwind",
+      "value": "react-tailwind-ts"
+    },
+    {
       "label": "DevReady · HTML + CSS",
       "value": "html-css"
     },
@@ -72,6 +80,8 @@
       "includedLanguages": [
         "react-tailwind",
         "react-css",
+        "react-ts",
+        "react-tailwind-ts",
         "html-css",
         "vue",
         "svelte"
@@ -95,6 +105,8 @@
       "includedLanguages": [
         "react-tailwind",
         "react-css",
+        "react-ts",
+        "react-tailwind-ts",
         "html-css",
         "vue",
         "svelte"

@@ -6,13 +6,44 @@ DevReady runs inside Figma's plugin sandbox. Its main code makes no network requ
 
 | Boundary | Risk | Protection | Tested by |
 |---|---|---|---|
-| **Design content → generated code** | Layer names and text come from files that may not be trusted. They're written into HTML, JSX, Swift and Kotlin | Escaped for each target language: markup and attributes, `{}` in JSX, `$` templates in Kotlin, `\(` in Swift, control characters, bidi overrides ("Trojan Source") | `hostile-content` fixture × 6 languages (`npm test`) |
+| **Design content → generated code** | Layer names and text come from files that may not be trusted. They're written into HTML, JSX, Swift and Kotlin | Escaped for each target language: markup and attributes, `{}` in JSX, `$` templates in Kotlin, `\(` in Swift, control characters, bidi overrides ("Trojan Source") | `hostile-content` fixture × 12 targets (`npm test`) |
 | **Generated HTML → live preview** | The preview renders generated HTML inside the panel | `<iframe sandbox="allow-same-origin">` with **no** `allow-scripts`, so scripts and event handlers never run. A CSP meta allows no requests except Google Fonts (none when offline), `referrerpolicy="no-referrer"`, no forms, no `<base>` | `npm run test:browser`: a hostile document with `<script>`, `onerror`, an external image and a form. Also checked: the test fails if the sandbox is removed |
 | **Panel UI → main thread** | Messages from the UI iframe drive file edits and exports | Every message is checked against a per-type schema before it is handled. Unknown types are ignored and unknown fields dropped. Strings are length-capped, ids must look like Figma node ids, enums and numeric ranges are enforced (export format/scale, font upload size/type, http(s)-only dev resources) and settings keys are whitelisted. Invalid input shows an error toast | `message validation` (15 cases) in `npm test` |
 | **File data → generated code** | Component mappings are stored in the Figma file (shared plugin data), which anyone with edit access, or another plugin, can write | Mappings are re-validated when read. The import path must be a plain module path, and it is emitted through a JS string-escaping helper | `component mappings from the file are validated and safely quoted` in `npm test` |
 
 ### Fixed in 1.1.0
 - **Code injection via component mappings.** A crafted import path stored in the file (e.g. `./x';alert(1);//`) was concatenated into generated React code without escaping, so someone who opened the file and copied the code got the injected statement. Paths are now validated on save and on load, and quoted on output.
+
+## Verify these claims yourself
+
+None of the above is a promise — each row has a test you can run:
+
+```bash
+npm ci
+npm run verify          # includes the 15 message-validation cases, injection cases,
+                        # privacy checks and the hostile-content fixtures
+python3 -m pip install playwright && python3 -m playwright install chromium
+npm run test:browser    # sandbox: script, onerror, external image and form in a hostile document
+```
+
+The browser test also **fails if the sandbox attribute is removed**, so the protection
+can't be dropped silently.
+
+Look at the actual attributes rather than a description:
+
+```bash
+grep -n 'sandbox=\|Content-Security-Policy' devready-plugin/ui.html
+grep -n 'function validateMsg\|MSG_SCHEMA' devready-plugin/code.js
+```
+
+### If you are reviewing this project
+
+Reviews written before **v1.2.0** (October 2026) describe an unsandboxed preview and an
+unvalidated message handler. Both were addressed in v1.1.0/v1.2.0, and the repository's
+layout was repaired afterwards — older reviews may also have read the stale copy of the
+plugin that used to live in `devready-plugin/devready-plugin/`. Quote the commit you
+reviewed (`git rev-parse HEAD`) next to your findings so readers can tell which tree
+the result applies to.
 
 ## Reporting a vulnerability
 

@@ -89,6 +89,20 @@ Compose gets an `AppColorsDark` object. You can also export the whole file's tok
 from **Inspect → Design tokens** as CSS, SCSS, JSON (design-tokens format) or a
 Tailwind v4 `@theme`.
 
+### Is there TypeScript output?
+
+Yes. Pick **React + TypeScript** or **React + TypeScript + Tailwind** (panel, Dev Mode's
+Code section, or Figma for VS Code). Compared with the JavaScript targets:
+
+- the file is `.tsx`;
+- every repeated pattern that becomes a component also gets a `Props` type
+  (`type StatCardProps = { label: string; value: string }`) and consumes it;
+- an `assets.d.ts` is added with ambient declarations for the CSS and asset imports the
+  design uses, so `tsc` doesn't complain about `import logo from './assets/logo.svg'`.
+
+CI compiles the generated `.tsx` with `tsc --strict`, so this is checked on every push,
+not just claimed.
+
 ### Is the code Tailwind v3 or v4?
 
 The React + Tailwind target emits utility classes, and the **design tokens export**

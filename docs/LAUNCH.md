@@ -30,7 +30,7 @@ DevReady isn't published yet. This is the path from local plugin to Community li
 >
 > **For developers**
 > • Box model, layout, typography, colors, effects, variables (every mode), interactions and component properties
-> • Code in React + Tailwind, React + CSS, HTML + CSS, single-file HTML, SwiftUI and Jetpack Compose: semantic tags, design tokens, reusable components for repeated instances
+> • Code in React + TypeScript, React + Tailwind, React + CSS, HTML + CSS, single-file HTML, Vue, Svelte, React Native, SwiftUI, Jetpack Compose and Flutter: semantic tags, design tokens, typed props, reusable components for repeated instances
 > • Live preview of the generated HTML next to or on top of the design
 > • Assets detected automatically; export PNG/JPG/SVG/PDF or everything as a ZIP
 > • See which layers changed since handoff

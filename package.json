@@ -1,7 +1,7 @@
 {
   "name": "dev-ready",
-  "version": "1.2.0",
-  "description": "Free Figma plugin: Dev Mode-style inspect, change tracking and design-to-code (React, Tailwind, HTML, SwiftUI, Compose), gated on Ready for dev.",
+  "version": "1.3.0",
+  "description": "Free Figma plugin: Dev Mode-style inspect, design tokens, accessibility checks and design-to-code in 12 targets (React + TypeScript, React, Vue, Svelte, React Native, HTML, SwiftUI, Compose, Flutter), gated on Ready for dev.",
   "private": true,
   "license": "MIT",
   "repository": {
@@ -23,7 +23,8 @@
     "@eslint/js": "^10.0.1",
     "esbuild": "0.24.2",
     "eslint": "^10.13.0",
-    "globals": "^17.13.0"
+    "globals": "^17.13.0",
+    "typescript": "^5.9.3"
   },
   "engines": {
     "node": ">=18"

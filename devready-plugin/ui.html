@@ -1097,8 +1097,8 @@ function secLayers(sp) {
   return sec('Layers', '', rows + (L.more ? '<div class="faint" style="padding:4px 0">+ ' + L.more + ' more</div>' : ''), L.children.length + (L.more || 0));
 }
 const ANN_PROPS = [['', 'No pinned property'], ['width', 'Width'], ['height', 'Height'], ['fills', 'Fill'], ['strokes', 'Stroke'], ['cornerRadius', 'Corner radius'], ['itemSpacing', 'Gap'], ['padding', 'Padding'], ['layoutMode', 'Layout direction'], ['alignItems', 'Alignment'], ['effects', 'Effects'], ['opacity', 'Opacity'], ['fontSize', 'Font size'], ['fontWeight', 'Font weight'], ['fontFamily', 'Font family'], ['lineHeight', 'Line height'], ['textAlignHorizontal', 'Text align']];
-const LANGS = { css: 'CSS', tailwind: 'Tailwind', 'html-css': 'HTML + CSS', 'html-single': 'Single HTML (one file)', 'react-tailwind': 'React + Tailwind', 'react-css': 'React + CSS', vue: 'Vue (single file)', svelte: 'Svelte', 'react-native': 'React Native', swiftui: 'SwiftUI', compose: 'Jetpack Compose', flutter: 'Flutter (Dart)' };
-const LANG_HL = { json: 'json', html: 'html', vue: 'html', svelte: 'html', css: 'css', jsx: 'jsx', swift: 'native', kotlin: 'native', dart: 'native', text: 'plain' };
+const LANGS = { css: 'CSS', tailwind: 'Tailwind', 'html-css': 'HTML + CSS', 'html-single': 'Single HTML (one file)', 'react-tailwind': 'React + Tailwind', 'react-css': 'React + CSS', 'react-ts': 'React + TypeScript', 'react-tailwind-ts': 'React + TypeScript + Tailwind', vue: 'Vue (single file)', svelte: 'Svelte', 'react-native': 'React Native', swiftui: 'SwiftUI', compose: 'Jetpack Compose', flutter: 'Flutter (Dart)' };
+const LANG_HL = { json: 'json', html: 'html', vue: 'html', svelte: 'html', css: 'css', jsx: 'jsx', tsx: 'jsx', ts: 'jsx', swift: 'native', kotlin: 'native', dart: 'native', text: 'plain' };
 const NATIVE = { swiftui: 1, compose: 1, 'react-native': 1, flutter: 1 };
 function secCode(d) {
   let body, copyAll = '';

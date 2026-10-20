@@ -3,13 +3,13 @@
 <h1 align="center">DevReady</h1>
 
 <p align="center"><b>A free, open-source Figma plugin for design handoff.</b><br>
-Inspect specs like Dev Mode, generate real code in 10 targets, see what changed — for designs your team has marked <i>Ready for dev</i>.</p>
+Inspect specs like Dev Mode, generate real code in 12 targets, see what changed — for designs your team has marked <i>Ready for dev</i>.</p>
 
 <p align="center">
   <a href=".github/workflows/ci.yml"><img src="https://github.com/Ankushui18/Dev-Ready/actions/workflows/ci.yml/badge.svg" alt="Tests"></a>
   <img src="https://img.shields.io/badge/license-MIT-green" alt="MIT">
   <img src="https://img.shields.io/badge/Figma-Design%20%2B%20Dev%20Mode-0d99ff" alt="Figma Design + Dev Mode">
-  <img src="https://img.shields.io/badge/tests-110%20passing-brightgreen" alt="110 checks passing">
+  <img src="https://img.shields.io/badge/tests-133%20passing-brightgreen" alt="133 checks passing">
 </p>
 
 ---
@@ -46,7 +46,7 @@ Figma's **Dev Mode** shows developers the specs of a design: sizes, spacing, col
 | | |
 |---|---|
 | **Inspect** | Box model, layout and Auto Layout, typography, fills/strokes/effects, variables with **every mode**, component properties and overrides, dev resources, interactions. |
-| **Code (10 targets)** | React + Tailwind, React + CSS, HTML + CSS, single-file HTML, Vue, Svelte, React Native, SwiftUI, Jetpack Compose, Flutter. Semantic tags, BEM classes, design tokens, real components for repeated instances, and a project ZIP with `fonts/` + `assets/`. |
+| **Code (12 targets)** | **React + TypeScript**, React + TypeScript + Tailwind, React + Tailwind, React + CSS, HTML + CSS, single-file HTML, Vue, Svelte, React Native, SwiftUI, Jetpack Compose, Flutter. Semantic tags, BEM classes, design tokens, real components for repeated instances — with **typed props** and ambient asset declarations in the TypeScript targets — and a project ZIP with `fonts/` + `assets/`. |
 | **Preview & compare** | Renders the generated HTML next to, or on top of, the Figma design. Difference blend mode makes mismatches visible. |
 | **Change tracking** | Lists layers that changed since handoff — size/position, style, text, name, added and removed — with **before → after** values. |
 | **Accessibility** | WCAG 2.2 contrast for every text layer, touch-target sizes, unlabelled icon buttons, text under 12px. Click a row to select the layer. |
@@ -145,7 +145,7 @@ Dev-Ready/
 │   ├── test-report.md         latest test results
 │   ├── screenshots/           images used above
 │   └── brand/                 icon, cover, social preview
-├── tests/                     fixtures × 10 targets, privacy, change tracking, browser sandbox
+├── tests/                     fixtures × 12 targets, privacy, change tracking, browser sandbox
 ├── scripts/                   layout check, lint, ZIP builder
 ├── .github/workflows/ci.yml   what runs on every push and tag
 ├── CHANGELOG.md               what changed in each version
@@ -162,7 +162,7 @@ Dev-Ready/
 ```bash
 npm ci
 npm run verify        # layout + Figma sandbox check + ESLint + tests (what CI runs)
-npm test              # 110 checks: 9 fixture designs × 10 code targets, privacy, messages, tracking
+npm test              # 133 checks: 9 fixture designs × 12 code targets, privacy, messages, tracking, tsc
 npm run lint          # ESLint, including the script inside ui.html
 npm run test:browser  # Chromium: renders the panel, attacks the preview sandbox (needs Python Playwright)
 ```
@@ -170,6 +170,7 @@ npm run test:browser  # Chromium: renders the panel, attacks the preview sandbox
 Every push runs [CI](.github/workflows/ci.yml):
 
 - Generated code parses: JSX/CSS with **esbuild**; HTML, Swift, Kotlin, Dart and Vue/Svelte templates with structural checks.
+- **TypeScript output is compiled by `tsc` in strict mode**, so the generated props types and asset declarations actually type-check.
 - **Hostile layer names** can't inject markup or break string literals, and design text can't reach `{{ }}`, `{ }` or `$` interpolation.
 - **Every UI → plugin message** is validated against a schema (15 attack cases), and crafted component mappings can't inject code.
 - **Privacy:** no network APIs in `code.js`, private font names never appear in a Google URL, and only Google Fonts are allowed by the manifest.

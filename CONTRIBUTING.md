@@ -23,7 +23,7 @@ Use **Issues → New issue → Bug report**. The most useful details are:
 git clone https://github.com/Ankushui18/Dev-Ready.git
 cd Dev-Ready
 npm ci
-npm run verify  # layout + Figma sandbox check + ESLint + 110 checks (what CI runs)
+npm run verify  # layout + Figma sandbox check + ESLint + 133 checks (what CI runs)
 npm test        # just the test suite
 ```
 

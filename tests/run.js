@@ -21,7 +21,7 @@ const { createBuilders, loadEngine, CODE } = require('./harness');
 const { validateFile } = require('./validators');
 const FIXTURES = require('./fixtures');
 
-const LANGS = ['react-tailwind', 'react-css', 'html-css', 'html-single', 'vue', 'svelte', 'react-native', 'swiftui', 'compose', 'flutter'];
+const LANGS = ['react-tailwind', 'react-css', 'react-ts', 'react-tailwind-ts', 'html-css', 'html-single', 'vue', 'svelte', 'react-native', 'swiftui', 'compose', 'flutter'];
 const args = process.argv.slice(2);
 const only = (args.find(a => a.startsWith('--only=')) || '').slice(7);
 const DUMP = args.includes('--dump');
@@ -201,6 +201,82 @@ async function changeTracking() {
   }
 }
 
+/* The TypeScript targets are more than a rename: typed props, .tsx, and ambient
+   declarations so `tsc` accepts asset and CSS imports. Guard those specifics. */
+async function typescriptTargets() {
+  console.log('\nTypeScript targets' + C.d(' — typed props, .tsx, ambient asset declarations'));
+  const gen = async (fixtureName, lang) => {
+    const B = createBuilders();
+    const fx = FIXTURES.find(f => f.name === fixtureName);
+    const root = fx.build(B); root.parent = { type: 'PAGE', name: 'Page 1' };
+    return loadEngine(B).generateCode(root, lang, 'px', 16, 600, {});
+  };
+  for (const lang of ['react-ts', 'react-tailwind-ts']) {
+    const errs = [];
+    const out = await gen('nested-components', lang);
+    const file = out.files.find(f => /\.tsx$/.test(f.name));
+    if (!file) errs.push('no .tsx file');
+    else {
+      const c = file.code;
+      if (!/type StatCardProps = \{\n {2}label: string;\n {2}value: string;\n\};/.test(c)) errs.push('props type missing or untyped');
+      if (!/function StatCard\(\{ label, value \}: StatCardProps\)/.test(c)) errs.push('component does not consume its props type');
+      if (/\.jsx/.test(c)) errs.push('.jsx import left in TSX output');
+    }
+    record('typescript', lang, errs);
+  }
+  {
+    // Assets must be declared, or `tsc` rejects the component.
+    const errs = [];
+    const out = await gen('images-and-icons', 'react-ts');
+    const dts = out.files.find(f => f.name === 'assets.d.ts');
+    if (!dts) errs.push('assets.d.ts missing when the design has assets');
+    else ['css', 'svg', 'png'].forEach(e => { if (dts.code.indexOf("'*." + e + "'") < 0) errs.push('no declaration for *.' + e); });
+    if (!out.files.some(f => /\.tsx$/.test(f.name))) errs.push('no .tsx file');
+    record('typescript', 'ambient declarations cover every imported asset type', errs);
+  }
+  {
+    // Parse-only checks (esbuild) miss type errors, so compile the real output.
+    // A stub JSX namespace is enough: our own components are checked against their
+    // generated Props types, which is what this feature promises.
+    const errs = [];
+    let ts = null;
+    try { ts = require('typescript'); } catch (e) { /* optional dependency */ }
+    if (!ts) errs.push('typescript is not installed — run npm ci');
+    else {
+      const os = require('os');
+      const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'devready-ts-'));
+      try {
+        const out = await gen('nested-components', 'react-ts');
+        out.files.forEach(f => fs.writeFileSync(path.join(dir, f.name), f.code));
+        fs.writeFileSync(path.join(dir, 'jsx-stub.d.ts'), 'declare namespace JSX {\n  interface IntrinsicElements {\n    [elem: string]: any;\n  }\n}\n');
+        const files = fs.readdirSync(dir).filter(f => /\.(ts|tsx)$/.test(f));
+        const program = ts.createProgram(files.map(f => path.join(dir, f)), {
+          noEmit: true, strict: true, jsx: ts.JsxEmit.Preserve, skipLibCheck: true,
+          target: ts.ScriptTarget.ES2020, moduleResolution: ts.ModuleResolutionKind.Node10, types: []
+        });
+        ts.getPreEmitDiagnostics(program).forEach(d => {
+          const msg = ts.flattenDiagnosticMessageText(d.messageText, ' ');
+          const where = d.file ? path.basename(d.file.fileName) + ':' + (d.file.getLineAndCharacterOfPosition(d.start).line + 1) : '';
+          errs.push('tsc ' + where + ' — ' + msg);
+        });
+      } finally {
+        fs.rmSync(dir, { recursive: true, force: true });
+      }
+    }
+    record('typescript', 'generated .tsx compiles with tsc (strict)', errs);
+  }
+  {
+    // The JS targets must stay plain JS: no types, no .d.ts.
+    const errs = [];
+    const out = await gen('nested-components', 'react-css');
+    const file = out.files.find(f => /\.jsx$/.test(f.name));
+    if (!file) errs.push('no .jsx file');
+    else if (/Props = \{|: StatCardProps/.test(file.code)) errs.push('types leaked into the JavaScript target');
+    if (out.files.some(f => f.name === 'assets.d.ts')) errs.push('assets.d.ts emitted for a JavaScript target');
+    record('typescript', 'JavaScript targets stay untyped', errs);
+  }
+}
+
 function repoLayout() {
   console.log('\nrepository' + C.d(' — files are where GitHub, CI and Figma expect them'));
   const { checkLayout } = require('../scripts/check-layout.js');
@@ -263,7 +339,7 @@ function sandboxCheck() {
   console.log('DevReady test suite');
   sandboxCheck();
   for (const fx of FIXTURES) if (!only || fx.name.includes(only)) await runFixture(fx);
-  if (!only) { await changeTracking(); await privacyAndOffline(); await messageValidation(); await require('./features')(record); repoLayout(); }
+  if (!only) { await changeTracking(); await privacyAndOffline(); await messageValidation(); await require('./features')(record); await typescriptTargets(); repoLayout(); }
   const total = results.length;
   console.log('\n' + (failed ? C.r(failed + ' failed') : C.g('all passed')) + ' · ' + (total - failed) + '/' + total + ' checks');
   if (REPORT) {

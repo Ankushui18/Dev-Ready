@@ -8,7 +8,7 @@
 
 ## Checklist
 
-- [ ] `npm run verify` passes (layout + Figma sandbox check + ESLint + 110 checks)
+- [ ] `npm run verify` passes (layout + Figma sandbox check + ESLint + 133 checks)
 - [ ] For a code-generation fix: a fixture in `tests/fixtures.js` reproduces the bug
 - [ ] For a new output path: an escaping case in the `hostile-content` fixture
 - [ ] For a new UI → plugin message: a schema entry in `MSG_SCHEMA` **and** a case in `messageValidation()`
