@@ -1,6 +1,6 @@
 {
   "name": "dev-ready",
-  "version": "1.5.0",
+  "version": "1.5.1",
   "description": "Free Figma plugin: Dev Mode-style inspect, design tokens, accessibility checks and design-to-code in 12 targets (React + TypeScript, React, Vue, Svelte, React Native, HTML, SwiftUI, Compose, Flutter), gated on Ready for dev.",
   "private": true,
   "license": "MIT",
