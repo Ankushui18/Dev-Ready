@@ -1,178 +1,100 @@
-# DevReady Inspect: a Figma plugin that works like Dev Mode, but only for designs marked "ready for dev"
+<p align="center"><img src="docs/brand/cover-1920x1080.png" alt="DevReady: Dev Mode-style handoff for Figma, gated on ready for dev" width="100%"></p>
 
-DevReady Inspect is a Dev-Mode-style inspector for Figma. Specs, code and assets only **unlock when the design is marked Ready for dev or Completed**. Anything else shows a 🔒 screen with a one-click hand-off button.
+# DevReady
 
-## Install (local development)
-1. Open the **Figma desktop app**.
-2. Go to **Plugins → Development → Import plugin from manifest…**
-3. Pick `manifest.json` from this folder.
-4. Run it from **Plugins → Development → DevReady Inspect**, in Design mode or in Dev Mode (Inspect panel → Plugins).
+**A free, open-source Figma plugin for design handoff. Specs, tokens, assets, change tracking and production-quality code unlock when a design is marked *Ready for dev*.**
 
-You don't need a build step. The plugin is plain `code.js` and `ui.html`.
+[![Tests](https://github.com/Ankushui18/Dev-Ready/actions/workflows/ci.yml/badge.svg)](https://github.com/Ankushui18/Dev-Ready/actions/workflows/ci.yml)
+![License: MIT](https://img.shields.io/badge/license-MIT-green)
+![Figma: Design + Dev Mode](https://img.shields.io/badge/Figma-Design%20%2B%20Dev%20Mode-0d99ff)
 
-## Where it runs
-| Surface | What you get |
-|---|---|
-| **Design mode** | The full UI. You can also mark designs ready or completed and draw redlines on the canvas |
-| **Dev Mode → Plugins tab** | The full inspector (read-only, which is how Figma runs Dev Mode plugins) |
-| **Dev Mode → Code section** | "DevReady · React + Tailwind" and "DevReady · HTML + CSS" in the language dropdown, with a rem unit option and a gate preference |
-| **VS Code (Figma for VS Code)** | The same as Dev Mode |
+> **Know what changed, what's missing and what developers need before a Figma design ships.**
 
-## How the "dev ready" gate works
-For a selected layer, the plugin walks up its parent layers. The first one with a status unlocks the inspector:
-- Figma's **native** `devStatus` (`READY_FOR_DEV` or `COMPLETED`), set from Figma's own "Mark ready for dev"
-- or the plugin's **team flag** (shared plugin data). Use it on free plans, where the native status isn't available, or in Dev Mode, where plugins can't change the native status.
+- **Designers** mark a frame ready for dev (native Figma status, or a free DevReady flag when your plan doesn't support it).
+- **Developers** select it and get a Dev Mode-style Inspect panel, plus code in 6 targets, a list of changes since handoff, and annotations.
+- **Teams** that don't want a gate can turn it off with one click. Then it's simply a free inspector and code generator.
 
-You can turn the gate off in ⚙ Settings, or use the "Inspect anyway" button.
+**Status:** v1.0.0 runs as a local development plugin. It's not on Figma Community yet ([launch checklist](docs/LAUNCH.md)).
 
-## Using it in Dev Mode (developer side)
-1. Open the file and press **Shift + D** (or use the `</>` toggle) to switch to **Dev Mode**.
-2. **Inspect panel → Plugins → DevReady Inspect** shows the full inspector inside Dev Mode's own panel. Drag the panel edge to make it wider.
-3. **Inspect panel → Code → language dropdown** lists **DevReady · React + Tailwind / React + CSS / HTML + CSS / Single HTML / SwiftUI / Jetpack Compose**. These show the generated code directly in Figma's native Code section, with no plugin window.
-4. In Design mode the plugin opens as a 480px-wide window. You can resize it from the corner.
+---
 
-## Code engine
-Code is built from the whole layer tree, not just the one layer you selected:
-- **Semantic BEM class names.** Auto-generated layer names are ignored (`Frame 2121453060` → `insights__header`, `1284` → `insights__value`, `12.4%` → `insights__change`, a pill with a fill → `insights__badge`). Text inside a component gets a role name from the main component, so every instance shares classes.
-- **De-duplication.** Layers with identical styles share one class. Repeated component instances become one **React component with props**, e.g. `<StatCard label="Sessions" value="342" />`.
-- **Design tokens.** Figma variables are collected into `:root { --surface: #FFF; … }` and the code uses `var(--surface)`.
-- **Clean CSS.** It removes Figma's inline comments and `font-style: normal`, strips flex-only properties when the parent isn't flex, adds `position: relative` when a child is absolutely positioned, sets the most common font family once on the root, and adds a scoped reset (Figma has no default margins).
-- **Semantics.** Lists become `ul`/`li`, buttons become `<button type="button">`, and only one real title becomes a heading (`h1` for page-sized frames, otherwise `h2`). Numbers never become headings.
-- **Assets.** Icons and images become `<img>` tags pointing to exported files. Rotation is baked into the exported file, so there's no `rotate()` in the CSS. Decorative icons get `alt="" aria-hidden="true"`, and React code imports them (`import userCircleIcon from './assets/user-circle.svg'`).
-- **Free-positioned layouts.** Layers inside regular (non-auto-layout) frames and groups are positioned with `position: absolute; left; top`, measured from the layer's real position (group children are measured from the group). Those frames get `position: relative` and their size, and frames that clip their content get `overflow: hidden`.
-- **Fonts, handled automatically (web outputs).** Every font family and weight the design uses is detected, and each family is handled one of three ways:
-  - **On Google Fonts** (checked live against the Google Fonts API, cached, with an offline fallback list): linked automatically with only the weights/italics the design uses. HTML gets `<link>` tags; React gets an `@import` in `Component.css` / `tokens.css`.
-  - **Not on Google Fonts** (Gilroy, brand fonts…): an `@font-face` rule per style with `src: local(...)`, so the copy installed on the device is used. Click **Code → Fonts → Add font files** and pick the `.woff2/.woff/.ttf/.otf` files. They're matched to styles by file name (Bold, SemiBold, MediumItalic, 700…) and then:
-    - **Single HTML:** embedded as data URIs.
-    - **Project ZIPs:** bundled in `fonts/`.
-    Uploaded files are remembered per font family (max 2.5 MB each; `.woff2` is the smallest).
-  - **System fonts** (SF Pro, New York, SF Mono, Helvetica, Segoe UI…): nothing is loaded.
-  - Every `font-family` gets a fallback stack (sans, serif or mono), so text never falls back to Times.
-  - Auto-width text gets `white-space: nowrap`, so it doesn't wrap where Figma doesn't.
-  - Auto layout children get their Fixed / Fill / Hug sizing from the layer itself (`width`, `flex: 1 0 0` or `align-self: stretch`, `flex-shrink: 0`).
-  - SwiftUI uses `ZStack` + `.offset` and Compose uses `Box` + `Modifier.offset` for the same layouts.
-- **Mixed text styles** become `<span>`s with their own classes.
-- **Project export.** **Download project** builds a ZIP with the code files and every referenced asset (SVG, or PNG @2x):
-  - `HTML + CSS` → `index.html` (with the Google Fonts link) + `styles.css` + `assets/`
-  - `React + Tailwind` → `Component.jsx` + `tokens.css` + `assets/`
-  - `React + CSS` → `Component.jsx` + `Component.css` + `assets/`
-  - `Single HTML` → **one `.html` file** with the CSS inlined and every asset embedded (see below)
-  - `SwiftUI` → `Component.swift` + `assets/`
-  - `Jetpack Compose` → `Component.kt` + `assets/`
-- **Variable modes → themes.** Each variable's value is resolved for every mode of its collection, following aliases. The default mode goes in `:root`. Other modes become override blocks: `[data-theme="dark"] { --surface: #121726; }` for Light/Dark collections, otherwise `[data-<collection>="<mode>"]`, e.g. `[data-density="compact"]`.
-- **SwiftUI and Jetpack Compose.** These come from the same layer tree as the web code:
-  - Auto layout becomes `VStack`/`HStack`/`ZStack` in SwiftUI and `Column`/`Row`/`Box` in Compose.
-  - Gaps and space-between alignment become `spacing:` + `Spacer()` in SwiftUI and `Arrangement.spacedBy`/`SpaceBetween` in Compose.
-  - Padding, frame, background, corner radius, border, shadow and opacity become modifiers in the correct order.
-  - Text gets font, weight, color, line height and tracking. Text with mixed styles becomes `Text + Text` in SwiftUI and `buildAnnotatedString` in Compose.
-  - Repeated components become a `struct StatCard: View` or a `@Composable fun StatCard(...)` with parameters.
-  - Variables become `Color.surface` / `AppColors.Surface`. If a Dark mode exists, SwiftUI gets light/dark-aware colors (`Color(light:dark:)`) and Compose gets a separate `AppColorsDark` object.
-- **Code Connect-style mapping.** Select a component instance → **Component → Connect to code** → enter the code component name and import path, e.g. `Button` from `@/components/ui/button`.
-  - From then on, every instance of that component in generated React code becomes `<Button variant="primary" size="large" showIcon>View report</Button>`, plus the correct `import`, instead of rebuilt divs.
-  - Variant props become string props, boolean props become flags, and a Label/Text prop becomes the children.
-  - Mappings are saved in the file, so the whole team gets the same output.
+## What it looks like
 
-## Single HTML + Preview & Compare
-**Single HTML (one file)** gives you HTML, CSS and assets in one self-contained file:
-- The CSS goes in a `<style>` block.
-- Icons are embedded as SVG data URIs and images as PNG/JPG data URIs. Image fills on containers are embedded too, so no `url(<path-to-image>)` placeholders are left.
-- The Google Font is linked.
-- Double-click the downloaded file and it opens in any browser, centered on a neutral background. There are no folders to put together.
-- Embedding is capped at 8 MB in the panel and 400 KB in Dev Mode's Code section. Anything over the cap stays as an `assets/` reference.
+| Inspect | Layer properties | Code (React + Tailwind) |
+|---|---|---|
+| <img src="docs/screenshots/inspect.png" width="260" alt="Inspect panel with status, overrides, dev resources and changes"> | <img src="docs/screenshots/layer-properties.png" width="260" alt="Box model diagram with token chips"> | <img src="docs/screenshots/code-react.png" width="260" alt="Generated React + Tailwind component"> |
 
-**Code → Preview** renders that file live inside the plugin, so you can check the build against the design without leaving Figma:
-- **Preview**: the HTML build at design width, scaled to fit the panel. It grows if the HTML ends up taller than the frame.
-- **Side by side**: Figma's own render of the frame on the left, the HTML on the right.
-- **Overlay**: Figma's render on top of the HTML, with an opacity slider. Tick **Difference** to switch the blend mode: matching pixels turn black, so anything bright is a spacing, size, font or color mismatch.
-- **Download .html** saves the single file.
+| Preview vs. design | Annotations | Dark mode |
+|---|---|---|
+| <img src="docs/screenshots/preview-compare.png" width="260" alt="Live HTML preview compared with the Figma design"> | <img src="docs/screenshots/annotations.png" width="260" alt="Color-coded annotation categories"> | <img src="docs/screenshots/inspect-dark.png" width="260" alt="Inspect panel in dark mode"> |
 
-## Inspect panel layout (matches Figma Dev Mode)
+## Install (2 minutes)
 
-Top to bottom, every section is collapsible (click its title):
+1. Download this repo (**Code → Download ZIP**) and unzip it.
+2. In the **Figma desktop app**, go to **Plugins → Development → Import plugin from manifest…** and pick `devready-plugin/manifest.json`.
+3. Open any file and run **Plugins → Development → DevReady Inspect**.
 
-1. **Header**: layer name, type line (e.g. "Component instance"), status chip, "Ready for dev · <frame>" and a **N changes** button that jumps to *Changes since ready*.
-2. **Overrides**: on instances, shows which layers differ from the main component, with **Compare with main component**.
-3. **Dev resources**: links with GitHub / Storybook / Jira / Linear icons. **Code Connect** box below.
-4. **Component information**: description, preview thumbnail, properties (boolean / instance swap / text / variant icons), "N more" and **Go to main component**.
-5. **Annotations**: colour-coded categories, pinned property chips, add form (category, pinned property, optional canvas note).
-6. **Code**, **Layer properties**, **Typography**, **Colors**, **Effects**, **Variables**, **Content**, **Interactions**, **Layers**, **Assets**, **Export**.
-   - **Layer properties** has a box-model diagram (margin, border, padding, size, radius) and a **List / Code** toggle. List shows token chips (`# var(--space-600)`). Code shows grouped CSS (Layout / Style) or Tailwind.
-   - **Export** has scale (0.5x to 4x), format (PNG / JPG / SVG / PDF), **Export <layer>** and a preview.
+In Dev Mode (Shift+D), you'll find it under **Inspect → Plugins → DevReady Inspect**, or as a language in **Inspect → Code**, named "DevReady · React + Tailwind" and so on.
 
-## Why annotations might not show on the canvas
-
-Figma's native annotations are real, but several Figma rules can hide them:
-
-| Cause | Fix |
-|---|---|
-| The annotation view is off (it also hides measurements, and sometimes turns back off on reload) | Press **Shift+Y**, or Main menu → View → **Annotations** |
-| Free (Starter) plan | Native annotations need a Professional plan or higher. Tick **Also add a note on the canvas** instead. |
-| No edit seat | Adding annotations needs a Full seat with edit access. Viewing needs a Full or Dev seat. |
-| Main component vs instance | An annotation on a main component doesn't appear on its instances, and the other way round. |
-| Group, section or boolean layer | These can't hold annotations. Select a frame, shape, text or instance. The plugin falls back to a canvas note. |
-| Layer is off-screen | The plugin now scrolls the layer into view after adding. |
-
-What the plugin does now:
-- It reads the annotations back after writing, to confirm Figma kept them.
-- It retries without the pinned property or category if Figma rejects them.
-- If Figma drops or blocks the annotation, it draws a **canvas note** instead: a locked "📝 DevReady note" card with a leader line, placed beside the frame and visible on every plan.
-- Deleting the annotation also removes its canvas note. **⋯ → Remove canvas notes on page** clears all of them.
+> No Figma file to try it on? Open `devready-plugin/ui.html` in a browser. It runs the full panel on sample data.
 
 ## Features
-- **Inspect**
-  - Box model (distance to parent, padding, size)
-  - Width/height/X/Y, sizing (fixed/hug/fill), min/max
-  - Auto layout: direction, gap, alignment, padding, wrap
-  - Fills and gradients, strokes, corner radius, shadows and blurs
-  - Typography, including text with mixed styles
-  - Text content (click to copy)
-  - Color & text **style names** and **variables/tokens** (with their WEB code syntax)
-  - Component, variant and properties, plus a "go to main component" button
-  - **Variable modes**: every token shows its value in each mode (Light/Dark, Comfortable/Compact…) with alias chains (`→ blue/500`), plus the layer's explicit mode
-  - **Layers**: a breadcrumb of parent layers (click to go up) and a list of child layers (click to go down)
-- **Changes since ready** (Figma's API doesn't provide this, so the plugin implements it itself)
-  - When a design is marked Ready for dev, the plugin saves a snapshot of its layers (size/position, style and text hashes).
-  - The header then shows **"N changes"**, and the **Changes** section lists added, changed and removed layers with what changed. Click one to select it.
-  - **Mark as reviewed** saves a new snapshot. For designs that were marked ready before you installed the plugin, use **Start tracking**.
-  - Dev Mode's Code section header also shows "⚠ N changes since ready".
-- **Annotations & dev resources (read + write)**
-  - Add notes for developers, optionally pinned to a property (width, gap, fill, font size…), and remove them. These are real Figma annotations, so they also appear on the canvas in Dev Mode.
-  - Add/remove links (GitHub, Storybook, Jira…) as real Dev Mode dev resources.
-- **Measure**
-  - Select one layer to see its distance to the parent, or shift-select a second layer to see the spacing between them
-  - The 📏 button adds **real Figma measurements**, the same ones Dev Mode draws (insets to the parent, or the gap between two layers). In Design mode it falls back to drawn redlines if measurements aren't available. ✕ clears them.
-- **Code**
-  - CSS from Figma's own engine (`getCSSAsync`)
-  - Tailwind classes, with the Tailwind scale used where values match and arbitrary values otherwise
-  - Full-tree **HTML + CSS** and **React + Tailwind** for the selected layer and everything inside it
-  - Automatic tag guesses (`button`, `nav`, `h1`–`h3`, `p`, `img` for icons)
-  - px/rem units with a configurable base size
-- **Assets**
-  - Automatically finds icons, image fills and layers with export settings
-  - Export as SVG / PNG 1x/2x/3x / JPG / PDF, or **download everything as a ZIP** (built in, so no network access is needed)
-- **Ready list**: with nothing selected, it lists every ready or completed design on the page. Click one to jump to it.
-- **Settings** (saved per user): gate on/off, accept the team flag, px/rem, rem base, HEX/RGB/HSL
 
-## Files
-- `manifest.json`: editor types, capabilities (inspect + codegen + vscode), codegen languages and preferences
-- `code.js`: plugin logic (gate, spec extraction, variable modes, change tracking, Code Connect mapping, CSS→Tailwind, tree code generation for web/SwiftUI/Compose, assets, native measurements, annotations, dev resources, codegen)
-- `ui.html`: the panel UI, styled after Figma Dev Mode's Inspect panel (UI3 look, follows Figma's light/dark theme). If you open it in a normal browser, it shows sample data.
+| | |
+|---|---|
+| **Ready-for-dev gate** | Specs and code unlock for frames, components and sections marked *Ready for dev* or *Completed*. The panel always labels where a status comes from: **Figma status** (native) or **DevReady flag** (shared plugin data, for plans or modes where the native status can't be set). The gate is optional. |
+| **Inspect** | Box model, layout, typography, colors, effects, variables with every mode (light/dark), interactions, component properties and overrides, dev resources, list or code view. |
+| **Code** | React + Tailwind, React + CSS, HTML + CSS, single-file HTML, SwiftUI, Jetpack Compose. You get semantic tags, BEM classes, design tokens, reusable components for repeated instances, and a `fonts/` + `assets/` project ZIP. |
+| **Preview & compare** | Renders the generated HTML next to, or overlaid on, the Figma design to spot differences. |
+| **Change tracking** | Lists layers that changed since handoff (size/position, style, text, name), plus added and removed layers. |
+| **Annotations** | Figma-native annotations with categories and pinned properties, and a canvas-note fallback that works on every plan. |
+| **Assets & export** | Icons and images detected automatically. PNG/JPG/SVG/PDF at 0.5–4x, or everything as one ZIP. |
 
-## Notes and limits
-- If Figma rejects the manifest on import, remove `"codegen"` from `capabilities` and delete the `codegenLanguages` and `codegenPreferences` blocks. The inspector will still work.
-- The native status can only be set on frames, components and sections that sit directly on a page or inside a section, and not inside something that already has a status. This is a Figma rule.
-- Change tracking compares against the plugin's own snapshot, not Figma's version history. It tells you *which* layers changed and *what kind* of change, but not the before/after values. Snapshots are limited to 2,500 layers per design.
-- Code Connect mapping affects React output only. SwiftUI and Compose still rebuild the component from its layers.
-- Plugins can't do the following, so Dev Mode still does them better: hover-to-measure on the canvas, version comparison, notifications when designs change, and VS Code's built-in "Figma for VS Code" integration.
-- Full-tree code stops after 600 layers in the panel (1,500 for Download project) and 150 in Dev Mode's Code section, because Figma gives code generation only a 3-second time limit.
-- Network access is limited to `fonts.googleapis.com` / `fonts.gstatic.com`. Those requests contain only **font family names and weights** (to check which fonts exist on Google Fonts and to show the real font in the preview). No layer names, text, images or file data are sent anywhere. Everything else stays inside Figma. See [PRIVACY.md](../PRIVACY.md) for the full list, and `npm test` for the automated check.
-- Before you publish, replace `"id"` in `manifest.json` with the ID Figma gives you.
+Full documentation: **[devready-plugin/README.md](devready-plugin/README.md)**
 
-## Testing
+## Known limits (honest list)
 
-From the repo root: `npm install && npm test`. The suite runs 9 fixture designs through all 6 code targets and checks each output parses (JSX/CSS with esbuild; HTML, Swift and Kotlin with structural checks). It also tests escaping of hostile layer names, change tracking against Figma's 100 kB plugin-data limit, offline fonts, and what gets sent over the network. See [docs/test-report.md](../docs/test-report.md).
+- **Change tracking** shows before → after for position, size, fills, strokes, radius, effects, layout, font and text. Other edits, such as gradient stops or individual effect parameters, are flagged by category only. It covers the first 2,500 layers of a frame, and the panel warns when a frame is bigger.
+- **Code** stops after a set number of layers: 600 in the panel, 1,500 for project downloads, and 150 in Dev Mode's Code section, which has a 3-second budget. The output says when this happens. Pick a smaller frame for the full tree.
+- **Swift and Kotlin output** is checked for structure and safe string escaping, but isn't compiled in CI. JSX and CSS are parsed by esbuild.
+- **Native annotations and Ready for dev** depend on your Figma plan and seat. See [Why annotations might not show](devready-plugin/README.md#why-annotations-might-not-show-on-the-canvas).
+- Not yet tested on a matrix of real Figma files across Design Mode, Dev Mode, Inspect → Code and Figma for VS Code. The [launch checklist](docs/LAUNCH.md#environment-test-matrix) tracks this.
 
-## Troubleshooting
+## Privacy
 
-- **`SyntaxError: possible import expression rejected around line N`** (or an HTML-comment error) in the console: Figma's plugin sandbox rejects some text patterns anywhere in `code.js`, even inside strings and comments. These are `import (` / `import(`, `<!--` / `-->` and `eval(`. Run `node check-sandbox.js` after editing `code.js` to find them.
+DevReady runs entirely inside Figma. **The plugin code makes no network requests.** Fonts are recognised using a bundled Google Fonts catalog. The only traffic is the live preview loading **public Google Fonts** (family and weights), so it renders in the design's typeface. Private or commercial font names are never sent, and you can switch it off with ⋯ → *Load Google Fonts in preview*. No layer names, text, images or file data leave Figma. Details, and everything the plugin stores in your file: **[PRIVACY.md](PRIVACY.md)**. Automated tests check these claims on every commit.
 
+## Quality
+
+```bash
+npm ci
+npm run verify        # layout + Figma sandbox check + ESLint + the test suite (what CI runs)
+npm test              # 65 checks: 9 fixture designs × 6 code targets, privacy, message validation, change tracking
+npm run lint          # ESLint 10, including the script inside ui.html
+npm run test:browser  # Chromium: renders the panel and attacks the preview sandbox (needs Python Playwright)
+```
+
+Every commit is checked by [CI](.github/workflows/ci.yml):
+- Generated code parses: JSX/CSS with esbuild; HTML, Swift and Kotlin with structural checks.
+- Hostile layer names can't inject markup or break string literals.
+- **The plugin code makes zero network requests**, and private font names never appear in a Google URL.
+- **Every UI → plugin message** is validated against a schema (15 attack cases), and crafted component mappings stored in a file can't inject code.
+- **The preview is sandboxed:** a hostile document can't run scripts, reach other hosts or touch the panel. This is checked in a real browser.
+- Snapshots stay under Figma's 100 kB plugin-data limit, and before → after values are correct.
+- The repository layout is correct, so a mis-placed upload fails CI.
+
+Latest results: [docs/test-report.md](docs/test-report.md).
+
+## Roadmap
+
+1. Publish to Figma Community.
+2. Run the environment matrix on real files, and fix what breaks.
+3. Readiness checks: flag missing constraints, detached styles and hard-coded values before handoff.
+4. Tailwind theme export (`tailwind.config` / v4 `@theme`) from Figma variables.
+5. A benchmark suite of real-world designs with screenshot diffs of the generated code.
+
+Ideas and bug reports are welcome. See [CONTRIBUTING.md](CONTRIBUTING.md).
+
+## License
+
+[MIT](LICENSE). Free for personal and commercial use.

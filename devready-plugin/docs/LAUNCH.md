@@ -67,8 +67,8 @@ A 30–45 second screen recording works better than any still image. Show: selec
 
 **Data security disclosure:** fill it in. Answers, consistent with [PRIVACY.md](../PRIVACY.md):
 - Collects or transmits user data? **No.** The only outbound requests are font family names to Google Fonts.
-- Stores data? Yes, **in the file** (shared plugin data: status flag, note, change-tracking snapshot, component mappings) and **on the device** (settings, font cache, uploaded fonts).
-- Third parties: Google Fonts (font CSS and font files only).
+- Stores data? Yes, **in the file** (shared plugin data: status flag, note, change-tracking snapshot, component mappings) and **on the device** (settings, uploaded fonts). The snapshot includes short text excerpts and colors for before → after.
+- Third parties: Google Fonts, requested only by the panel's preview, for public families (CSS and font files). The plugin code makes no network requests. Can be turned off in ⋯.
 - Authentication, payments, analytics: none.
 
 ## 3. Environment test matrix
@@ -79,16 +79,18 @@ Test each row on a real file. Record ✅ / ⚠️ / ❌ and a one-line note.
 |---|---|---|---|
 | 1 | Design Mode, panel | Mark ready (native + flag), gate lock/unlock, Inspect, all sections render | |
 | 2 | Design Mode, panel | Annotate: native annotation appears (Shift+Y); canvas note on a free plan; group → note fallback | |
-| 3 | Design Mode, panel | Start tracking → edit text/style/rename → change list correct; 1,000+ layer frame doesn't error | |
+| 3 | Design Mode, panel | Start tracking → edit text/fill/padding/rename → change list shows correct before → after; 1,000+ layer frame doesn't error | |
 | 4 | Design Mode, panel | Export PNG/SVG/PDF; ZIP download; project ZIP with fonts | |
 | 5 | Dev Mode, Inspect → Plugins | Read-only behaviour: flag instead of native status; no canvas writes | |
 | 6 | Dev Mode, Inspect → Code | Each DevReady language returns within 3 s on a medium frame; preferences (unit, gate) apply | |
 | 7 | Figma for VS Code | Codegen languages appear and produce output | |
 | 8 | Panel width | Narrowest and widest Inspect panel: no overflow or clipped buttons | |
 | 9 | Themes | Light and dark: all text readable, chips and buttons visible | |
-| 10 | Fonts | Google font, custom font (upload), system font (SF), offline | |
+| 10 | Fonts | Google font, variable weight (e.g. 450), custom font (upload), system font (SF); ⋯ → Load Google Fonts in preview off → no font requests | |
 | 11 | Variables | Light/dark collection: tokens and modes correct in CSS, SwiftUI and Compose | |
 | 12 | Remote library | Instance of a library component; variables from a library | |
+| 13 | Preview sandbox | Preview renders, height fits, Overlay/Difference work inside Figma's UI iframe (sandboxed `srcdoc` + CSP) | |
+| 14 | Message validation | Normal use never shows a "DevReady: invalid …" toast (component mapping, export at 0.5x–4x, font upload, dev resources, settings) | |
 
 ## 4. First 30 days after approval
 

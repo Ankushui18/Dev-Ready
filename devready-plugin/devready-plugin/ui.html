@@ -1,0 +1,1660 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>DevReady Inspect</title>
+<style>
+  /* ---------- Figma UI3 tokens (fallbacks used outside Figma) ---------- */
+  :root {
+    --bg: var(--figma-color-bg, #ffffff);
+    --bg2: var(--figma-color-bg-secondary, #f5f5f5);
+    --bg3: var(--figma-color-bg-tertiary, #e6e6e6);
+    --hover: var(--figma-color-bg-hover, #f5f5f5);
+    --pressed: var(--figma-color-bg-pressed, #e6e6e6);
+    --fg: var(--figma-color-text, rgba(0,0,0,.9));
+    --fg2: var(--figma-color-text-secondary, rgba(0,0,0,.5));
+    --fg3: var(--figma-color-text-tertiary, rgba(0,0,0,.3));
+    --icon: var(--figma-color-icon-secondary, rgba(0,0,0,.5));
+    --border: var(--figma-color-border, #e6e6e6);
+    --brand: var(--figma-color-bg-brand, #0d99ff);
+    --brand-fg: var(--figma-color-text-brand, #007be5);
+    --onbrand: var(--figma-color-text-onbrand, #ffffff);
+    --green: var(--figma-color-bg-success, #14ae5c);
+    --warn-fg: var(--figma-color-text-warning, #b86200);
+    --warn-tint: var(--figma-color-bg-warning-tertiary, #fff1e3);
+    --danger: var(--figma-color-text-danger, #dc3412);
+    --danger-tint: var(--figma-color-bg-danger-tertiary, #ffe2e0);
+    --green-fg: var(--figma-color-text-success, #009951);
+    --green-tint: var(--figma-color-bg-success-tertiary, #cff7d3);
+    --purple: var(--figma-color-text-component, #9747ff);
+    --purple-tint: var(--figma-color-bg-component-tertiary, #f1e5ff);
+    --menu: var(--figma-color-bg-menu, #1e1e1e);
+    --menu-fg: var(--figma-color-text-menu, #ffffff);
+    --menu-fg2: var(--figma-color-text-menu-secondary, rgba(255,255,255,.6));
+    --menu-hover: var(--figma-color-bg-menu-selected, #0d99ff);
+    --code-prop: #9747ff; --code-val: #0c8ce9; --code-str: #009951; --code-tag: #e03e1a; --code-cmt: rgba(0,0,0,.35);
+    --mono: "Roboto Mono", "SF Mono", ui-monospace, Menlo, Consolas, monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: var(--figma-color-bg, #2c2c2c); --bg2: var(--figma-color-bg-secondary, #383838); --bg3: var(--figma-color-bg-tertiary, #444);
+      --hover: var(--figma-color-bg-hover, #383838); --pressed: var(--figma-color-bg-pressed, #444);
+      --fg: var(--figma-color-text, #fff); --fg2: var(--figma-color-text-secondary, rgba(255,255,255,.7)); --fg3: var(--figma-color-text-tertiary, rgba(255,255,255,.4));
+      --icon: var(--figma-color-icon-secondary, rgba(255,255,255,.7)); --border: var(--figma-color-border, #444);
+      --green-fg: var(--figma-color-text-success, #79d297); --green-tint: var(--figma-color-bg-success-tertiary, #1a4a2e);
+      --purple: var(--figma-color-text-component, #d6b6fb); --purple-tint: var(--figma-color-bg-component-tertiary, #3c2a5a);
+      --brand-fg: var(--figma-color-text-brand, #7cc4f8);
+    }
+  }
+  .figma-dark { --code-prop: #d6b6fb; --code-val: #7cc4f8; --code-str: #79d297; --code-tag: #ffa98e; --code-cmt: rgba(255,255,255,.4); }
+  @media (prefers-color-scheme: dark) { :root:not(.figma-light) { --code-prop: #d6b6fb; --code-val: #7cc4f8; --code-str: #79d297; --code-tag: #ffa98e; --code-cmt: rgba(255,255,255,.4); } }
+
+  * { box-sizing: border-box; }
+  html, body { margin: 0; background: var(--bg); color: var(--fg); font: 11px/16px Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; letter-spacing: .005em; -webkit-font-smoothing: antialiased; }
+  body { display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
+  button { font: inherit; color: inherit; background: none; border: 0; padding: 0; cursor: default; }
+  a { color: var(--brand-fg); text-decoration: none; }
+  svg { display: block; flex-shrink: 0; }
+  main { flex: 1; overflow-y: auto; overflow-x: hidden; }
+  main::-webkit-scrollbar { width: 8px; } main::-webkit-scrollbar-thumb { background: var(--bg3); border-radius: 8px; border: 2px solid var(--bg); }
+
+  /* ---------- header ---------- */
+  .hdr { padding: 8px 8px 8px 16px; border-bottom: 1px solid var(--border); flex-shrink: 0; }
+  .hdr-row { display: flex; align-items: center; gap: 6px; height: 32px; }
+  .hdr .ico { color: var(--icon); }
+  .hdr .ico.cmp { color: var(--purple); }
+  .hdr .name { font-weight: 600; font-size: 13px; line-height: 20px; flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .hdr .sub { color: var(--fg2); padding: 0 8px 2px 22px; margin-top: -4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .ibtn { width: 24px; height: 24px; border-radius: 5px; display: grid; place-items: center; color: var(--icon); flex-shrink: 0; }
+  .ibtn:hover { background: var(--hover); color: var(--fg); }
+  .ibtn.on { background: var(--pressed); }
+
+  .chip { display: inline-flex; align-items: center; gap: 4px; height: 24px; padding: 0 6px 0 6px; border-radius: 5px; font-weight: 500; white-space: nowrap; }
+  .chip.ready { color: var(--green-fg); background: var(--green-tint); }
+  .chip.done { color: var(--fg); background: var(--bg2); }
+  .chip.done svg:first-child { color: var(--green); }
+  .chip.none { color: var(--fg2); background: var(--bg2); }
+  .chip.off { color: var(--fg2); border: 1px dashed var(--border); }
+  button.chip:hover { filter: brightness(.97); }
+  .chip.chg { color: var(--warn-fg); background: var(--warn-tint); cursor: pointer; }
+  .crumb { display: flex; align-items: center; gap: 2px; padding: 0 8px 4px 22px; color: var(--fg2); white-space: nowrap; overflow: hidden; }
+  .crumb span.c { cursor: pointer; border-radius: 3px; padding: 1px 3px; max-width: 140px; overflow: hidden; text-overflow: ellipsis; flex-shrink: 1; min-width: 24px; }
+  .crumb span.c:hover { background: var(--hover); color: var(--fg); }
+  .crumb i { font-style: normal; color: var(--fg3); }
+  .kb { display: inline-flex; align-items: center; height: 18px; padding: 0 5px; border-radius: 4px; font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: .02em; flex-shrink: 0; }
+  .kb.added { color: var(--green-fg); background: var(--green-tint); }
+  .kb.changed { color: var(--warn-fg); background: var(--warn-tint); }
+  .kb.removed { color: var(--danger); background: var(--danger-tint); }
+  .list-row.dead { cursor: default; opacity: .7; }
+  .list-row.dead:hover { background: none; }
+  .list-row .x { opacity: 0; color: var(--fg2); }
+  .list-row:hover .x, .note:hover .x { opacity: 1; }
+  .note .x { margin-left: auto; opacity: 0; color: var(--fg2); align-self: flex-start; }
+  /* accessibility + tokens */
+  .a-sum { display: flex; gap: 6px; flex-wrap: wrap; margin: 0 0 6px; }
+  .a-sum .pill { display: inline-flex; align-items: center; gap: 5px; height: 20px; padding: 0 7px; border-radius: 10px; font-weight: 500; background: var(--bg2); color: var(--fg2); }
+  .a-sum .pill i { width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
+  .a-sum .pill.bad { background: var(--danger-tint); color: var(--danger); }
+  .a-sum .pill.warn { background: var(--warn-tint); color: var(--warn-fg); }
+  .a-sum .pill.ok { background: var(--green-tint); color: var(--green-fg); }
+  .a-row { height: auto; min-height: 32px; padding-top: 3px; padding-bottom: 3px; }
+  .a-row .ln { display: flex; flex-direction: column; min-width: 0; line-height: 15px; }
+  .a-row .ln small { color: var(--fg2); font-size: 11px; white-space: normal; }
+  .a-sw { width: 28px; height: 20px; border-radius: 4px; display: inline-grid; place-items: center; font-weight: 700; font-size: 11px; box-shadow: inset 0 0 0 1px rgba(128,128,128,.35); flex-shrink: 0; }
+  .list-row .a-dot { display: block; flex: 0 0 8px; width: 8px; height: 8px; min-height: 0; padding: 0; border-radius: 50%; margin: 0 10px; background: var(--fg3); }
+  .list-row .a-dot.fail { background: var(--danger); } .list-row .a-dot.warn { background: #f5a623; } .list-row .a-dot.pass { background: var(--green); }
+  .a-ratio { font-family: var(--mono); font-size: 10px; font-weight: 600; flex-shrink: 0; text-align: right; line-height: 14px; }
+  .a-ratio.fail { color: var(--danger); } .a-ratio.pass { color: var(--green-fg); } .a-ratio small { display: block; color: var(--fg2); font-weight: 400; }
+  .tok-bar { display: flex; align-items: center; gap: 6px; margin: 0 0 6px; }
+  .tok-bar .fill1 { flex: 1; }
+  .tok-bar .dd { box-shadow: inset 0 0 0 1px var(--border); }
+  .modes { grid-template-columns: auto 1fr; gap: 2px 10px; margin: 2px 0 6px; padding-left: 8px; border-left: 2px solid var(--bg2); }
+  .modes .mk { color: var(--fg2); line-height: 20px; }
+  .modes .mv { display: flex; align-items: center; gap: 6px; min-width: 0; line-height: 20px; }
+  .modes .mv .sw { width: 12px; height: 12px; }
+  .form { display: grid; gap: 6px; padding: 8px; margin: 4px 0 2px; border-radius: 6px; background: var(--bg2); }
+  .form .row { display: flex; gap: 6px; justify-content: flex-end; }
+  .form label { color: var(--fg2); font-size: 11px; }
+  input.in, select.in { width: 100%; height: 28px; font: inherit; color: var(--fg); background: var(--bg); border: 1px solid var(--border); border-radius: 5px; padding: 0 8px; outline: none; }
+  input.in:focus, select.in:focus { border-color: var(--brand); box-shadow: 0 0 0 1px var(--brand); }
+  .form textarea { min-height: 44px; }
+  .mini { color: var(--brand); cursor: pointer; font-weight: 500; }
+  .mini:hover { text-decoration: underline; }
+  .cc-head { display: flex; align-items: center; gap: 6px; margin: 10px 0 4px; color: var(--fg2); }
+  .cc-head b { color: var(--fg); font-weight: 600; }
+  .cc-head .fill1 { flex: 1; }
+  .seg { display: inline-flex; padding: 2px; gap: 2px; border-radius: 6px; background: var(--bg2); }
+  .seg button { height: 22px; padding: 0 9px; border-radius: 4px; color: var(--fg2); font-weight: 500; }
+  .seg button.on { background: var(--bg); color: var(--fg); box-shadow: 0 0 0 1px var(--border); }
+  .pv-bar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin: 2px 0 8px; }
+  .pv-bar .fill1 { flex: 1; }
+  .pv-bar input[type=range] { width: 90px; accent-color: var(--brand); }
+  .pv-bar label { display: inline-flex; align-items: center; gap: 4px; color: var(--fg2); cursor: pointer; }
+  .pv-stage { border-radius: 6px; background: repeating-conic-gradient(var(--bg2) 0 25%, var(--bg) 0 50%) 0 0 / 16px 16px; box-shadow: inset 0 0 0 1px var(--border); padding: 8px; overflow: hidden; }
+  .pv-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .pv-col .cap { color: var(--fg2); font-size: 11px; margin-bottom: 4px; display: flex; justify-content: space-between; }
+  .pv-box { position: relative; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,.12); background: #fff; }
+  .pv-box iframe { border: 0; position: absolute; left: 0; top: 0; transform-origin: 0 0; background: transparent; }
+  .pv-box img.shot { position: absolute; left: 0; top: 0; width: 100%; height: auto; }
+  .pv-note { color: var(--fg3); margin-top: 6px; }
+  .top-tabs { display: flex; align-items: center; justify-content: space-between; margin: 0 0 8px; }
+  .note { margin: 4px 8px 0 0; padding: 8px 10px; background: var(--bg2); border-radius: 5px; color: var(--fg); white-space: pre-wrap; display: flex; gap: 8px; }
+  .note .who { color: var(--fg2); }
+
+  /* ---------- sections ---------- */
+  .sec { border-bottom: 1px solid var(--border); padding: 4px 0 12px; }
+  .sec:last-child { border-bottom: 0; }
+  .sec-h { display: flex; align-items: center; gap: 2px; height: 40px; padding: 0 8px 0 16px; }
+  .sec-h .t { font-weight: 600; flex: 1; min-width: 0; display: flex; align-items: center; gap: 6px; }
+  .sec-h .t .cnt { color: var(--fg2); font-weight: 400; }
+  .sec-h > .btn { margin-right: 8px; }
+  .sec-b { padding: 0 16px; }
+
+  /* dropdown trigger like Figma's */
+  .dd { display: inline-flex; align-items: center; gap: 2px; height: 24px; padding: 0 4px 0 8px; border-radius: 5px; color: var(--fg); white-space: nowrap; }
+  .dd:hover { background: var(--hover); }
+  .dd svg { color: var(--icon); }
+
+  /* property rows */
+  .props { display: grid; grid-template-columns: minmax(76px, 38%) 1fr; row-gap: 0; align-items: center; }
+  .pk { color: var(--fg2); height: 24px; line-height: 24px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding-right: 8px; }
+  .pv { min-height: 24px; display: flex; align-items: center; gap: 6px; min-width: 0; }
+  .pv > span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .cp { border-radius: 4px; padding: 2px 4px; margin: 0 -4px; cursor: pointer; }
+  .cp:hover { background: var(--hover); }
+  .muted { color: var(--fg2); }
+  .faint { color: var(--fg3); }
+
+  /* tokens & swatches */
+  .tok { display: inline-flex; align-items: center; gap: 4px; height: 20px; padding: 0 6px; border-radius: 4px; background: var(--bg2); max-width: 100%; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+  .tok svg { color: var(--icon); }
+  .sw { width: 16px; height: 16px; border-radius: 3px; flex-shrink: 0; position: relative; overflow: hidden; box-shadow: inset 0 0 0 1px rgba(0,0,0,.1);
+        background: conic-gradient(#ddd 25%, #fff 0 50%, #ddd 0 75%, #fff 0) 0 0 / 8px 8px; }
+  .sw i { position: absolute; inset: 0; box-shadow: inset 0 0 0 1px rgba(0,0,0,.1); border-radius: 3px; }
+  .color-row { display: flex; align-items: center; gap: 8px; height: 32px; padding: 0 8px; margin: 0 -8px; border-radius: 5px; cursor: pointer; }
+  .color-row:hover { background: var(--hover); }
+  .color-row .cn { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .color-row .cv { color: var(--fg2); font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .color-row .cv.solo { color: var(--fg); flex: 1; }
+  .sub-h { color: var(--fg2); margin: 8px 0 2px; }
+
+  /* box model */
+  .bm { margin: 4px 0 8px; font-size: 10px; font-variant-numeric: tabular-nums; text-align: center; color: var(--fg); }
+  .bm .box { position: relative; border-radius: 4px; padding: 20px 28px; }
+  .bm .lab { position: absolute; top: 3px; left: 6px; font-size: 9px; color: var(--fg2); }
+  .bm .n { position: absolute; }
+  .bm .n.t { top: 3px; left: 0; right: 0; } .bm .n.b { bottom: 3px; left: 0; right: 0; }
+  .bm .n.l { left: 0; width: 28px; top: 50%; transform: translateY(-50%); } .bm .n.r { right: 0; width: 28px; top: 50%; transform: translateY(-50%); }
+  .bm .n.z { color: var(--fg3); }
+  .bm .pos { border: 1px dashed var(--fg3); }
+  .bm .pad { background: var(--bg2); border: 1px solid var(--border); }
+  .bm .core { height: 32px; display: grid; place-items: center; border-radius: 3px; border: 1px solid var(--brand); background: color-mix(in srgb, var(--brand) 10%, var(--bg)); font-weight: 500; font-size: 11px; cursor: pointer; }
+
+  /* code */
+  .code { position: relative; background: var(--bg2); border-radius: 5px; }
+  .code pre { margin: 0; padding: 8px 0; font: 11px/18px var(--mono); white-space: pre; max-height: 520px; overflow: auto; tab-size: 2; color: var(--fg); counter-reset: ln; }
+  .code pre .l { display: block; padding: 0 14px 0 0; min-width: max-content; }
+  .code pre .l::before { counter-increment: ln; content: counter(ln); display: inline-block; width: 34px; padding-right: 12px; margin-right: 4px; text-align: right; color: var(--fg3); user-select: none; position: sticky; left: 0; background: var(--bg2); }
+  .code pre::-webkit-scrollbar { width: 8px; height: 8px; } .code pre::-webkit-scrollbar-thumb { background: var(--bg3); border-radius: 8px; }
+  .files { display: flex; gap: 2px; border-bottom: 1px solid var(--border); margin-bottom: 8px; overflow-x: auto; }
+  .file { height: 28px; padding: 0 10px; color: var(--fg2); border-bottom: 2px solid transparent; margin-bottom: -1px; white-space: nowrap; display: inline-flex; align-items: center; gap: 6px; font-family: var(--mono); font-size: 11px; }
+  .file:hover { color: var(--fg); }
+  .file.on { color: var(--fg); border-bottom-color: var(--brand); }
+  .fonts { margin-top: 12px; border-top: 1px solid var(--border); padding-top: 10px; }
+  .fonts-h { display: flex; align-items: center; gap: 6px; font-weight: 600; margin-bottom: 6px; }
+  .frow { padding: 6px 0; }
+  .frow + .frow { border-top: 1px dashed var(--border); }
+  .frow-top { display: flex; align-items: center; gap: 6px; min-height: 24px; }
+  .frow-top .fill1 { flex: 1; }
+  .frow-top b { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .fsrc { font-size: 10px; font-weight: 600; letter-spacing: .02em; padding: 1px 6px; border-radius: 4px; text-transform: uppercase; flex-shrink: 0; }
+  .fsrc.google { color: var(--green-fg); background: var(--green-tint); }
+  .fsrc.custom { color: var(--warn-fg); background: var(--warn-tint); }
+  .fsrc.system { color: var(--fg2); background: var(--bg2); }
+  .fnote { color: var(--fg2); margin: 2px 0 0; line-height: 1.45; }
+  .fvars { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 6px; }
+  .fvar { display: inline-flex; align-items: center; gap: 4px; height: 22px; padding: 0 7px; border-radius: 11px; background: var(--bg2); color: var(--fg2); font-size: 11px; }
+  .fvar.ok { color: var(--green-fg); background: var(--green-tint); }
+  .fvar .x { cursor: pointer; opacity: .7; margin-left: 2px; }
+  .fvar .x:hover { opacity: 1; }
+  .code-foot { display: flex; align-items: center; gap: 8px; margin-top: 8px; flex-wrap: wrap; }
+  .code-foot .stats { color: var(--fg2); flex: 1; min-width: 160px; }
+  .warn { padding: 6px 10px; border-radius: 5px; background: color-mix(in srgb, #ffcd29 25%, transparent); margin-bottom: 8px; }
+  .code .copy-float { position: absolute; top: 4px; right: 4px; opacity: 0; background: var(--bg); box-shadow: 0 0 0 1px var(--border); }
+  .code:hover .copy-float { opacity: 1; }
+  .code + .code { margin-top: 8px; }
+  .code-label { color: var(--fg2); margin: 10px 0 4px; }
+  .c-p { color: var(--code-prop); } .c-v { color: var(--code-val); } .c-s { color: var(--code-str); } .c-t { color: var(--code-tag); } .c-c { color: var(--code-cmt); }
+
+  /* typography card */
+  .type-card { display: flex; gap: 10px; align-items: center; padding: 8px; margin: 0 -8px 6px; border-radius: 5px; }
+  .type-card .ag { width: 40px; height: 40px; border-radius: 5px; background: var(--bg2); display: grid; place-items: center; font-size: 18px; flex-shrink: 0; }
+  .type-card .tn { font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .type-card .td { color: var(--fg2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .seg-sep { height: 1px; background: var(--border); margin: 8px 0; }
+
+  /* component card */
+  .cmp-card { display: flex; align-items: center; gap: 8px; padding: 8px; border: 1px solid var(--border); border-radius: 5px; margin-bottom: 8px; }
+  .cmp-card .ci { color: var(--purple); }
+  .cmp-card .cn { flex: 1; min-width: 0; }
+  .cmp-card .cn b { font-weight: 500; display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .link { color: var(--brand-fg); cursor: pointer; display: inline-flex; align-items: center; gap: 2px; white-space: nowrap; }
+  .link:hover { text-decoration: underline; }
+  .desc { color: var(--fg2); margin: 0 0 8px; white-space: pre-wrap; }
+
+  /* spacing */
+  .spacing { display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; }
+  .sp { background: var(--bg2); border-radius: 5px; padding: 6px 8px; cursor: pointer; }
+  .sp:hover { background: var(--pressed); }
+  .sp b { display: block; font-size: 12px; font-weight: 600; color: #f24822; font-variant-numeric: tabular-nums; }
+  .sp span { color: var(--fg2); font-size: 10px; }
+  .spacing.two { grid-template-columns: 1fr 1fr; }
+
+  /* assets */
+  .assets { display: grid; grid-template-columns: repeat(auto-fill, minmax(84px, 1fr)); gap: 8px; }
+  .asset { cursor: pointer; min-width: 0; }
+  .asset .th { aspect-ratio: 1; border-radius: 5px; background: var(--bg2); display: grid; place-items: center; overflow: hidden; position: relative; border: 1px solid transparent; }
+  .asset:hover .th { border-color: var(--brand); }
+  .asset .th img { max-width: 76%; max-height: 76%; object-fit: contain; }
+  .asset .th .dl { position: absolute; right: 4px; bottom: 4px; width: 22px; height: 22px; border-radius: 4px; background: var(--brand); color: #fff; display: grid; place-items: center; opacity: 0; }
+  .asset:hover .th .dl { opacity: 1; }
+  .asset .an { margin-top: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .asset .am { color: var(--fg2); font-size: 10px; }
+  .ph { color: var(--fg3); }
+
+  /* text content */
+  .content { background: var(--bg2); border-radius: 5px; padding: 8px 10px; white-space: pre-wrap; word-break: break-word; max-height: 140px; overflow: auto; cursor: pointer; }
+  .content:hover { box-shadow: inset 0 0 0 1px var(--border); }
+
+  /* buttons */
+  .btn { height: 24px; padding: 0 8px; border-radius: 5px; display: inline-flex; align-items: center; justify-content: center; gap: 4px; font-weight: 500; box-shadow: inset 0 0 0 1px var(--border); white-space: nowrap; }
+  .btn:hover { background: var(--hover); }
+  .btn.green { background: var(--green); color: #fff; box-shadow: none; }
+  .btn.green:hover { filter: brightness(1.06); }
+  .btn.blue { background: var(--brand); color: var(--onbrand); box-shadow: none; }
+  .btn.full { width: 100%; height: 32px; }
+  .row-btns { display: flex; gap: 8px; margin-top: 8px; flex-wrap: wrap; }
+
+  /* empty / locked */
+  .empty { padding: 32px 24px 20px; text-align: center; }
+  .empty .em-ico { width: 40px; height: 40px; margin: 0 auto 12px; border-radius: 50%; background: var(--bg2); display: grid; place-items: center; color: var(--icon); }
+  .empty h3 { font-size: 13px; line-height: 20px; margin: 0 0 4px; font-weight: 600; }
+  .empty p { margin: 0 auto; color: var(--fg2); max-width: 240px; }
+  textarea { width: 100%; font: inherit; color: var(--fg); background: var(--bg); border: 1px solid var(--border); border-radius: 5px; padding: 6px 8px; resize: vertical; min-height: 52px; outline: none; }
+  textarea:focus { border-color: var(--brand); box-shadow: 0 0 0 1px var(--brand); }
+  .list-row { display: flex; align-items: center; gap: 8px; height: 32px; padding: 0 8px; margin: 0 -8px; border-radius: 5px; cursor: pointer; }
+  .list-row:hover { background: var(--hover); }
+  .list-row .ico { color: var(--icon); }
+  .list-row .ln { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .st-ico.ready { color: var(--green); } .st-ico.done { color: var(--green); }
+
+  /* menu (Figma dark menu) */
+  .menu { position: fixed; z-index: 50; min-width: 180px; background: var(--menu); color: var(--menu-fg); border-radius: 13px; padding: 8px; box-shadow: 0 2px 5px rgba(0,0,0,.15), 0 10px 16px rgba(0,0,0,.12), 0 0 .5px rgba(0,0,0,.15); display: none; }
+  .menu.on { display: block; }
+  .mi { display: flex; align-items: center; gap: 8px; height: 24px; padding: 0 8px 0 6px; border-radius: 5px; white-space: nowrap; }
+  .mi:hover { background: var(--menu-hover); }
+  .mi .ck { width: 16px; display: grid; place-items: center; }
+  .mi.dis { opacity: .4; pointer-events: none; }
+  .mh { color: var(--menu-fg2); padding: 4px 8px 2px 28px; font-size: 11px; }
+  .ms { height: 1px; background: rgba(255,255,255,.12); margin: 8px -8px; }
+
+  .toast { position: fixed; left: 50%; bottom: 12px; transform: translate(-50%, 8px); background: var(--menu); color: var(--menu-fg); padding: 8px 12px; border-radius: 5px; opacity: 0; pointer-events: none; transition: .15s; z-index: 60; box-shadow: 0 4px 12px rgba(0,0,0,.2); }
+  .toast.on { opacity: 1; transform: translate(-50%, 0); }
+  .demo { background: var(--bg2); color: var(--fg2); padding: 4px 16px; font-size: 10px; flex-shrink: 0; border-bottom: 1px solid var(--border); }
+  .bar { height: 2px; flex-shrink: 0; background: linear-gradient(90deg, transparent, var(--brand), transparent) 0 0 / 200% 100%; opacity: 0; }
+  .bar.on { opacity: 1; animation: ld 1s linear infinite; }
+  @keyframes ld { to { background-position: -200% 0; } }
+  .resize { position: fixed; right: 0; bottom: 0; width: 12px; height: 12px; cursor: nwse-resize; color: var(--fg3); }
+  /* ================= Dev Mode look (v3) ================= */
+  :root { --code-prop: var(--fg); --code-val: #c4258f; --code-kw: #b35c00; --code-str: #2f6fdb; --code-tag: #8638e5; --code-cmt: rgba(0,0,0,.4); --pad-tint: #e5f4ff; }
+  @media (prefers-color-scheme: dark) { :root:not(.figma-light) { --code-prop: var(--fg); --code-val: #ff7ac6; --code-kw: #ffa657; --code-str: #79b8ff; --code-tag: #c5a3ff; --code-cmt: rgba(255,255,255,.4); --pad-tint: rgba(13,153,255,.18); --warn-fg: var(--figma-color-text-warning, #f5a455); --warn-tint: var(--figma-color-bg-warning-tertiary, rgba(247,133,0,.16)); } }
+  .figma-dark { --code-prop: var(--fg); --code-val: #ff7ac6; --code-kw: #ffa657; --code-str: #79b8ff; --code-tag: #c5a3ff; --code-cmt: rgba(255,255,255,.4); --pad-tint: rgba(13,153,255,.18); --warn-fg: var(--figma-color-text-warning, #f5a455); --warn-tint: var(--figma-color-bg-warning-tertiary, rgba(247,133,0,.16)); }
+  .c-k { color: var(--code-kw); } .c-n { color: var(--code-val); }
+  u.vu { text-decoration: none; border-bottom: 1px dashed #3fbf73; }
+
+  /* header */
+  .hdr { padding: 12px 8px 10px 16px; }
+  .hdr-row { height: 28px; }
+  .hdr .name { font-size: 13px; }
+  .h-type, .h-meta { display: flex; align-items: center; gap: 6px; min-height: 28px; padding-right: 8px; color: var(--fg2); }
+  .h-type .fill1, .h-meta .fill1 { flex: 1; }
+  .tline { display: inline-flex; align-items: center; gap: 6px; color: var(--fg2); white-space: nowrap; }
+  .tline svg { color: var(--icon); }
+  .tline.cmp, .tline.cmp svg { color: var(--purple); }
+  .tline.cmp[data-select] { cursor: pointer; } .tline.cmp[data-select]:hover { text-decoration: underline; }
+  .h-meta svg { color: var(--icon); }
+  .h-meta .txt { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .hdr .crumb { padding-left: 0; margin: 2px 0 0; }
+  .hdr .note { margin: 8px 8px 2px 0; }
+  .note svg { color: var(--icon); flex-shrink: 0; }
+  .btn.sm { height: 24px; padding: 0 4px 0 8px; font-weight: 400; gap: 2px; }
+  .btn.sm svg { color: var(--icon); }
+  .btn.warn { color: var(--warn-fg); background: var(--warn-tint); box-shadow: none; }
+  .btn.warn svg { color: currentColor; }
+  .btn.wide { width: 100%; height: 28px; font-weight: 400; margin-top: 8px; }
+
+  /* collapsible sections */
+  .sec { padding: 0 0 14px; }
+  .sec.closed { padding-bottom: 0; }
+  .sec-h { padding: 0 8px 0 2px; height: 40px; }
+  .sec-t { flex: 1; min-width: 0; height: 40px; display: flex; align-items: center; gap: 0; font-weight: 600; text-align: left; color: var(--fg); }
+  .sec-t .chv { width: 14px; height: 16px; display: grid; place-items: center; color: var(--fg3); transition: transform .12s; flex-shrink: 0; }
+  .sec.closed .sec-t .chv { transform: rotate(-90deg); }
+  .sec-t .cnt { color: var(--fg2); font-weight: 400; margin-left: 6px; }
+  .sec-t:hover .chv { color: var(--fg2); }
+  .blk { padding: 12px 16px 14px; border-bottom: 1px solid var(--border); }
+
+  /* instance overrides (B) */
+  .ov-note { display: flex; gap: 8px; color: var(--fg2); line-height: 18px; }
+  .ov-note svg { color: var(--icon); margin-top: 1px; }
+  .ov-act { padding: 8px 0 0 24px; }
+  .ov-act .btn { height: 28px; font-weight: 400; padding: 0 10px; }
+  .ov-list { margin: 8px 0 0 16px; }
+  .ov-list .list-row { height: 28px; }
+
+  /* dev resources (C) & code connect */
+  .res-row { display: flex; align-items: center; gap: 8px; height: 32px; padding: 0 8px; margin: 0 -8px; border-radius: 5px; }
+  .res-row:hover { background: var(--hover); }
+  .res-row .ln { flex: 1; min-width: 0; color: var(--fg); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .res-row .ri { color: var(--fg); }
+  .res-row .x { opacity: 0; } .res-row:hover .x { opacity: 1; }
+  .cc-box { display: flex; align-items: center; gap: 8px; min-height: 40px; padding: 0 12px; border-radius: 6px; background: var(--bg2); color: var(--fg2); }
+  .cc-box b { font-weight: 500; color: var(--fg); }
+  .sec-h > .dd.box { margin-right: 8px; }
+  .cc-box .fill1 { flex: 1; }
+  .cc-box .mini { color: var(--fg2); font-weight: 400; }
+  .cc-box .mini:hover { color: var(--fg); }
+  .cc-box code { font-family: var(--mono); font-size: 10.5px; color: var(--fg); }
+
+  /* component information (D/E) */
+  .ci-desc { margin: 0 0 10px; color: var(--fg); line-height: 18px; white-space: pre-wrap; }
+  .ci-prev { height: 132px; border-radius: 6px; background: var(--bg2); display: grid; place-items: center; overflow: hidden; margin-bottom: 8px; }
+  .ci-prev img { max-width: 82%; max-height: 104px; object-fit: contain; }
+  .ci-prev .ph { color: var(--fg3); }
+  .cprops .pk { height: 32px; line-height: 32px; }
+  .cprops .pv { min-height: 32px; gap: 10px; }
+  .cprops .pi { color: var(--icon); display: grid; place-items: center; width: 16px; }
+  .more-row { display: flex; align-items: center; gap: 8px; height: 32px; color: var(--fg); }
+  .more-row svg { color: var(--icon); }
+
+  /* annotations */
+  .ann { display: flex; gap: 10px; padding: 10px 10px 10px 12px; border-radius: 6px; background: var(--bg2); margin-bottom: 6px; }
+  .ann-dot { width: 8px; height: 8px; border-radius: 50%; margin-top: 4px; flex-shrink: 0; }
+  .ann-b { flex: 1; min-width: 0; line-height: 17px; word-break: break-word; }
+  .ann-cat { font-size: 10px; font-weight: 600; color: var(--fg2); text-transform: uppercase; letter-spacing: .03em; margin-bottom: 2px; }
+  .ann-b code { font-family: var(--mono); font-size: 10.5px; background: var(--bg); padding: 0 3px; border-radius: 3px; }
+  .ann-props { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 6px; }
+  .ann .x { opacity: 0; color: var(--fg2); align-self: flex-start; margin: -4px -4px 0 0; }
+  .ann:hover .x { opacity: 1; }
+  .ann-help { margin-top: 8px; color: var(--fg2); }
+  .ann-help summary { cursor: pointer; color: var(--fg2); list-style: none; display: inline-flex; align-items: center; gap: 4px; }
+  .ann-help summary::-webkit-details-marker { display: none; }
+  .ann-help summary:hover { color: var(--fg); }
+  .ann-help ul { margin: 6px 0 0; padding-left: 16px; line-height: 17px; }
+  .ann-help li { margin-bottom: 4px; }
+  .ann-help kbd { font: 600 10px/16px Inter, sans-serif; padding: 0 4px; border-radius: 3px; background: var(--bg2); box-shadow: inset 0 0 0 1px var(--border); color: var(--fg); }
+  .form .two { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+  .chk { display: flex; align-items: center; gap: 6px; color: var(--fg); cursor: pointer; }
+  .chk input { margin: 0; accent-color: var(--brand); }
+  .chk .faint { margin-left: 2px; }
+
+  /* box model (G) */
+  .bm2 { position: relative; background: var(--bg2); border-radius: 8px; padding: 34px 44px; margin: 0 0 10px; font-size: 11px; font-variant-numeric: tabular-nums; color: var(--fg); }
+  .bm2.nom { padding: 18px 18px 30px; }
+  .mline { position: absolute; background: var(--brand); }
+  .mline.abs { background: #f24822; }
+  .mline.t { left: 50%; top: 0; width: 1px; height: 34px; } .mline.b { left: 50%; bottom: 0; width: 1px; height: 34px; }
+  .mline.l { top: 50%; left: 0; height: 1px; width: 44px; } .mline.r { top: 50%; right: 0; height: 1px; width: 44px; }
+  .mtag { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); background: var(--brand); color: #fff; font-weight: 500; font-size: 10px; line-height: 16px; padding: 0 4px; border-radius: 2px; min-width: 20px; text-align: center; cursor: pointer; white-space: nowrap; }
+  .mline.abs .mtag { background: #f24822; }
+  .bb { position: relative; background: var(--bg); border-radius: 10px; padding: 30px 34px; }
+  .bb .cn { position: absolute; width: 12px; height: 12px; border: 0 solid var(--fg3); }
+  .bb .cn.on { border-color: var(--fg); }
+  .bb .cn.tl { left: -2px; top: -2px; border-top-width: 1.5px; border-left-width: 1.5px; border-top-left-radius: 9px; }
+  .bb .cn.tr { right: -2px; top: -2px; border-top-width: 1.5px; border-right-width: 1.5px; border-top-right-radius: 9px; }
+  .bb .cn.br { right: -2px; bottom: -2px; border-bottom-width: 1.5px; border-right-width: 1.5px; border-bottom-right-radius: 9px; }
+  .bb .cn.bl { left: -2px; bottom: -2px; border-bottom-width: 1.5px; border-left-width: 1.5px; border-bottom-left-radius: 9px; }
+  .chipn { position: absolute; min-width: 20px; height: 18px; line-height: 16px; text-align: center; background: var(--bg); border: 1px solid var(--border); border-radius: 4px; padding: 0 4px; font-size: 10.5px; cursor: pointer; }
+  .chipn.z, .bw.z { color: var(--fg3); cursor: default; }
+  .rad.tl { left: 6px; top: 6px; } .rad.tr { right: 6px; top: 6px; } .rad.br { right: 6px; bottom: 6px; } .rad.bl { left: 6px; bottom: 6px; }
+  .bb > .lab { position: absolute; left: 34px; top: 7px; color: var(--fg2); }
+  .bw { position: absolute; line-height: 16px; }
+  .bw.t { left: 50%; top: 7px; transform: translateX(-50%); } .bw.b { left: 50%; bottom: 7px; transform: translateX(-50%); }
+  .bw.l { left: 14px; top: 50%; transform: translateY(-50%); } .bw.r { right: 14px; top: 50%; transform: translateY(-50%); }
+  .pb { position: relative; background: var(--pad-tint); border: 1px solid var(--fg); border-radius: 1px; padding: 27px 38px; }
+  .pb > .lab { position: absolute; left: 7px; top: 5px; color: var(--fg2); }
+  .pv2.t { left: 50%; top: 4px; transform: translateX(-50%); } .pv2.b { left: 50%; bottom: 4px; transform: translateX(-50%); }
+  .pv2.l { left: 8px; top: 50%; transform: translateY(-50%); } .pv2.r { right: 8px; top: 50%; transform: translateY(-50%); }
+  .cb { border: 1px dashed var(--fg); background: var(--bg); height: 28px; display: grid; place-items: center; font-family: var(--mono); font-size: 11px; cursor: pointer; white-space: nowrap; }
+  .bbx { position: absolute; right: 10px; bottom: 8px; color: var(--fg3); }
+  .lp-bar { display: flex; align-items: center; justify-content: space-between; margin: 0 0 12px; }
+  .lp-bar .seg button { height: 26px; padding: 0 10px; font-weight: 400; font-size: 11px; }
+  .dd.box { box-shadow: inset 0 0 0 1px var(--border); height: 28px; padding: 0 6px 0 10px; gap: 8px; }
+  .lchg { display: grid; grid-template-columns: auto; gap: 2px; padding: 12px; border-radius: 6px; background: var(--bg2); margin: 0 0 14px; line-height: 17px; }
+  .lchg svg { color: var(--fg); margin-bottom: 6px; }
+  .lchg b { font-weight: 600; }
+  .lp-h { font-weight: 500; color: var(--fg); margin: 2px 0 6px; }
+  .lp-props .pk { height: 32px; line-height: 32px; }
+  .lp-props .pv { min-height: 32px; }
+
+  /* variable chip (#) */
+  .vchip { display: inline-flex; align-items: center; gap: 6px; height: 26px; padding: 0 8px 0 5px; border-radius: 5px; box-shadow: inset 0 0 0 1px var(--border); max-width: 100%; min-width: 0; cursor: pointer; background: var(--bg); }
+  .vchip:hover { box-shadow: inset 0 0 0 1px var(--fg3); }
+  .vchip i { width: 16px; height: 16px; border-radius: 3px; box-shadow: inset 0 0 0 1px var(--fg3); display: grid; place-items: center; color: var(--fg2); flex-shrink: 0; font-style: normal; }
+  .vchip span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+  .vchip.sm { height: 20px; padding: 0 6px; cursor: default; }
+  .tok { height: 24px; padding: 0 8px 0 6px; border-radius: 5px; background: var(--bg); box-shadow: inset 0 0 0 1px var(--border); }
+
+  /* code groups (H) */
+  .cg-h { display: flex; align-items: center; justify-content: space-between; height: 32px; margin-top: 6px; }
+  .cg-h span.t { color: var(--fg); }
+  .code { background: var(--bg); box-shadow: inset 0 0 0 1px var(--border); border-radius: 6px; }
+  .code pre { padding: 10px 0; font: 11.5px/20px var(--mono); }
+  .code pre .l::before { width: 30px; padding-right: 10px; margin-right: 12px; background: var(--bg); box-shadow: inset -1px 0 0 var(--border); color: var(--fg3); }
+  .code pre::before { content: ''; }
+  .code.wrap pre { white-space: pre-wrap; word-break: break-all; }
+
+  /* colors (H) */
+  .ccol-h { color: var(--fg3); margin: 6px 0 8px; }
+  .ccol { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; min-height: 28px; }
+  .cchip { display: inline-flex; align-items: center; gap: 6px; height: 28px; padding: 0 10px 0 6px; border-radius: 5px; box-shadow: inset 0 0 0 1px var(--border); min-width: 0; max-width: 78%; cursor: pointer; }
+  .cchip:hover { box-shadow: inset 0 0 0 1px var(--fg3); }
+  .cchip .sw { width: 18px; height: 18px; }
+  .cchip span.cl { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+  .ccol .cval { color: var(--fg2); margin-left: auto; font-variant-numeric: tabular-nums; white-space: nowrap; }
+
+  /* interactions */
+  .ix + .ix { border-top: 1px solid var(--border); margin-top: 6px; padding-top: 6px; }
+  .ix .pk { height: 30px; line-height: 30px; }
+  .ix .pv { min-height: 30px; }
+
+  /* assets list (I) */
+  .arow { display: flex; align-items: center; gap: 14px; padding: 6px 8px; margin: 0 -8px; border-radius: 6px; cursor: pointer; position: relative; }
+  .arow:hover { background: var(--hover); }
+  .arow .th { width: 60px; height: 60px; border-radius: 4px; background: var(--bg2); box-shadow: inset 0 0 0 1px var(--border); display: grid; place-items: center; overflow: hidden; flex-shrink: 0; }
+  .arow .th img { max-width: 80%; max-height: 80%; object-fit: contain; }
+  .arow .ai { flex: 1; min-width: 0; display: grid; gap: 4px; }
+  .arow .an { color: var(--fg); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 12px; }
+  .arow .ak { display: inline-flex; align-items: center; gap: 6px; color: var(--fg2); font-size: 12px; white-space: nowrap; }
+  .arow .ak.cmp { color: var(--purple); } .arow .ak.cmp svg { color: var(--purple); }
+  .arow .ak[data-select]:hover { text-decoration: underline; }
+  .arow .dl { width: 24px; height: 24px; border-radius: 5px; display: grid; place-items: center; color: var(--icon); opacity: 0; }
+  .arow:hover .dl { opacity: 1; }
+
+  /* export (J) */
+  .exp-row { display: flex; align-items: center; gap: 8px; }
+  .exp-sc { display: flex; align-items: center; height: 28px; border-radius: 5px; background: var(--bg2); width: 116px; }
+  .exp-sc span { flex: 1; text-align: left; padding-left: 10px; }
+  .exp-sc i { width: 26px; height: 28px; display: grid; place-items: center; box-shadow: inset 1px 0 0 var(--bg); color: var(--icon); }
+  .exp-sc.dis { opacity: .5; pointer-events: none; }
+  .exp-fmt { display: inline-flex; align-items: center; justify-content: space-between; height: 28px; border-radius: 5px; box-shadow: inset 0 0 0 1px var(--border); flex: 1; padding: 0 6px 0 10px; }
+  .exp-fmt svg { color: var(--icon); }
+  .pv-t { display: flex; align-items: center; gap: 2px; height: 32px; margin: 6px 0 2px -14px; color: var(--fg2); font-weight: 600; }
+  .pv-t span { width: 14px; display: grid; place-items: center; color: var(--fg3); transition: transform .12s; }
+  .pv-t.closed span { transform: rotate(-90deg); }
+  .exp-prev { border-radius: 6px; background: repeating-conic-gradient(var(--bg2) 0 25%, var(--bg) 0 50%) 0 0 / 12px 12px; box-shadow: inset 0 0 0 1px var(--border); min-height: 96px; display: grid; place-items: center; padding: 10px; }
+  .exp-prev img { max-width: 100%; max-height: 220px; object-fit: contain; }
+  .exp-prev .ph { color: var(--fg3); }
+  .src-b { margin-left: 6px; padding: 0 5px; border-radius: 4px; font-size: 10px; line-height: 16px; color: var(--fg2); background: var(--bg2); white-space: nowrap; cursor: help; }
+  .src-b.flag { color: var(--accent, #0d99ff); background: color-mix(in srgb, #0d99ff 12%, transparent); }
+.chg-det{margin:-2px 0 6px 28px;padding:4px 0 4px 10px;border-left:1px solid var(--border);display:grid;gap:2px}
+.chg-line{display:grid;grid-template-columns:70px minmax(0,1fr) 12px minmax(0,1fr);gap:6px;align-items:center;font-size:11px;line-height:16px}
+.chg-p{color:var(--fg2)}
+.chg-b,.chg-n{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-family:var(--mono)}
+.chg-b{color:var(--fg3);text-decoration:line-through;text-decoration-color:var(--fg3)}
+.chg-a{color:var(--fg3)}
+.chg-sw{display:inline-block;width:9px;height:9px;border-radius:2px;margin-right:4px;vertical-align:-1px;box-shadow:inset 0 0 0 1px rgba(0,0,0,.15)}
+</style>
+</head>
+<body>
+  <div id="demo" class="demo" style="display:none">Preview · sample data — run inside Figma for live inspection</div>
+  <div id="hdr" class="hdr"></div>
+  <div id="bar" class="bar"></div>
+  <main id="main"></main>
+  <div id="menu" class="menu"></div>
+  <div id="toast" class="toast"></div>
+  <input type="file" id="font-file" multiple accept=".woff2,.woff,.ttf,.otf" style="display:none" />
+  <svg id="resize" class="resize" viewBox="0 0 12 12"><path d="M11 4L4 11M11 8l-3 3" stroke="currentColor"/></svg>
+
+<script>
+/* ===================================================================
+ * DevReady Inspect — UI (Figma Dev Mode style)
+ * =================================================================== */
+const S = { view: 'code', cmp: 'preview', opacity: 50, diff: false, shot: null, data: null, lang: 'css', file: '', code: {}, codeFor: null, assetFmt: 'SVG:1', thumbs: {}, demo: false, got: false };
+const $ = id => document.getElementById(id);
+const esc = s => String(s === undefined || s === null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+const r2 = n => typeof n === 'number' ? Math.round(n * 100) / 100 : n;
+function send(m) { if (!S.demo) parent.postMessage({ pluginMessage: m }, '*'); }
+
+/* ---------- icons (16px, Figma-like) ---------- */
+const I = {
+  chevS: '<svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.2"><path d="M3.5 4.75L6 7.25l2.5-2.5"/></svg>',
+  clock: '<svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor"><path d="M2.5 8a5.5 5.5 0 1 0 1.6-3.9M2.5 3v2.5H5"/><path d="M8 5.5V8l1.8 1.3"/></svg>',
+  info: '<svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor"><circle cx="8" cy="8" r="6"/><path d="M8 7.2v3.6"/><circle cx="8" cy="5.2" r=".4" fill="currentColor"/></svg>',
+  github: '<svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M8 .7a7.3 7.3 0 0 0-2.3 14.2c.4.1.5-.2.5-.4v-1.3c-2 .4-2.5-.9-2.5-.9-.3-.8-.8-1.1-.8-1.1-.7-.4 0-.4 0-.4.7 0 1.1.8 1.1.8.7 1.1 1.7.8 2.1.6.1-.5.3-.8.5-1-1.6-.2-3.3-.8-3.3-3.6 0-.8.3-1.5.8-2-.1-.2-.3-.9.1-2 0 0 .6-.2 2 .8a7 7 0 0 1 3.7 0c1.4-1 2-.8 2-.8.4 1 .2 1.8.1 2 .5.5.8 1.2.8 2 0 2.8-1.7 3.4-3.3 3.6.3.2.5.7.5 1.4v2c0 .2.1.5.5.4A7.3 7.3 0 0 0 8 .7z"/></svg>',
+  storybook: '<svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M3 1.8l9.6-.5c.3 0 .6.2.6.6v12.2c0 .3-.3.6-.6.6L3 14.2a.6.6 0 0 1-.6-.6V2.4c0-.3.3-.6.6-.6z" fill="#FF4785"/><path d="M10.4 1.4l.1 1.9.9-.6.8.6V1.3z" fill="#fff"/><path d="M8.9 6.3c0 .3 1.8.2 2.1-.1 0-2-1-3-3-3S5 4.3 5 5.8c0 2.6 3.5 2.6 3.5 4 0 .4-.2.6-.6.6-.5 0-.8-.3-.7-1.2 0-.2-1.8-.2-2.1 0-.1 2.2 1.2 2.8 2.8 2.8 1.5 0 2.7-.8 2.7-2.3 0-2.6-3.6-2.6-3.6-3.9 0-.5.4-.6.6-.6.3 0 .7 0 .7 1.1z" fill="#fff"/></svg>',
+  ticket: '<svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor"><path d="M2.5 5.5V4a1 1 0 0 1 1-1h9a1 1 0 0 1 1 1v1.5a1.5 1.5 0 0 0 0 3V10a1 1 0 0 1-1 1h-9a1 1 0 0 1-1-1V8.5a1.5 1.5 0 0 0 0-3z"/></svg>',
+  diamond: '<svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor"><path d="M8 2.5L13.5 8 8 13.5 2.5 8z"/></svg>',
+  diamondF: '<svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" opacity=".55"><path d="M8 2.5L13.5 8 8 13.5 2.5 8z"/></svg>',
+  toggle: '<svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor"><rect x="1.5" y="4.5" width="13" height="7" rx="3.5"/><circle cx="5" cy="8" r="1.8"/></svg>',
+  swap: '<svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor"><path d="M8 13.5V7M5.5 9.5L8 7l2.5 2.5"/><path d="M4.6 8.5H4a2.5 2.5 0 0 1-.3-5A3.5 3.5 0 0 1 10.4 3a2.75 2.75 0 0 1 1.6 5.5h-.6"/></svg>',
+  moreV: '<svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><circle cx="8" cy="3.5" r="1.1"/><circle cx="8" cy="8" r="1.1"/><circle cx="8" cy="12.5" r="1.1"/></svg>',
+  hash: '<svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="currentColor"><path d="M3.5 1.5L2.8 8.5M7.2 1.5L6.5 8.5M1.5 3.6h7M1.2 6.4h7"/></svg>',
+  clip: '<svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor"><rect x="3.5" y="3" width="9" height="11" rx="1.5"/><path d="M6 3V2.5a.5.5 0 0 1 .5-.5h3a.5.5 0 0 1 .5.5V3M6 7h4M6 9.5h4M6 12h2.5"/></svg>',
+  FRAME: '<svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor"><path d="M5.5 2.5v11M10.5 2.5v11M2.5 5.5h11M2.5 10.5h11"/></svg>',
+  SECTION: '<svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor"><rect x="2.5" y="4.5" width="11" height="9" rx="1"/><path d="M2.5 4.5v-1a1 1 0 0 1 1-1h3l1 2"/></svg>',
+  COMPONENT: '<svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor"><path d="M8 1.9l2 2-2 2-2-2zM8 10.1l2 2-2 2-2-2zM3.9 6l2 2-2 2-2-2zM12.1 6l2 2-2 2-2-2z"/></svg>',
+  INSTANCE: '<svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor"><path d="M8 2.3L13.7 8 8 13.7 2.3 8z"/></svg>',
+  TEXT: '<svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor"><path d="M3.5 4.5v-1h9v1M8 3.5v9M6 12.5h4"/></svg>',
+  GROUP: '<svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-dasharray="2 1.5"><rect x="2.5" y="2.5" width="11" height="11" rx="1"/></svg>',
+  VECTOR: '<svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor"><path d="M3 13l2.5-7L10 3l3 3-3 4.5L3 13zM3 13l4-4"/><circle cx="8" cy="8" r="1"/></svg>',
+  RECT: '<svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor"><rect x="3.5" y="3.5" width="9" height="9" rx="1"/></svg>',
+  ELLIPSE: '<svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor"><circle cx="8" cy="8" r="4.5"/></svg>',
+  copy: '<svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor"><rect x="5.5" y="5.5" width="8" height="8" rx="1.5"/><path d="M10.5 5.5v-2a1 1 0 0 0-1-1h-6a1 1 0 0 0-1 1v6a1 1 0 0 0 1 1h2"/></svg>',
+  chev: '<svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor"><path d="M5.5 7l2.5 2.5L10.5 7"/></svg>',
+  more: '<svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><circle cx="4" cy="8" r="1"/><circle cx="8" cy="8" r="1"/><circle cx="12" cy="8" r="1"/></svg>',
+  gear: '<svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor"><path d="M2.5 5h6M11.5 5h2M2.5 11h2M7.5 11h6"/><circle cx="10" cy="5" r="1.5"/><circle cx="6" cy="11" r="1.5"/></svg>',
+  dl: '<svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor"><path d="M8 2.5v8M4.5 7L8 10.5 11.5 7M3 13.5h10"/></svg>',
+  ext: '<svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor"><path d="M4.5 2.5h5v5M9.5 2.5l-7 7"/></svg>',
+  lock: '<svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor"><rect x="3.5" y="7.5" width="9" height="6" rx="1"/><path d="M5.5 7.5V5.5a2.5 2.5 0 0 1 5 0v2"/></svg>',
+  ready: '<svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3"><path d="M6 5L3 8l3 3M10 5l3 3-3 3"/></svg>',
+  done: '<svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path fill-rule="evenodd" d="M8 14A6 6 0 1 0 8 2a6 6 0 0 0 0 12zm2.9-7.6l-.8-.7L7.2 8.9 5.8 7.6l-.7.7 2.1 2z"/></svg>',
+  check: '<svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.2"><path d="M4 8.5l2.5 2.5L12 5.5"/></svg>',
+  variable: '<svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor"><path d="M6 1.5l4 2.3v4.4L6 10.5 2 8.2V3.8z"/></svg>',
+  style: '<svg width="12" height="12" viewBox="0 0 12 12" fill="currentColor"><circle cx="3.5" cy="3.5" r="1.6"/><circle cx="8.5" cy="3.5" r="1.6"/><circle cx="3.5" cy="8.5" r="1.6"/><circle cx="8.5" cy="8.5" r="1.6"/></svg>',
+  link: '<svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor"><path d="M7 9a2.5 2.5 0 0 0 3.5 0l2-2A2.5 2.5 0 0 0 9 3.5l-.7.7M9 7a2.5 2.5 0 0 0-3.5 0l-2 2A2.5 2.5 0 0 0 7 12.5l.7-.7"/></svg>',
+  note: '<svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor"><path d="M3.5 3.5h9v6l-3 3h-6z"/><path d="M9.5 12.5v-3h3"/></svg>',
+  x: '<svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor"><path d="M5 5l6 6M11 5l-6 6"/></svg>',
+  plus: '<svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor"><path d="M8 3.5v9M3.5 8h9"/></svg>',
+  diff: '<svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor"><circle cx="8" cy="8" r="5.5"/><path d="M8 5v3.5l2 1.2"/></svg>',
+  ruler: '<svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor"><rect x="1.5" y="5.5" width="13" height="5" rx="1"/><path d="M4.5 5.5v2M7.5 5.5v3M10.5 5.5v2"/></svg>'
+};
+function typeIcon(t) {
+  if (t === 'COMPONENT' || t === 'COMPONENT_SET') return I.COMPONENT;
+  if (t === 'INSTANCE') return I.INSTANCE;
+  if (t === 'TEXT') return I.TEXT;
+  if (t === 'SECTION') return I.SECTION;
+  if (t === 'GROUP') return I.GROUP;
+  if (t === 'RECTANGLE') return I.RECT;
+  if (t === 'ELLIPSE') return I.ELLIPSE;
+  if (t === 'VECTOR' || t === 'BOOLEAN_OPERATION' || t === 'STAR' || t === 'POLYGON' || t === 'LINE') return I.VECTOR;
+  return I.FRAME;
+}
+const isCmp = t => t === 'COMPONENT' || t === 'COMPONENT_SET' || t === 'INSTANCE';
+
+/* ---------- color ---------- */
+const to255 = v => Math.round(v * 255);
+const hx = v => { const s = to255(v).toString(16); return s.length < 2 ? '0' + s : s; };
+const hexOf = c => ('#' + hx(c.r) + hx(c.g) + hx(c.b)).toUpperCase();
+const rgbaCss = c => 'rgba(' + to255(c.r) + ',' + to255(c.g) + ',' + to255(c.b) + ',' + (c.a === undefined ? 1 : c.a) + ')';
+function hsl(c) {
+  const r = c.r, g = c.g, b = c.b, mx = Math.max(r, g, b), mn = Math.min(r, g, b); let h = 0, s = 0; const l = (mx + mn) / 2;
+  if (mx !== mn) { const d = mx - mn; s = l > .5 ? d / (2 - mx - mn) : d / (mx + mn); h = mx === r ? (g - b) / d + (g < b ? 6 : 0) : mx === g ? (b - r) / d + 2 : (r - g) / d + 4; h /= 6; }
+  return [Math.round(h * 360), Math.round(s * 100), Math.round(l * 100)];
+}
+function fmtColor(c) {
+  const f = (S.data && S.data.settings.colorFormat) || 'hex', a = c.a === undefined ? 1 : c.a;
+  if (f === 'rgb') return a < 1 ? 'rgba(' + to255(c.r) + ', ' + to255(c.g) + ', ' + to255(c.b) + ', ' + r2(a) + ')' : 'rgb(' + to255(c.r) + ', ' + to255(c.g) + ', ' + to255(c.b) + ')';
+  if (f === 'hsl') { const x = hsl(c); return a < 1 ? 'hsla(' + x[0] + ', ' + x[1] + '%, ' + x[2] + '%, ' + r2(a) + ')' : 'hsl(' + x[0] + ', ' + x[1] + '%, ' + x[2] + '%)'; }
+  return hexOf(c) + (a < 1 ? '  ' + Math.round(a * 100) + '%' : '');
+}
+const sw = c => '<span class="sw"><i style="background:' + rgbaCss(c) + '"></i></span>';
+const gsw = st => '<span class="sw"><i style="background:linear-gradient(90deg,' + st.map(s => rgbaCss(s.color) + ' ' + s.position + '%').join(',') + ')"></i></span>';
+
+/* ---------- utilities ---------- */
+function toast(t) { const el = $('toast'); el.textContent = t; el.classList.add('on'); clearTimeout(toast.t); toast.t = setTimeout(() => el.classList.remove('on'), 1400); }
+function copy(text, label) {
+  const ta = document.createElement('textarea'); ta.value = text; ta.style.cssText = 'position:fixed;opacity:0';
+  document.body.appendChild(ta); ta.select(); let ok = false; try { ok = document.execCommand('copy'); } catch (e) {} ta.remove();
+  if (!ok && navigator.clipboard) navigator.clipboard.writeText(text).catch(() => {});
+  toast(label || 'Copied to clipboard');
+}
+function download(name, bytes, mime) {
+  const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([bytes], { type: mime || 'application/octet-stream' })); a.download = name;
+  document.body.appendChild(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1500);
+}
+const MIME = { svg: 'image/svg+xml', png: 'image/png', jpg: 'image/jpeg', pdf: 'application/pdf', zip: 'application/zip' };
+
+/* store-only ZIP */
+const CRC = (() => { const t = new Uint32Array(256); for (let n = 0; n < 256; n++) { let c = n; for (let k = 0; k < 8; k++) c = c & 1 ? 0xEDB88320 ^ (c >>> 1) : c >>> 1; t[n] = c >>> 0; } return t; })();
+function crc32(b) { let c = 0xFFFFFFFF; for (let i = 0; i < b.length; i++) c = CRC[(c ^ b[i]) & 255] ^ (c >>> 8); return (c ^ 0xFFFFFFFF) >>> 0; }
+function makeZip(files) {
+  const enc = new TextEncoder(), parts = [], cen = []; let off = 0;
+  for (const f of files) {
+    const nm = enc.encode(f.name), d = f.bytes instanceof Uint8Array ? f.bytes : new Uint8Array(f.bytes), crc = crc32(d);
+    const L = new DataView(new ArrayBuffer(30));
+    [[0, 0x04034b50, 4], [4, 20, 2], [6, 0x0800, 2], [12, 33, 2], [14, crc, 4], [18, d.length, 4], [22, d.length, 4], [26, nm.length, 2]].forEach(x => x[2] === 4 ? L.setUint32(x[0], x[1], true) : L.setUint16(x[0], x[1], true));
+    parts.push(new Uint8Array(L.buffer), nm, d);
+    const C = new DataView(new ArrayBuffer(46));
+    [[0, 0x02014b50, 4], [4, 20, 2], [6, 20, 2], [8, 0x0800, 2], [14, 33, 2], [16, crc, 4], [20, d.length, 4], [24, d.length, 4], [28, nm.length, 2], [42, off, 4]].forEach(x => x[2] === 4 ? C.setUint32(x[0], x[1], true) : C.setUint16(x[0], x[1], true));
+    cen.push(new Uint8Array(C.buffer), nm);
+    off += 30 + nm.length + d.length;
+  }
+  const cs = cen.reduce((s, c) => s + c.length, 0), E = new DataView(new ArrayBuffer(22));
+  E.setUint32(0, 0x06054b50, true); E.setUint16(8, files.length, true); E.setUint16(10, files.length, true); E.setUint32(12, cs, true); E.setUint32(16, off, true);
+  const all = parts.concat(cen, [new Uint8Array(E.buffer)]), out = new Uint8Array(all.reduce((s, c) => s + c.length, 0));
+  let p = 0; for (const c of all) { out.set(c, p); p += c.length; } return out;
+}
+
+/* syntax highlight (Dev Mode-ish) */
+function hlVal(v) {
+  return v.replace(/\b(var)\(|(--[\w-]+)|(#[0-9A-Fa-f]{3,8})\b|(?<![\w#.&-])(-?\d*\.?\d+(?:px|rem|em|%|deg|ms|s|fr)?)(?![\w-])|(?<![\w#.&;-])([a-z][a-z-]*)(?![\w(;-])/g,
+    (m, vk, vn, hex, num, kw) => vk ? '<span class="c-k">var</span>(' : vn ? '<u class="vu">' + vn + '</u>' : hex ? '<span class="c-v">' + hex + '</span>' : num ? '<span class="c-n">' + num + '</span>' : '<span class="c-v">' + kw + '</span>');
+}
+function hl(code, lang) {
+  let s = esc(code);
+  if (lang === 'css') {
+    return s.split('\n').map(line => {
+      if (/^\s*(\/\*.*\*\/|\/\/.*)\s*$/.test(line)) return '<span class="c-c">' + line + '</span>';
+      if (/^\s*\.[\w-]+\s*\{/.test(line)) return line.replace(/(\.[\w-]+)/, '<span class="c-t">$1</span>');
+      return line.replace(/^(\s*)(-{0,2}\$?[a-z][a-z0-9-]*)(:\s*)(.*?)(;?)$/, (m, a, p, c, v, e) =>
+        a + '<span class="c-p">' + p + '</span>' + c + hlVal(v) + e);
+    }).join('\n');
+  }
+  if (lang === 'tw') return '<span class="c-s">' + s + '</span>';
+  if (lang === 'json') return s.replace(/(&quot;.*?&quot;)(\s*:)?|(-?\d+\.?\d*)(?=[,\s}\]]|$)/g, (m, str, colon, num) => str ? (colon ? '<span class="c-p">' + str + '</span>' + colon : '<span class="c-s">' + str + '</span>') : '<span class="c-n">' + num + '</span>');
+  if (lang === 'native') {
+    return s.split('\n').map(line => {
+      if (/^\s*\/\//.test(line)) return '<span class="c-c">' + line + '</span>';
+      return line.replace(/(&quot;.*?&quot;)|\b(import|struct|var|let|some|static|extension|init|fun|val|object|private|return|true|false|null|action)\b|(@\w+|#Preview)|\b([A-Z]\w*)\b|(?<![\w#.])(-?\d*\.?\d+f?)(?!\w)/g,
+        (m, str, kw, ann, typ, num) => str ? '<span class="c-s">' + str + '</span>' : kw ? '<span class="c-k">' + kw + '</span>' : ann ? '<span class="c-k">' + ann + '</span>' : typ ? '<span class="c-t">' + typ + '</span>' : '<span class="c-v">' + num + '</span>');
+    }).join('\n');
+  }
+  s = s.replace(/(&lt;\/?)([\w.-]+)/g, '$1<span class="c-t">$2</span>')
+       .replace(/([\w-]+)=(&quot;[\s\S]*?&quot;)/g, '$1=<span class="c-s">$2</span>')
+       .replace(/\b(export|default|function|return|import|from|const)\b/g, '<span class="c-k">$1</span>')
+       .replace(/('[^'\n]*')/g, '<span class="c-s">$1</span>')
+       .replace(/(\/\*[\s\S]*?\*\/)/g, '<span class="c-c">$1</span>');
+  return s;
+}
+const pretty = t => { const s = String(t || '').toLowerCase().replace(/_/g, ' '); return s.charAt(0).toUpperCase() + s.slice(1); };
+const px = n => n === undefined || n === null ? '' : r2(n) + 'px';
+const ALIGN = { MIN: 'Start', CENTER: 'Center', MAX: 'End', SPACE_BETWEEN: 'Space between', BASELINE: 'Baseline' };
+const SIZING = { FIXED: 'Fixed', HUG: 'Hug', FILL: 'Fill' };
+
+/* ---------- building blocks ---------- */
+function prop(k, v, copyVal, extra) {
+  if (v === undefined || v === null || v === '') return '';
+  return '<div class="pk">' + esc(k) + '</div><div class="pv"><span class="cp" data-copy="' + esc(copyVal !== undefined ? copyVal : v) + '">' + esc(v) + '</span>' + (extra || '') + '</div>';
+}
+const tok = v => v ? '<span class="tok cp" data-copy="' + esc(v.web || v.name) + '" title="' + esc(v.collection || '') + '">' + I.variable + esc(v.name) + '</span>' : '';
+const ddBtn = (label, act) => '<button class="dd" data-act="' + act + '">' + esc(label) + I.chev + '</button>';
+const ib = (icon, act, title, extra) => '<button class="ibtn" data-act="' + act + '" title="' + esc(title || '') + '"' + (extra || '') + '>' + icon + '</button>';
+function shortData(code) {
+  return String(code).replace(/(data:[\w\/+.-]+;base64,)([A-Za-z0-9+\/=]{120,})/g, (m, a, b) => a + b.slice(0, 24) + '…(' + Math.max(1, Math.round(b.length * 0.75 / 1024)) + ' KB embedded)');
+}
+function codeBlock(code, lang, label, copyAct) {
+  if (copyAct) code = shortData(code);
+  const body = hl(String(code).replace(/\n$/, ''), lang).split('\n').map(l => '<span class="l">' + (l || ' ') + '</span>').join('');
+  return (label ? '<div class="code-label">' + esc(label) + '</div>' : '') +
+    '<div class="code"><button class="ibtn copy-float" ' + (copyAct ? 'data-act="copy-file"' : 'data-copy="' + esc(code) + '"') + ' title="Copy">' + I.copy + '</button><pre>' + body + '</pre></div>';
+}
+
+/* ===================================================================
+ * Dev Mode–style sections (v3)
+ * =================================================================== */
+S.closed = S.closed || { 'Layers': true, 'Design tokens': true };
+function sec(title, actions, body, cnt, opts) {
+  opts = opts || {};
+  const key = opts.key || title;
+  const closed = !!S.closed[key];
+  return '<section class="sec' + (closed ? ' closed' : '') + '"' + (opts.id ? ' id="' + opts.id + '"' : '') + '><div class="sec-h"><button class="sec-t" data-act="sec-toggle" data-key="' + esc(key) + '"><span class="chv">' + I.chevS + '</span>' + esc(title) +
+    (cnt !== undefined ? '<span class="cnt">' + cnt + '</span>' : '') + '</button>' + (closed ? '' : (actions || '')) + '</div>' + (closed ? '' : '<div class="sec-b">' + body + '</div>') + '</section>';
+}
+const TYPE_NAMES = { FRAME: 'Frame', GROUP: 'Group', SECTION: 'Section', TEXT: 'Text', RECTANGLE: 'Rectangle', ELLIPSE: 'Ellipse', VECTOR: 'Vector', LINE: 'Line', POLYGON: 'Polygon', STAR: 'Star', BOOLEAN_OPERATION: 'Boolean group', COMPONENT: 'Main component', COMPONENT_SET: 'Component set', INSTANCE: 'Component instance' };
+function ago(iso) {
+  if (!iso) return '';
+  const s = (Date.now() - new Date(iso).getTime()) / 1000;
+  if (s < 60) return 'just now';
+  const u = [[86400 * 365, 'year'], [86400 * 30, 'month'], [86400, 'day'], [3600, 'hour'], [60, 'minute']].find(x => s >= x[0]);
+  const n = Math.floor(s / u[0]); return n + ' ' + u[1] + (n > 1 ? 's' : '') + ' ago';
+}
+function typeLine(sp) {
+  const c = sp.component;
+  if (c) {
+    const label = c.kind === 'Instance' ? 'Component instance' : c.kind === 'Component set' ? 'Component set' : (c.inSet ? 'Variant' : 'Main component');
+    return '<span class="tline cmp"' + (c.mainId ? ' data-select="' + esc(c.mainId) + '" title="Go to main component"' : '') + '>' + (c.kind === 'Instance' ? I.INSTANCE : c.inSet ? I.diamond : I.COMPONENT) + label + '</span>';
+  }
+  return '<span class="tline">' + typeIcon(sp.type) + (TYPE_NAMES[sp.type] || pretty(sp.type)) + '</span>';
+}
+function mdLite(t) {
+  return esc(t).replace(/`([^`]+)`/g, '<code>$1</code>').replace(/\*\*([^*]+)\*\*/g, '<b>$1</b>').replace(/(^|[^*])\*([^*]+)\*/g, '$1<i>$2</i>').replace(/^#+\s*/gm, '').replace(/\n/g, '<br>');
+}
+const prettyField = f => String(f).replace(/([A-Z])/g, ' $1').toLowerCase().replace(/^characters$/, 'text').replace(/^fills$/, 'fill').replace(/^strokes$/, 'stroke');
+
+function renderInspect(d) {
+  const sp = d.spec, st = d.status;
+  if (S.codeFor !== sp.id) { S.code = {}; S.codeFor = sp.id; S.ovOpen = false; S.propsAll = false; }
+  const canChange = st && (!d.isDev || st.source === 'plugin');
+  const ch = d.changes, n = ch && !ch.none ? ch.count : 0;
+  const meta = st ? '<div class="h-meta">' + I.clock + '<span class="txt">' + (st.type === 'COMPLETED' ? 'Completed' : 'Ready for dev') + (st.at ? ' ' + ago(st.at) : '') +
+      ' · <span class="link" data-select="' + esc(st.nodeId) + '">' + esc(st.nodeName) + '</span>' + '</span>' + srcBadge(st) + '<span class="fill1"></span>' +
+      (ch ? '<button class="btn sm' + (n ? ' warn' : '') + '" data-act="show-changes" title="Compare with the design that was handed off">' + (n ? n + ' change' + (n > 1 ? 's' : '') : 'Compare changes') + I.chevS + '</button>' : '') + '</div>' : '';
+  $('hdr').innerHTML =
+    '<div class="hdr-row"><div class="name" title="' + esc(sp.name) + '">' + esc(sp.name) + '</div>' +
+    (sp.component && sp.component.mainId ? ib(I.COMPONENT, 'goto-main', 'Go to main component') : '') + ib(I.more, 'more-menu', 'Settings') + '</div>' +
+    '<div class="h-type">' + typeLine(sp) + '<span class="fill1"></span>' + statusChip(st, d.settings.gate === 'off', canChange) + '</div>' +
+    meta + crumb(sp) + (d.count > 1 ? '<div class="sub" style="padding-left:0">' + d.count + ' layers selected</div>' : '') +
+    (st && st.description ? '<div class="note">' + I.note + '<span>' + esc(st.description) + '</span></div>' : '');
+
+  $('main').innerHTML = [
+    secOverrides(sp), secResources(sp), secCodeConnect(sp), secChanges(d), secComponent(sp), secRecommended(sp), secAnnotations(d),
+    secCode(d), d.count === 2 ? secSpacing(d) : '', secLayerProps(d), secTypography(sp), secColors(sp), secEffects(sp), secA11y(d),
+    secVariables(sp), secTokens(d, false), secContent(sp), secInteractions(sp), secLayers(sp), secAssets(d), secExport(d)
+  ].join('');
+  const f = document.querySelector('.form [autofocus]'); if (f && S.focusForm) { f.focus(); S.focusForm = false; }
+  mountPreview();
+}
+
+/* (B) instance vs main component */
+function secOverrides(sp) {
+  const c = sp.component; if (!c || c.kind !== 'Instance') return '';
+  const n = c.overrideCount || 0;
+  let msg;
+  if (!n) msg = 'This instance matches its main component.';
+  else {
+    const fields = [].concat.apply([], (c.overrides || []).map(o => o.fields));
+    const layout = fields.some(f => /width|height|layout|padding|itemSpacing|primaryAxis|counterAxis|constraint|minWidth|maxWidth|size/i.test(f));
+    msg = (layout ? 'The layout in this instance differs from the main component.' : 'This instance has overrides from the main component.') + ' <span class="faint">' + n + ' layer' + (n > 1 ? 's' : '') + '</span>';
+  }
+  let b = '<div class="ov-note">' + I.info + '<span>' + msg + '</span></div>';
+  if (n) b += '<div class="ov-act"><button class="btn" data-act="ov-compare">' + (S.ovOpen ? 'Hide comparison' : 'Compare with main component') + '</button></div>';
+  if (n && S.ovOpen) {b += '<div class="ov-list">' + (c.overrides || []).map(o => '<div class="list-row" data-select="' + esc(o.id) + '"><span class="ln">' + esc(o.name) + '</span><span class="faint">' + esc(o.fields.map(prettyField).join(', ')) + '</span></div>').join('') +
+    (n > (c.overrides || []).length ? '<div class="faint" style="padding:4px 0">+ ' + (n - c.overrides.length) + ' more</div>' : '') + '</div>';}
+  return '<div class="blk">' + b + '</div>';
+}
+
+/* (C) dev resources */
+function resIcon(u) { return /github\.com|gitlab|bitbucket/.test(u) ? I.github : /storybook|chromatic/.test(u) ? I.storybook : /atlassian|jira|linear\.app/.test(u) ? I.ticket : I.link; }
+function secResources(sp) {
+  const list = sp.devResources || [];
+  let b = list.map(r => '<div class="res-row"><span class="ri">' + resIcon(r.url) + '</span><a class="ln" href="' + esc(r.url) + '" target="_blank" rel="noopener">' + esc(r.name || r.url) + '</a>' +
+    '<button class="ibtn x" data-act="res-del" data-url="' + esc(r.url) + '" title="Remove link">' + I.x + '</button><a class="ibtn" href="' + esc(r.url) + '" target="_blank" rel="noopener" title="Open">' + I.ext + '</a></div>').join('');
+  if (S.form === 'res') {b += '<div class="form"><input class="in" id="res-url" autofocus placeholder="https://github.com/org/repo/blob/main/Button.tsx"><input class="in" id="res-name" placeholder="Name (optional), e.g. Notification - Storybook">' +
+    '<div class="row"><button class="btn" data-act="form-cancel">Cancel</button><button class="btn blue" data-act="res-add">Add link</button></div></div>';}
+  if (!list.length && S.form !== 'res') b = '<div class="faint">Link GitHub, Storybook, Jira or docs · <span class="mini" data-act="form-res">Add link</span></div>';
+  return sec('Dev resources', S.form !== 'res' ? ib(I.plus, 'form-res', 'Add dev resource') : '', b, list.length || undefined);
+}
+
+/* Code Connect box */
+function secCodeConnect(sp) {
+  const c = sp.component; if (!c || !c.mapKey) return '';
+  let b;
+  if (S.form === 'map') {
+    const m = c.map || c.suggest || {};
+    b = '<div class="form" style="margin:0"><label>Code component</label><input class="in" id="map-name" autofocus value="' + esc(m.name || '') + '" placeholder="Button">' +
+      '<label>Import path</label><input class="in" id="map-path" value="' + esc(m.path || '') + '" placeholder="@/components/ui/button">' +
+      '<div class="faint">Variant props become string props, booleans become flags, a Label/Text prop becomes children.</div>' +
+      '<div class="row"><button class="btn" data-act="form-cancel">Cancel</button><button class="btn blue" data-act="map-save">Save mapping</button></div></div>';
+  } else if (c.map) {
+    b = '<div class="cc-box">' + I.link + '<b>Code Connect</b><code>&lt;' + esc(c.map.name) + '&gt;</code><span class="fill1"></span><span class="mini" data-act="form-map">Edit</span><span class="mini" data-act="map-del">Remove</span></div>';
+  } else {
+    b = '<div class="cc-box"><b>Code Connect</b><span class="fill1"></span><span class="mini" data-act="form-map">Connect to codebase</span></div>';
+  }
+  return '<div class="blk">' + b + '</div>';
+}
+
+/* (D/E) component information */
+const PROP_ICON = t => t === 'VARIANT' ? I.diamondF : t === 'BOOLEAN' ? I.toggle : t === 'INSTANCE_SWAP' ? I.swap : t === 'TEXT' ? I.TEXT : I.diamond;
+function secComponent(sp) {
+  const c = sp.component; if (!c) return '';
+  let b = '';
+  if (c.description) b += '<div class="ci-desc">' + esc(c.description) + '</div>';
+  b += '<div class="ci-prev" data-thumb="' + esc(sp.id) + '">' + (S.thumbs[sp.id] ? '<img src="' + S.thumbs[sp.id] + '" alt="">' : '<span class="ph">' + I.COMPONENT + '</span>') + '</div>';
+  const props = [];
+  if (c.variant && !(c.props || []).some(p => p.type === 'VARIANT')) c.variant.split(/,\s*/).forEach(kv => { const p = kv.split('='); props.push({ name: p[0], type: 'VARIANT', value: p[1] || kv }); });
+  (c.props || []).forEach(p => props.push(p));
+  if (props.length) {
+    const shown = S.propsAll ? props : props.slice(0, 3);
+    b += '<div class="props cprops">' + shown.map(p => '<div class="pk">' + esc(p.name) + '</div><div class="pv"><span class="pi">' + PROP_ICON(p.type) + '</span><span class="cp" data-copy="' + esc(p.value) + '">' +
+      esc(p.type === 'BOOLEAN' ? (p.value === 'true' ? 'True' : p.value === 'false' ? 'False' : p.value) : p.value) + '</span></div>').join('') + '</div>';
+    if (props.length > 3) b += '<button class="more-row" data-act="props-more">' + I.moreV + (S.propsAll ? 'Show less' : (props.length - 3) + ' more') + '</button>';
+  }
+  if (c.docs) b += c.docs.map(u => '<div style="margin-top:6px"><a href="' + esc(u) + '" target="_blank" rel="noopener" class="link">Documentation ' + I.ext + '</a></div>').join('');
+  if (c.mainId) b += '<button class="btn wide" data-select="' + esc(c.mainId) + '">' + (c.kind === 'Instance' ? 'Go to main component' : 'Select component') + '</button>';
+  else if (c.remote) b += '<div class="faint" style="margin-top:8px">From a team library' + (c.name ? ' · ' + esc(c.name) : '') + '</div>';
+  return sec('Component information', '', b);
+}
+/* (F) recommended code = Code Connect snippet */
+function secRecommended(sp) {
+  const c = sp.component; if (!c || !c.map || !c.snippet) return '';
+  return sec('Recommended code', '<span class="dd box" style="cursor:default">React' + I.chevS + '</span>' + '<button class="ibtn" data-copy="' + esc(c.snippet) + '" title="Copy">' + I.clip + '</button>', codeBlock2(c.snippet, 'jsx'));
+}
+
+/* annotations */
+const CAT_HEX = { yellow: '#FFC629', orange: '#FF8C1A', red: '#F24822', pink: '#F25AA6', violet: '#9747FF', blue: '#0D99FF', teal: '#08B3B8', green: '#14AE5C' };
+function secAnnotations(d) {
+  const sp = d.spec, list = sp.annotations || [], cats = sp.annCats || [];
+  if (!list.length && !sp.canAnnotate && !sp.annNoteCount) return '';
+  const catOf = id => cats.find(c => c.id === id);
+  let b = list.map(a => {
+    const c = catOf(a.categoryId);
+    return '<div class="ann"><span class="ann-dot" style="background:' + (c ? (CAT_HEX[c.color] || '#14AE5C') : '#14AE5C') + '"></span><div class="ann-b">' + (c ? '<div class="ann-cat">' + esc(c.label) + '</div>' : '') +
+      '<div>' + (a.label ? mdLite(a.label) : '<span class="faint">Pinned properties</span>') + '</div>' +
+      (a.properties.length ? '<div class="ann-props">' + a.properties.map(p => '<span class="vchip sm">' + esc(pretty(p.replace(/([A-Z])/g, ' $1'))) + '</span>').join('') + '</div>' : '') + '</div>' +
+      (sp.canAnnotate ? '<button class="ibtn x" data-act="ann-del" data-idx="' + a.index + '" title="Remove">' + I.x + '</button>' : '') + '</div>';
+  }).join('');
+  if (S.form === 'ann') {
+    const pinDefault = S.pinNote !== undefined ? S.pinNote : !!(d.status && d.status.source === 'plugin');
+    b += '<div class="form"><textarea id="ann-text" autofocus placeholder="e.g. Use the shared <Card> component; animate on hover (150ms ease-out)"></textarea>' +
+      '<div class="' + (cats.length ? 'two' : '') + '">' + (cats.length ? '<select class="in" id="ann-cat"><option value="">No category</option>' + cats.map(c => '<option value="' + esc(c.id) + '" data-color="' + esc(c.color) + '">' + esc(c.label) + '</option>').join('') + '</select>' : '') +
+      '<select class="in" id="ann-prop">' + ANN_PROPS.map(p => '<option value="' + p[0] + '">' + (p[0] ? 'Pin: ' : '') + p[1] + '</option>').join('') + '</select></div>' +
+      (d.isDev ? '' : '<label class="chk"><input type="checkbox" id="ann-pin"' + (pinDefault ? ' checked' : '') + '> Also add a note on the canvas <span class="faint">· visible on every plan</span></label>') +
+      '<div class="row"><button class="btn" data-act="form-cancel">Cancel</button><button class="btn blue" data-act="ann-add">Add annotation</button></div></div>';
+  } else if (!list.length) b = '<div class="faint">No annotations · <span class="mini" data-act="form-ann">Add a note for developers</span></div>';
+  b += '<details class="ann-help"' + (S.annHelp ? ' open' : '') + '><summary>' + I.info + 'Not seeing annotations on the canvas?</summary><ul>' +
+    '<li>Press <kbd>Shift</kbd> <kbd>Y</kbd> or open Main menu → View → <b>Annotations</b>. When that’s off, annotations and measurements are hidden in both Design and Dev Mode.</li>' +
+    '<li>Figma annotations need a <b>paid plan</b> (Professional or higher). Adding them needs a Full seat with edit access. Viewers without a Full or Dev seat can’t see them.</li>' +
+    '<li>Annotations stay on the layer you added them to. A note on a main component doesn’t appear on its instances, and the other way round.</li>' +
+    '<li>Groups, sections and boolean shapes can’t hold annotations. Select a frame, shape, text or instance.</li>' +
+    (d.isDev ? '' : '<li>Need them to show for everyone, on any plan? Tick <b>Also add a note on the canvas</b>. It adds a locked note layer next to the frame.</li>') + '</ul></details>' +
+    (sp.annNoteCount ? '<div class="faint" style="margin-top:6px">' + sp.annNoteCount + ' canvas note' + (sp.annNoteCount > 1 ? 's' : '') + ' for this layer · <span class="mini" data-act="notes-clear">Remove all canvas notes on this page</span></div>' : '');
+  return sec('Annotations', sp.canAnnotate && S.form !== 'ann' ? ib(I.plus, 'form-ann', 'Add annotation') : '', b, list.length || undefined);
+}
+
+/* (G/H) layer properties */
+function boxModel(sp) {
+  const bx = sp.box || {}, m = bx.margin, p = bx.padding || {}, r = sp.radius || [0];
+  const R = r.length === 1 ? [r[0], r[0], r[0], r[0]] : r;
+  const hasStroke = !!(sp.strokes && sp.strokes.length && sp.strokeInfo);
+  let bw = [0, 0, 0, 0];
+  if (hasStroke) { const w = sp.strokeInfo.weight; bw = typeof w === 'number' ? [w, w, w, w] : String(w).split(/\s+/).map(Number); }
+  const abs = !!(sp.constraints || sp.absolute);
+  const num = (x, cls) => '<span class="chipn ' + cls + (x ? '' : ' z') + '"' + (x ? ' data-copy="' + x + 'px"' : '') + '>' + (x ? r2(x) : '–') + '</span>';
+  const mt = (x, side) => '<span class="mline ' + side + (abs ? ' abs' : '') + '"><b class="mtag" data-copy="' + x + 'px">' + r2(x) + '</b></span>';
+  return '<div class="bm2' + (m ? '' : ' nom') + '">' + (m ? mt(m.top, 't') + mt(m.right, 'r') + mt(m.bottom, 'b') + mt(m.left, 'l') : '') +
+    '<div class="bb">' + ['tl', 'tr', 'br', 'bl'].map((k, i) => '<i class="cn ' + k + (R[i] ? ' on' : '') + '"></i>' + num(R[i], 'rad ' + k)).join('') +
+    '<span class="lab">Border</span>' + ['t', 'r', 'b', 'l'].map((k, i) => '<span class="bw ' + k + (bw[i] ? '' : ' z') + '">' + (bw[i] ? r2(bw[i]) : '–') + '</span>').join('') +
+    '<div class="pb"><span class="lab">Padding</span>' + num(p.top, 'pv2 t') + num(p.right, 'pv2 r') + num(p.bottom, 'pv2 b') + num(p.left, 'pv2 l') +
+    '<div class="cb" data-copy="' + sp.size.w + 'px × ' + sp.size.h + 'px">' + r2(sp.size.w) + ' × ' + r2(sp.size.h) + '</div></div></div>' +
+    '<span class="bbx">' + (hasStroke && sp.strokeInfo.align === 'OUTSIDE' ? 'content-box' : 'border-box') + '</span></div>';
+}
+const tokFor = (sp, keys) => (sp.tokens || []).find(t => keys.indexOf(t.property) > -1);
+const vchip = t => '<span class="vchip" data-copy="' + esc(t.web || t.name) + '" title="' + esc(t.name + (t.collection ? ' · ' + t.collection : '')) + '"><i>' + I.hash + '</i><span>' + esc(t.web || t.name) + '</span></span>';
+function prow(k, v, copyVal, t) {
+  if (!t && (v === undefined || v === null || v === '')) return '';
+  return '<div class="pk">' + esc(k) + '</div><div class="pv">' + (t ? vchip(t) : '<span class="cp" data-copy="' + esc(copyVal !== undefined ? copyVal : v) + '">' + esc(v) + '</span>') + '</div>';
+}
+function lpList(sp) {
+  const sizeLabel = (k, val) => sp.sizing && sp.sizing[k] && sp.sizing[k] !== 'FIXED' ? SIZING[sp.sizing[k]] + ' (' + px(val) + ')' : px(val);
+  let rows = prow('Width', sizeLabel('h', sp.size.w), px(sp.size.w), tokFor(sp, ['width'])) + prow('Height', sizeLabel('v', sp.size.h), px(sp.size.h), tokFor(sp, ['height']));
+  if (sp.constraints || sp.absolute) rows += prow('Top', px(sp.pos.y)) + prow('Left', px(sp.pos.x));
+  if (sp.constraints) Object.keys(sp.constraints).forEach(k => { rows += prow(pretty(k.replace(/([A-Z])/g, ' $1')), px(sp.constraints[k])); });
+  if (sp.rotation) rows += prow('Rotation', sp.rotation + '°');
+  if (sp.opacity !== undefined) rows += prow('Opacity', Math.round(sp.opacity * 100) + '%', sp.opacity, tokFor(sp, ['opacity']));
+  if (sp.radius) rows += prow('Radius', sp.radius.length === 1 ? px(sp.radius[0]) : sp.radius.map(r2).join(' '), sp.radius.length === 1 ? px(sp.radius[0]) : sp.radius.map(n => n + 'px').join(' '), tokFor(sp, ['topLeftRadius', 'topRightRadius', 'bottomLeftRadius', 'bottomRightRadius', 'cornerRadius']));
+  if (sp.strokeInfo && sp.strokes && sp.strokes.length) {
+    const w = sp.strokeInfo.weight;
+    rows += prow('Border', typeof w === 'number' ? px(w) : w, undefined, tokFor(sp, ['strokeWeight', 'strokeTopWeight', 'strokeRightWeight', 'strokeBottomWeight', 'strokeLeftWeight'])) +
+      prow('Border alignment', pretty(sp.strokeInfo.align)) + (sp.strokeInfo.dash ? prow('Dash', sp.strokeInfo.dash) : '');
+  }
+  if (sp.layout) {
+    const L = sp.layout;
+    rows += prow('Direction', L.mode === 'HORIZONTAL' ? 'Horizontal' : L.mode === 'VERTICAL' ? 'Vertical' : 'Grid') +
+      prow('Padding', L.padding.map(r2).join(' '), L.padding.map(v => v + 'px').join(' '), tokFor(sp, ['paddingLeft', 'paddingTop', 'paddingRight', 'paddingBottom'])) +
+      prow('Gap', L.gap === 'auto' ? 'Auto' : px(L.gap), undefined, L.gap === 'auto' ? null : tokFor(sp, ['itemSpacing'])) +
+      (L.crossGap !== null && L.crossGap !== undefined ? prow('Row gap', px(L.crossGap), undefined, tokFor(sp, ['counterAxisSpacing'])) : '') +
+      prow('Align', (ALIGN[L.primary] || L.primary) + ' · ' + (ALIGN[L.counter] || L.counter)) +
+      (L.wrap ? prow('Wrap', 'Wrap') : '') + (L.grid ? prow('Grid', L.grid.rows + ' × ' + L.grid.cols) : '');
+  }
+  if (sp.absolute) rows += prow('Position', 'Absolute');
+  if (sp.clips) rows += prow('Overflow', 'Hidden');
+  if (sp.blendMode) rows += prow('Blend', pretty(sp.blendMode));
+  return '<div class="lp-h">Layout</div><div class="props lp-props">' + rows + '</div>';
+}
+function cssGroups(css) {
+  const out = []; let cur = null;
+  String(css || '').split('\n').forEach(l => {
+    const m = /^\s*\/\*\s*(.+?)\s*\*\/\s*$/.exec(l);
+    if (m) {
+      const t = m[1] === 'Auto layout' || m[1] === 'Layout' ? 'Layout' : m[1] === 'Style' ? 'Style' : 'Typography';
+      cur = out.find(g => g.title === t);
+      if (!cur) { cur = { title: t, sub: t === 'Typography' && m[1] !== 'Typography' ? m[1] : '', lines: [] }; out.push(cur); }
+      return;
+    }
+    if (!l.trim()) return;
+    if (!cur) { cur = { title: 'Style', sub: '', lines: [] }; out.push(cur); }
+    cur.lines.push(l.trim());
+  });
+  const order = { Layout: 0, Typography: 1, Style: 2 };
+  return out.sort((a, b) => order[a.title] - order[b.title]);
+}
+function lpCode(d) {
+  if (S.lpLang === 'tailwind') {
+    const tw = d.tailwind || '';
+    return '<div class="cg-h"><span class="t">Tailwind</span><button class="ibtn" data-copy="' + esc(tw) + '" title="Copy">' + I.clip + '</button></div>' + codeBlock2(tw.split(' ').join('\n'), 'tw');
+  }
+  const groups = cssGroups(d.css);
+  if (!groups.length) return '<div class="faint">No CSS for this layer.</div>';
+  return groups.map(g => '<div class="cg-h"><span class="t">' + esc(g.title) + (g.sub ? ' <span class="faint">' + esc(g.sub) + '</span>' : '') + '</span><button class="ibtn" data-copy="' + esc(g.lines.join('\n')) + '" title="Copy ' + esc(g.title.toLowerCase()) + '">' + I.clip + '</button></div>' + codeBlock2(g.lines.join('\n'), 'css')).join('');
+}
+function codeBlock2(code, lang) {
+  const h = hl(String(code).replace(/\n$/, ''), lang);
+  const body = h.split('\n').map(l => '<span class="l">' + (l || ' ') + '</span>').join('');
+  return '<div class="code' + (lang === 'tw' ? ' wrap' : '') + '"><pre>' + body + '</pre></div>';
+}
+function secLayerProps(d) {
+  const sp = d.spec;
+  const actions = (sp.canMeasure || d.isDev ? ib(I.ruler, 'measure-native', d.isDev ? 'Add Dev Mode measurement' : 'Add measurement on canvas') + ib(I.x, 'measure-clear', 'Clear measurements') : '');
+  const lp = S.lp || 'list';
+  const right = lp === 'list' ? '<button class="dd box" data-act="code-menu">' + (d.settings.unit === 'rem' ? 'rem' : 'px') + I.chevS + '</button>' : '<button class="dd box" data-act="lplang-menu">' + (S.lpLang === 'tailwind' ? 'Tailwind' : 'CSS') + I.chevS + '</button>';
+  let b = boxModel(sp) +
+    '<div class="lp-bar"><div class="seg"><button class="' + (lp === 'list' ? 'on' : '') + '" data-act="lp-list">List</button><button class="' + (lp === 'code' ? 'on' : '') + '" data-act="lp-code">Code</button></div>' + right + '</div>';
+  const changed = d.changes && d.changes.changes && d.changes.changes.find(x => x.id === sp.id);
+  if (changed) b += '<div class="lchg">' + I.info + '<b>Layer changes</b><span>This layer has been edited since it was marked ready for dev' + (changed.parts && changed.parts.length ? ' (' + esc(changed.parts.join(', ')) + ')' : '') + '. <span class="mini" data-act="show-changes">See changes</span></span></div>';
+  b += lp === 'list' ? lpList(sp) : lpCode(d);
+  if (d.measure && d.count === 1 && d.measure.outer) b += '<div class="faint" style="margin-top:8px">Distances are to <b style="font-weight:500">' + esc(d.measure.outer) + '</b> · Shift-select another layer to measure between them</div>';
+  return sec('Layer properties', actions, b);
+}
+
+/* colors */
+function cchip(color, label, copyVal, named) {
+  return '<div class="ccol"><span class="cchip" data-copy="' + esc(copyVal) + '">' + sw(color) + '<span class="cl">' + esc(label) + '</span></span>' + (named ? '<span class="cval">' + esc(fmtColor(color)) + '</span>' : '') + '</div>';
+}
+function paintRows(list, styleName) {
+  return list.map(p => {
+    if (p.type === 'SOLID') {
+      const name = p.variable ? (p.variable.web || p.variable.name) : styleName;
+      const v = fmtColor(p.color);
+      return cchip(p.color, name || v, p.variable && p.variable.web ? p.variable.web : v.split('  ')[0], !!name);
+    }
+    return colorRow(p, styleName);
+  }).join('');
+}
+function secColors(sp) {
+  const fills = sp.type === 'TEXT' ? [] : (sp.fills || []);
+  const strokes = sp.strokes || [];
+  const texts = sp.text ? sp.text.segments.filter(s => s.color) : [];
+  if (!fills.length && !strokes.length && !texts.length) return '';
+  const fmt = { hex: 'Hex', rgb: 'RGB', hsl: 'HSL' }[S.data.settings.colorFormat] || 'Hex';
+  let b = '';
+  if (fills.length) b += '<div class="ccol-h">Background colors</div>' + paintRows(fills, sp.fillStyle);
+  if (texts.length) {
+    const seen = {};
+    b += '<div class="ccol-h">Text colors</div>' + texts.filter(s => { const k = fmtColor(s.color) + (s.colorVar ? s.colorVar.name : ''); if (seen[k]) return false; seen[k] = 1; return true; })
+      .map(s => cchip(s.color, s.colorVar ? (s.colorVar.web || s.colorVar.name) : fmtColor(s.color), s.colorVar && s.colorVar.web ? s.colorVar.web : fmtColor(s.color).split('  ')[0], !!s.colorVar)).join('');
+  }
+  if (strokes.length) b += '<div class="ccol-h">Border colors</div>' + paintRows(strokes, sp.strokeStyle);
+  return sec('Colors', '<button class="dd box" data-act="color-menu">' + fmt + I.chevS + '</button>', b);
+}
+
+/* interactions */
+function secInteractions(sp) {
+  const L = sp.interactions; if (!L || !L.length) return '';
+  const b = L.map(r => '<div class="props ix"><div class="pk">Trigger</div><div class="pv"><span>' + esc(r.trigger) + '</span></div>' +
+    (r.actions.length ? r.actions : ['None']).map(a => '<div class="pk">Action</div><div class="pv"><span title="' + esc(a) + '">' + esc(a) + '</span></div>').join('') + '</div>').join('');
+  return sec('Interactions', '', b, L.length > 1 ? L.length : undefined);
+}
+
+/* (I) assets */
+function secAssets(d) {
+  const list = (d.assets || []).filter(a => a.kind !== 'selection'); if (!list.length) return '';
+  const fmtLabel = FMTS.find(f => f[0] === S.assetFmt)[1];
+  const rows = list.map(a => {
+    const th = S.thumbs[a.id] ? '<img src="' + S.thumbs[a.id] + '" alt="">' : '<span class="ph">' + (a.kind === 'icon' ? I.VECTOR : a.kind === 'image' ? I.RECT : I.FRAME) + '</span>';
+    const kind = a.type === 'INSTANCE' ? '<span class="ak cmp" data-select="' + esc(a.id) + '" title="Select in canvas">' + I.diamond + 'Component instance</span>'
+      : a.type === 'COMPONENT' ? '<span class="ak cmp">' + I.COMPONENT + 'Component</span>'
+      : '<span class="ak">' + (a.kind === 'image' ? 'Image' : a.kind === 'export' ? 'Export · ' + esc((a.formats || []).join(', ')) : 'Icon') + ' · ' + r2(a.w) + '×' + r2(a.h) + '</span>';
+    return '<div class="arow" data-export="' + esc(a.id) + '" title="Download ' + esc(a.name) + ' as ' + fmtLabel + '"><div class="th">' + th + '</div><div class="ai"><div class="an">' + esc(a.name) + '</div>' + kind + '</div><span class="dl">' + I.dl + '</span></div>';
+  }).join('');
+  return sec('Assets', ddBtn(fmtLabel, 'fmt-menu') + ib(I.dl, 'export-all', 'Download all as ZIP'), rows, list.length);
+}
+
+/* (J) export */
+const EX_SCALES = [0.5, 0.75, 1, 1.5, 2, 3, 4];
+const EX_FMTS = ['PNG', 'JPG', 'SVG', 'PDF'];
+function secExport(d) {
+  const sp = d.spec, e = S.exp || (S.exp = { scale: 2, fmt: 'PNG' });
+  const vec = e.fmt === 'SVG' || e.fmt === 'PDF';
+  const prevClosed = !!S.closed['Export preview'];
+  let b = '<div class="exp-row"><button class="exp-sc' + (vec ? ' dis' : '') + '" data-act="expscale-menu"><span>' + (vec ? '1x' : e.scale + 'x') + '</span><i>' + I.chevS + '</i></button>' +
+    '<button class="exp-fmt" data-act="expfmt-menu">' + e.fmt + I.chevS + '</button></div>' +
+    '<button class="btn wide" data-act="export-sel">Export ' + esc(sp.name) + '</button>' +
+    '<button class="pv-t' + (prevClosed ? ' closed' : '') + '" data-act="sec-toggle" data-key="Export preview"><span>' + I.chevS + '</span>Preview</button>';
+  if (!prevClosed) b += '<div class="exp-prev" data-thumb="' + esc(sp.id) + '">' + (S.thumbs[sp.id] ? '<img src="' + S.thumbs[sp.id] + '" alt="">' : '<span class="ph">Preview loads in Figma</span>') + '</div>';
+  return sec('Export', '', b);
+}
+
+/* ===================================================================
+ * Render
+ * =================================================================== */
+function render() {
+  $('demo').style.display = S.demo ? 'block' : 'none';
+  const d = S.data;
+  if (!d) { $('hdr').innerHTML = '<div class="hdr-row"><div class="name">DevReady</div></div>'; $('main').innerHTML = ''; return; }
+  if (d.mode === 'empty') return renderEmpty(d);
+  if (d.mode === 'locked') return renderLocked(d);
+  return renderInspect(d);
+}
+
+function statusChip(st, gateOff, clickable) {
+  const tag = clickable ? 'button data-act="status-menu"' : 'span';
+  const end = clickable ? I.chev + '</button>' : '</span>';
+  if (!st) return gateOff ? '<span class="chip off">No status</span>' : '<span class="chip none">' + I.lock + 'Not ready</span>';
+  if (st.type === 'COMPLETED') return '<' + tag + ' class="chip done">' + I.done + 'Completed' + end;
+  return '<' + tag + ' class="chip ready">' + I.ready + 'Ready for dev' + end;
+}
+function readyRows(list) {
+  if (!list || !list.length) return '<div class="muted" style="padding:4px 0 8px">Nothing on this page is marked ready for dev yet.</div>';
+  return list.map(i => '<div class="list-row" data-select="' + esc(i.id) + '"><span class="ico">' + typeIcon(i.type) + '</span><span class="ln">' + esc(i.name) + '</span>' +
+    (i.source === 'plugin' ? '<span class="faint">flag</span>' : '') +
+    '<span class="st-ico ' + (i.status === 'COMPLETED' ? 'done' : 'ready') + '" title="' + (i.status === 'COMPLETED' ? 'Completed' : 'Ready for dev') + '">' + (i.status === 'COMPLETED' ? I.done : I.ready) + '</span></div>').join('');
+}
+
+function renderEmpty(d) {
+  $('hdr').innerHTML = '<div class="hdr-row"><div class="name">' + esc(d.page || 'Page') + '</div>' + ib(I.more, 'more-menu', 'Settings') + '</div>';
+  $('main').innerHTML =
+    '<div class="empty"><div class="em-ico">' + I.FRAME + '</div><h3>Select a layer</h3><p>Inspect specs, code and assets of designs marked ready for dev.</p></div>' +
+    sec('Ready for dev', '', readyRows(d.ready), d.ready ? d.ready.length : 0) + secTokens(d, true);
+}
+
+/* Where a status comes from. Figma's native status and DevReady's shared flag are different things. */
+function srcBadge(st) {
+  if (!st) return '';
+  return st.source === 'plugin'
+    ? '<span class="src-b flag" title="Set with DevReady (stored as shared plugin data on the frame). Anyone running DevReady sees it; Figma’s own Ready for dev list does not.">DevReady flag</span>'
+    : '<span class="src-b" title="Figma’s native Ready for dev status — the same one shown in Dev Mode.">Figma status</span>';
+}
+function renderLocked(d) {
+  $('hdr').innerHTML = '<div class="hdr-row"><span class="ico' + (isCmp(d.node.type) ? ' cmp' : '') + '">' + typeIcon(d.node.type) + '</span><div class="name">' + esc(d.node.name) + '</div>' + statusChip(null) + ib(I.more, 'more-menu', 'Settings') + '</div>';
+  let hand = '';
+  if (d.target) {
+    hand = sec('Mark as ready for dev', '',
+      '<div class="list-row" data-select="' + esc(d.target.id) + '" style="margin-bottom:6px"><span class="ico">' + typeIcon(d.target.type) + '</span><span class="ln">' + esc(d.target.name) + '</span></div>' +
+      '<textarea id="note" placeholder="Add a note for developers (optional)"></textarea>' +
+      '<div class="row-btns"><button class="btn green full" data-act="mark" data-status="READY_FOR_DEV">' + I.ready + (d.isDev ? 'Flag as ready for dev' : 'Mark as ready for dev') + '</button></div>' +
+      '<div class="faint" style="margin-top:6px">' + (d.isDev ? 'Dev Mode is read-only, so this saves a DevReady flag (shared plugin data).' : 'Uses Figma’s native status when your plan allows it, otherwise a DevReady flag.') + '</div>');
+  }
+  $('main').innerHTML =
+    '<div class="empty"><div class="em-ico">' + I.lock + '</div><h3>Not ready for dev</h3><p>This layer isn’t inside a frame, component or section marked ready for dev, so specs, code and assets are hidden.</p>' +
+    '<div class="row-btns" style="justify-content:center"><button class="btn" data-act="gate-off">Inspect anyway</button></div>' +
+    '<p class="faint" style="margin-top:10px">The gate is an optional team workflow. “Inspect anyway” turns it off for you on this device (⋯ → Dev-ready gate turns it back on). Status comes from Figma’s Ready for dev or, where that isn’t available, a DevReady flag.</p></div>' +
+    hand + sec('Ready for dev', '', readyRows(d.ready), d.ready ? d.ready.length : 0);
+}
+
+/* ---------- sections ---------- */
+function crumb(sp) {
+  const L = sp.layers; if (!L || !L.ancestors.length) return '';
+  return '<div class="crumb">' + L.ancestors.map(a => '<span class="c" data-select="' + esc(a.id) + '" title="' + esc(a.name) + '">' + esc(a.name) + '</span><i>›</i>').join('') + '<span class="c" style="color:var(--fg)">' + esc(sp.name) + '</span></div>';
+}
+function fmtDate(iso) { if (!iso) return ''; const d = new Date(iso); return d.toLocaleDateString(undefined, { day: 'numeric', month: 'short' }) + ', ' + d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' }); }
+function secChanges(d) {
+  const c = d.changes; if (!c) return '';
+  const save = '<button class="btn" data-act="baseline-save" title="Treat the current design as the new handoff baseline">' + (c.none ? 'Start tracking' : 'Mark as reviewed') + '</button>';
+  if (c.none) return sec('Changes', '', '<div class="muted" style="margin-bottom:8px">This design was marked ready before change tracking was on. Save a snapshot to see future edits here.</div>' + save);
+  if (!c.count) return sec('Changes', '', '<div class="list-row dead"><span class="ico" style="color:var(--green)">' + I.check + '</span><span class="ln muted">No changes' + (c.partial ? ' in the first ' + (c.limit || 2500).toLocaleString() + ' layers' : '') + ' since ready for dev · ' + esc(fmtDate(c.at)) + '</span></div>');
+  const sw = v => { const m = /^#[0-9A-F]{6,8}/.exec(v); return m ? '<i class="chg-sw" style="background:' + m[0] + '"></i>' : ''; };
+  const det = x => (x.detail && x.detail.length) ? '<div class="chg-det">' + x.detail.map(d => '<div class="chg-line"><span class="chg-p">' + esc(d.prop) + '</span><span class="chg-b" title="' + esc(d.before) + '">' + sw(d.before) + esc(d.before) + '</span><span class="chg-a">→</span><span class="chg-n" title="' + esc(d.after) + '">' + sw(d.after) + esc(d.after) + '</span></div>').join('') + '</div>' : '';
+  const rows = c.changes.map(x => '<div class="chg"><div class="list-row' + (x.id ? '' : ' dead') + '"' + (x.id ? ' data-select="' + esc(x.id) + '"' : '') + '><span class="kb ' + x.kind + '">' + x.kind + '</span><span class="ln">' + esc(x.name) + '</span><span class="faint">' + esc(x.parts.join(', ')) + '</span></div>' + det(x) + '</div>').join('');
+  return '<div id="sec-changes">' + sec('Changes since ready', save, '<div class="faint" style="margin:-2px 0 4px">Compared with the snapshot from ' + esc(fmtDate(c.at)) + (c.count > c.changes.length ? ' · showing ' + c.changes.length + ' of ' + c.count : '') + '</div>' +
+    (c.partial ? '<div class="warn" style="margin-bottom:6px">Partial check — only the first ' + (c.limit || 2500).toLocaleString() + ' layers are tracked. Edits deeper in this frame, and added or removed layers, aren’t detected.</div>' : '') +
+    rows + '<div class="faint" style="margin-top:6px">' + (c.values ? 'Before → after for position, size, fill, stroke, radius, effects, layout, font and text. Other edits (e.g. gradient stops) are flagged by category.' : 'This snapshot was saved by an older version, so only the kind of change is shown. Mark as reviewed to record before/after values from now on.') + '</div>', c.count) + '</div>';
+}
+function secLayers(sp) {
+  const L = sp.layers; if (!L || !L.children.length) return '';
+  const rows = L.children.map(k => '<div class="list-row" data-select="' + esc(k.id) + '"' + (k.visible ? '' : ' style="opacity:.5"') + '><span class="ico">' + typeIcon(k.type) + '</span><span class="ln">' + esc(k.name) + '</span>' + (k.kids ? '<span class="faint">' + k.kids + '</span>' : '') + '</div>').join('');
+  return sec('Layers', '', rows + (L.more ? '<div class="faint" style="padding:4px 0">+ ' + L.more + ' more</div>' : ''), L.children.length + (L.more || 0));
+}
+const ANN_PROPS = [['', 'No pinned property'], ['width', 'Width'], ['height', 'Height'], ['fills', 'Fill'], ['strokes', 'Stroke'], ['cornerRadius', 'Corner radius'], ['itemSpacing', 'Gap'], ['padding', 'Padding'], ['layoutMode', 'Layout direction'], ['alignItems', 'Alignment'], ['effects', 'Effects'], ['opacity', 'Opacity'], ['fontSize', 'Font size'], ['fontWeight', 'Font weight'], ['fontFamily', 'Font family'], ['lineHeight', 'Line height'], ['textAlignHorizontal', 'Text align']];
+const LANGS = { css: 'CSS', tailwind: 'Tailwind', 'html-css': 'HTML + CSS', 'html-single': 'Single HTML (one file)', 'react-tailwind': 'React + Tailwind', 'react-css': 'React + CSS', vue: 'Vue (single file)', svelte: 'Svelte', 'react-native': 'React Native', swiftui: 'SwiftUI', compose: 'Jetpack Compose', flutter: 'Flutter (Dart)' };
+const LANG_HL = { json: 'json', html: 'html', vue: 'html', svelte: 'html', css: 'css', jsx: 'jsx', swift: 'native', kotlin: 'native', dart: 'native', text: 'plain' };
+const NATIVE = { swiftui: 1, compose: 1, 'react-native': 1, flutter: 1 };
+function secCode(d) {
+  let body, copyAll = '';
+  const canPreview = !NATIVE[S.lang];
+  const tabs = canPreview ? '<div class="top-tabs"><div class="seg"><button class="' + (S.view !== 'preview' ? 'on' : '') + '" data-act="view-code">Code</button><button class="' + (S.view === 'preview' ? 'on' : '') + '" data-act="view-preview">Preview</button></div>' +
+    (S.view === 'preview' ? '<span class="faint">Live HTML build vs. Figma design</span>' : '') + '</div>' : '';
+  if (canPreview && S.view === 'preview') {
+    const actions = ddBtn(LANGS[S.lang], 'lang-menu') + ib(I.gear, 'code-menu', 'Code settings');
+    return sec('Code', actions, tabs + secPreview(d) + fontsBlock(S.code['html-single']));
+  }
+  if (S.lang === 'css') { body = codeBlock(d.css || '/* No styles */', 'css'); copyAll = d.css; }
+  else if (S.lang === 'tailwind') { body = codeBlock(d.tailwind || '', 'tw'); copyAll = d.tailwind; }
+  else {
+    const c = S.code[S.lang];
+    if (!c) { body = '<div class="code"><pre class="faint" style="padding:10px 14px">Generating clean code for the whole layer tree…</pre></div>'; requestCode(S.lang); }
+    else {
+      const files = c.files || [];
+      if (!files.some(f => f.name === S.file)) S.file = files[0] ? files[0].name : '';
+      const cur = files.find(f => f.name === S.file) || files[0];
+      copyAll = cur ? cur.code : '';
+      body = (c.truncated ? '<div class="warn">Output truncated — select a smaller frame for the full tree.</div>' : '') +
+        '<div class="files">' + files.map(f => '<button class="file' + (f === cur ? ' on' : '') + '" data-file="' + esc(f.name) + '">' + esc(f.name) + '</button>').join('') +
+        (c.assets && c.assets.length ? '<span class="file" style="cursor:default">assets/ <span class="faint">' + c.assets.length + '</span></span>' : '') + '</div>' +
+        (S.lang === 'html-single' ? '<div class="faint" style="margin:-2px 0 6px">One self-contained file: CSS is inlined and ' + (c.preview && c.preview.inlinedKB ? c.preview.inlinedKB + ' KB of assets are' : 'assets are') + ' embedded. Open it in any browser.</div>' : '') +
+        (cur ? codeBlock(cur.code, LANG_HL[cur.lang] || 'plain', '', true) : '') +
+        '<div class="code-foot"><span class="stats">' + (c.stats ? c.stats.layers + ' layers · ' + c.stats.tokens + ' tokens' + (c.stats.modes ? ' · ' + c.stats.modes + ' modes' : '') + (c.stats.mapped ? ' · ' + c.stats.mapped + ' mapped' : '') + ' · ' + c.stats.assets + ' assets' : '') + '</span>' +
+        '<button class="btn" data-act="copy-file">' + I.copy + 'Copy file</button>' +
+        '<button class="btn blue" data-act="export-project">' + I.dl + (S.lang === 'html-single' ? 'Download .html' : 'Download project') + '</button></div>' +
+        (NATIVE[S.lang] ? '' : fontsBlock(c));
+    }
+  }
+  const generated = S.lang !== 'css' && S.lang !== 'tailwind';
+  const actions = ddBtn(LANGS[S.lang], 'lang-menu') + ib(I.gear, 'code-menu', 'Code settings') + (copyAll ? (generated ? ib(I.copy, 'copy-file', 'Copy file') : '<button class="ibtn" data-copy="' + esc(copyAll) + '" title="Copy">' + I.copy + '</button>') : '');
+  return sec('Code', actions, tabs + body);
+}
+
+/* ---------- Fonts: Google → linked, others → @font-face (installed copy or uploaded file) ---------- */
+const WNAME = { 100: 'Thin', 200: 'ExtraLight', 300: 'Light', 400: 'Regular', 500: 'Medium', 600: 'SemiBold', 700: 'Bold', 800: 'ExtraBold', 900: 'Black' };
+const vLabel = v => v.weight + ' ' + (v.style || WNAME[v.weight] || '');
+function fontsBlock(c) {
+  if (!c || !c.fonts || !c.fonts.length) return '';
+  const single = S.lang === 'html-single' || S.view === 'preview';
+  const rows = c.fonts.map(f => {
+    const fam = esc(f.family);
+    if (f.source === 'google') {
+      const off = f.variants.filter(v => !v.onGoogle);
+      return '<div class="frow"><div class="frow-top"><span class="fsrc google">Google</span><b>' + fam + '</b><span class="fill1"></span><span class="faint">' + f.variants.map(v => v.weight + (v.italic ? 'i' : '')).join(' · ') + '</span></div>' +
+        '<p class="fnote">' + 'Loaded automatically from Google Fonts with just the weights this design uses.' + (off.length ? ' Not on Google: ' + off.map(vLabel).join(', ') + ' — the browser will synthesize them.' : '') + '</p></div>';
+    }
+    if (f.source === 'system') {
+      return '<div class="frow"><div class="frow-top"><span class="fsrc system">System</span><b>' + fam + '</b></div>' +
+        '<p class="fnote">' + (f.kind === 'serif' ? 'System serif' : f.kind === 'mono' ? 'System monospace' : 'Apple system font') + ' — nothing to load. Falls back to ' + (f.kind === 'serif' ? 'Georgia / Times' : f.kind === 'mono' ? 'Menlo / Consolas' : 'Segoe UI on Windows and Roboto on Android') + '.</p></div>';
+    }
+    const up = f.variants.filter(v => v.uploaded).length, all = f.variants.length;
+    return '<div class="frow"><div class="frow-top"><span class="fsrc custom">Custom</span><b>' + fam + '</b><span class="fill1"></span>' +
+      '<button class="btn" data-act="font-up" data-fam="' + fam + '">' + I.dl.replace('<svg', '<svg style="transform:rotate(180deg)"') + 'Add font files</button></div>' +
+      '<p class="fnote">Not on Google Fonts. ' + (up === all ? 'All styles are ' + (single ? 'embedded in the HTML file.' : 'bundled in <code>fonts/</code> in the project download.')
+        : (up ? up + ' of ' + all + ' styles bundled; the rest' : 'Uses') + ' the copy installed on the device (<code>local()</code>). Add .woff2 / .ttf / .otf files to ' + (single ? 'embed them in the HTML.' : 'bundle them with the project.')) + '</p>' +
+      '<div class="fvars">' + f.variants.map(v => '<span class="fvar' + (v.uploaded ? ' ok' : '') + '" title="' + (v.uploaded ? 'Font file added' : 'Uses installed font') + '">' + (v.uploaded ? '✓ ' : '') + esc(vLabel(v)) +
+        (v.uploaded ? '<span class="x" data-act="font-rm" data-fam="' + fam + '" data-key="' + v.key + '" title="Remove file">×</span>' : '') + '</span>').join('') + '</div></div>';
+  }).join('');
+  return '<div class="fonts"><div class="fonts-h">Fonts<span class="faint" style="font-weight:400">· ' + c.fonts.length + ' famil' + (c.fonts.length > 1 ? 'ies' : 'y') + '</span></div>' + rows + '</div>';
+}
+const FILE_W = [['extralight', 200], ['ultralight', 200], ['semibold', 600], ['demibold', 600], ['extrabold', 800], ['ultrabold', 800], ['thin', 100], ['hairline', 100],
+  ['light', 300], ['regular', 400], ['book', 400], ['normal', 400], ['medium', 500], ['bold', 700], ['heavy', 800], ['black', 900]];
+function guessKey(fileName, family) {
+  let n = fileName.replace(/\.[a-z0-9]+$/i, '').toLowerCase().replace(/[^a-z0-9]/g, '');
+  n = n.replace(family.toLowerCase().replace(/[^a-z0-9]/g, ''), '');
+  const it = /italic|oblique/.test(n) ? 1 : 0;
+  const m = /([1-9]00)/.exec(n); let w = m ? +m[1] : 0;
+  if (!w) for (const p of FILE_W) if (n.indexOf(p[0]) > -1) { w = p[1]; break; }
+  return it + ',' + (w || 400);
+}
+let fontFam = '';
+async function uploadFonts(files) {
+  const c = S.code[S.view === 'preview' ? 'html-single' : S.lang] || S.code['html-single'];
+  const f = c && c.fonts && c.fonts.find(x => x.family === fontFam); if (!f) return;
+  const jobs = [], skipped = [];
+  for (const file of files) {
+    const ext = (file.name.split('.').pop() || '').toLowerCase();
+    if (['woff2', 'woff', 'ttf', 'otf'].indexOf(ext) === -1) { skipped.push(file.name + ' (format)'); continue; }
+    if (file.size > 2.5 * 1024 * 1024) { skipped.push(file.name + ' (over 2.5 MB — use .woff2)'); continue; }
+    let key = guessKey(file.name, f.family);
+    if (!f.variants.some(v => v.key === key) && f.variants.length === 1 && files.length === 1) key = f.variants[0].key; // one style used, one file given
+    if (!f.variants.some(v => v.key === key)) { skipped.push(file.name + ' (style not used in this design)'); continue; }
+    jobs.push({ file, key, ext });
+  }
+  for (let i = 0; i < jobs.length; i++) {
+    const j = jobs[i];
+    send({ type: 'font-upload', family: f.family, key: j.key, ext: j.ext, name: j.file.name, bytes: new Uint8Array(await j.file.arrayBuffer()), last: i === jobs.length - 1 });
+  }
+  if (skipped.length) toast('Skipped: ' + skipped.join(', '));
+  else if (!jobs.length) toast('No matching font files');
+}
+$('font-file').addEventListener('change', e => { const fl = Array.from(e.target.files || []); e.target.value = ''; if (fl.length) uploadFonts(fl); });
+
+/* ---------- Preview & compare (single-file HTML vs Figma render) ---------- */
+/** Preview fonts: 'google' loads public Google Fonts; 'off' makes the preview fully offline. */
+function pvOnline() { return !S.demo && !(S.data && S.data.settings && S.data.settings.previewFonts === 'off'); }
+/*
+ * The preview iframe is sandboxed WITHOUT allow-scripts (nothing in it can run JS,
+ * so allow-same-origin only lets this panel measure it), and the document gets a
+ * CSP: images only from data:/blob:, styles inline, fonts only from Google Fonts
+ * (or nowhere, offline). Generated HTML has no scripts; this is defence in depth.
+ */
+function pvCsp(online) {
+  return '<meta http-equiv="Content-Security-Policy" content="default-src \'none\'; img-src data: blob:; style-src \'unsafe-inline\'' +
+    (online ? ' https://fonts.googleapis.com' : '') + '; font-src data:' + (online ? ' https://fonts.gstatic.com' : '') + '; base-uri \'none\'; form-action \'none\'">';
+}
+function previewDoc(html, ov) {
+  const online = pvOnline();
+  let src = String(html);
+  if (!online) src = src.replace(/<link[^>]+fonts\.(googleapis|gstatic)\.com[^>]*>\s*/gi, '').replace(/@import url\([^)]*fonts\.googleapis\.com[^)]*\);?\s*/gi, '');
+  src = /<head[^>]*>/i.test(src) ? src.replace(/<head[^>]*>/i, m => m + pvCsp(online)) : pvCsp(online) + src;
+  html = src;
+  const css = '<style>html,body{margin:0!important;padding:0!important;background:transparent!important;min-height:0!important;display:block!important;overflow:hidden}' +
+    '#__dr_ov{position:fixed;left:0;top:0;pointer-events:none;z-index:2147483647}</style>';
+  let doc = String(html).replace('</head>', css + '</head>');
+  if (ov) doc = doc.replace('</body>', '<img id="__dr_ov" src="' + ov.url + '" style="width:' + ov.w + 'px;height:auto;opacity:' + (S.opacity / 100) + ';mix-blend-mode:' + (S.diff ? 'difference' : 'normal') + '"></body>');
+  return doc;
+}
+function secPreview(d) {
+  const c = S.code['html-single'];
+  if (!c) { requestCode('html-single'); return '<div class="code"><pre class="faint" style="padding:10px 14px">Building a single-file HTML preview…</pre></div>'; }
+  const mode = S.cmp || 'preview';
+  const pv = c.preview || { w: 400, h: 300 };
+  const shotReady = S.shot && S.shot.id === d.spec.id;
+  if (mode !== 'preview' && !shotReady && !S.demo) requestShot(d.spec.id);
+  const avail = Math.max(200, ($('main').clientWidth || 480) - 32 - 16);
+  const colW = mode === 'side' ? (avail - 8) / 2 : avail;
+  const sc = Math.min(1, colW / pv.w);
+  const box = (inner) => '<div class="pv-box" style="width:' + Math.round(pv.w * sc) + 'px;height:' + Math.round(pv.h * sc) + 'px">' + inner + '</div>';
+  const frame = '<iframe id="pv-frame" title="HTML preview" sandbox="allow-same-origin" referrerpolicy="no-referrer" style="width:' + pv.w + 'px;height:' + pv.h + 'px;transform:scale(' + sc + ')"></iframe>';
+  let stage;
+  if (mode === 'side') {
+    stage = '<div class="pv-cols"><div class="pv-col"><div class="cap"><span>Figma design</span></div>' + box(shotReady ? '<img class="shot" src="' + S.shot.url + '" alt="">' : '<div class="pv-note" style="padding:8px">' + (S.demo ? 'Design snapshot loads inside Figma' : 'Loading…') + '</div>') + '</div>' +
+      '<div class="pv-col"><div class="cap"><span>HTML build</span></div>' + box(frame) + '</div></div>';
+  } else stage = box(frame);
+  const bar = '<div class="pv-bar"><div class="seg">' + [['preview', 'Preview'], ['overlay', 'Overlay'], ['side', 'Side by side']].map(m => '<button class="' + (mode === m[0] ? 'on' : '') + '" data-act="cmp-' + m[0] + '">' + m[1] + '</button>').join('') + '</div>' +
+    (mode === 'overlay' ? '<label title="Design opacity"><input type="range" id="pv-op" min="0" max="100" value="' + S.opacity + '"><span id="pv-opv">' + S.opacity + '%</span></label><label><input type="checkbox" id="pv-diff"' + (S.diff ? ' checked' : '') + '>Difference</label>' : '') +
+    '<span class="fill1"></span><button class="btn" data-act="pv-download">' + I.dl + 'Download .html</button></div>';
+  const note = mode === 'overlay' ? (shotReady ? 'Figma\'s render is laid over the HTML. Use <b>Difference</b>: anything that isn\'t black is a mismatch.' : (S.demo ? 'The design overlay loads inside Figma.' : 'Loading the design snapshot…'))
+    : mode === 'side' ? 'Left: Figma\'s own render. Right: the generated HTML.' : 'Scaled to ' + Math.round(sc * 100) + '% · ' + pv.w + '×' + pv.h + (pvOnline() ? ' · public Google Fonts load from Google' : ' · offline: fonts aren’t downloaded, installed copies or fallbacks are used');
+  S.pvMount = { h: pv.h, sc: sc, html: c.files[0].code, ov: mode === 'overlay' && shotReady ? { url: S.shot.url, w: pv.w, h: pv.h } : null };
+  return bar + '<div class="pv-stage">' + stage + '</div><div class="pv-note">' + note + '</div>';
+}
+function mountPreview() {
+  const f = $('pv-frame'); if (!f || !S.pvMount) return;
+  f.onload = () => {
+    // grow to the HTML's real height so overflow / extra height is visible, not clipped
+    try {
+      const doc = f.contentDocument, root = doc.body.firstElementChild;
+      const h = Math.ceil(Math.max(root ? root.getBoundingClientRect().height : 0, S.pvMount.h));
+      if (h > S.pvMount.h + 1) {
+        const sc = S.pvMount.sc;
+        f.style.height = h + 'px';
+        document.querySelectorAll('.pv-box').forEach(b => { b.style.height = Math.round(h * sc) + 'px'; });
+      }
+    } catch (e) { /* not same-origin — keep design height */ }
+  };
+  f.srcdoc = previewDoc(S.pvMount.html, S.pvMount.ov);
+}
+function updateOverlay() {
+  const f = $('pv-frame'); let el = null;
+  try { el = f && f.contentDocument && f.contentDocument.getElementById('__dr_ov'); } catch (e) { /* cross-origin */ }
+  if (el) { el.style.opacity = S.opacity / 100; el.style.mixBlendMode = S.diff ? 'difference' : 'normal'; }
+  else render();
+}
+function requestShot(id) {
+  if (S.shotPending === id) return; S.shotPending = id;
+  send({ type: 'design-shot', id: id });
+}
+
+function secSpacing(d) {
+  const m = d.measure; if (!m) return '';
+  let b;
+  if (m.mode === 'inset') b = '<div class="spacing">' + ['top', 'right', 'bottom', 'left'].map(k => '<div class="sp" data-copy="' + m[k] + 'px"><b>' + r2(m[k]) + '</b><span>' + pretty(k) + '</span></div>').join('') + '</div>';
+  else {b = '<div class="spacing two">' +
+    '<div class="sp" data-copy="' + (m.horizontal === null ? '' : m.horizontal + 'px') + '"><b>' + (m.horizontal === null ? '–' : r2(m.horizontal)) + '</b><span>Horizontal</span></div>' +
+    '<div class="sp" data-copy="' + (m.vertical === null ? '' : m.vertical + 'px') + '"><b>' + (m.vertical === null ? '–' : r2(m.vertical)) + '</b><span>Vertical</span></div></div>';}
+  b += '<div class="faint" style="margin-top:6px">' + (m.mode === 'inset' ? 'Inside ' + esc(m.outer) : esc(m.a) + ' ↔ ' + esc(m.b)) + (d.count === 1 ? ' · Shift-select another layer to measure' : '') + '</div>';
+  const actions = ib(I.ruler, 'measure-native', d.isDev ? 'Add Dev Mode measurement' : 'Add measurement on canvas') + ib(I.x, 'measure-clear', 'Clear measurements');
+  return sec(d.count === 2 ? 'Spacing' : 'Distance to parent', actions, b);
+}
+
+function secTypography(sp) {
+  if (!sp.text) return '';
+  const T = sp.text;
+  const body = T.segments.map((s, i) => {
+    const fam = String(s.family).replace(/'/g, '');
+    const card = '<div class="type-card"><div class="ag" style="font-family:\'' + esc(fam) + '\', Inter, sans-serif;font-weight:' + s.weight + '">Ag</div><div style="min-width:0"><div class="tn">' + esc(s.styleName || (s.family + ' ' + s.style)) + '</div><div class="td">' + esc(s.family) + ' · ' + esc(s.style) + ' · ' + r2(s.size) + '/' + esc(String(s.lineHeight).replace('px', '')) + '</div></div></div>';
+    let rows = prop('Font', s.family, 'font-family: ' + s.family + ';') + prop('Weight', s.weight + ' · ' + s.style, 'font-weight: ' + s.weight + ';') + prop('Size', px(s.size), 'font-size: ' + s.size + 'px;') +
+      prop('Line height', s.lineHeight) + prop('Letter spacing', s.letterSpacing) +
+      (s.textCase && s.textCase !== 'ORIGINAL' ? prop('Case', pretty(s.textCase)) : '') +
+      (s.decoration && s.decoration !== 'NONE' ? prop('Decoration', pretty(s.decoration)) : '') +
+      (s.color ? prop('Color', fmtColor(s.color), fmtColor(s.color).split('  ')[0], tok(s.colorVar)) : '');
+    if (s.color) rows = rows.replace('<div class="pv"><span class="cp" data-copy="' + esc(fmtColor(s.color).split('  ')[0]) + '">', '<div class="pv">' + sw(s.color) + '<span class="cp" data-copy="' + esc(fmtColor(s.color).split('  ')[0]) + '">');
+    return (i ? '<div class="seg-sep"></div>' : '') + (T.segments.length > 1 ? '<div class="faint" style="margin-bottom:2px">“' + esc(s.text) + '”</div>' : '') + card + '<div class="props">' + rows + '</div>';
+  }).join('');
+  const extra = '<div class="props" style="margin-top:4px">' + prop('Align', pretty(T.align) + ' · ' + pretty(T.valign)) + prop('Resizing', pretty(T.autoResize)) + (T.paragraphSpacing ? prop('Paragraph', px(T.paragraphSpacing)) : '') + '</div>';
+  return sec('Typography', '', body + extra, T.segments.length > 1 ? T.segments.length + T.more : undefined);
+}
+
+function colorRow(p, styleName) {
+  if (p.type === 'SOLID') {
+    const v = fmtColor(p.color), name = (p.variable && p.variable.name) || styleName;
+    return '<div class="color-row" data-copy="' + esc(p.variable && p.variable.web ? p.variable.web : v.split('  ')[0]) + '">' + sw(p.color) +
+      (name ? '<span class="cn">' + esc(name) + '</span><span class="cv">' + esc(v) + '</span>' : '<span class="cv solo">' + esc(v) + '</span>') + '</div>';
+  }
+  if (p.stops) {return '<div class="color-row">' + gsw(p.stops) + '<span class="cn">' + (styleName ? esc(styleName) : pretty(p.type)) + '</span><span class="cv">' + p.stops.length + ' stops</span></div>' +
+    p.stops.map(s => '<div class="color-row" style="padding-left:32px" data-copy="' + esc(fmtColor(s.color).split('  ')[0]) + '">' + sw(s.color) + '<span class="cv solo">' + esc(fmtColor(s.color)) + '</span><span class="cv">' + s.position + '%</span></div>').join('');}
+  if (p.type === 'IMAGE') return '<div class="color-row"><span class="sw"><i style="background:var(--bg3)"></i></span><span class="cn">Image</span><span class="cv">' + pretty(p.scaleMode) + (p.opacity < 1 ? ' · ' + Math.round(p.opacity * 100) + '%' : '') + '</span></div>';
+  return '';
+}
+function secEffects(sp) {
+  if (!sp.effects || !sp.effects.length) return '';
+  return sec('Effects', sp.effectStyle ? '<span class="tok">' + I.style + esc(sp.effectStyle) + '</span>' : '', sp.effects.map((e, i) => {
+    const head = (i ? '<div class="seg-sep"></div>' : '');
+    if (e.type === 'DROP_SHADOW' || e.type === 'INNER_SHADOW') {
+      const css = 'box-shadow: ' + (e.type === 'INNER_SHADOW' ? 'inset ' : '') + e.x + 'px ' + e.y + 'px ' + e.radius + 'px ' + e.spread + 'px ' + (e.color ? rgbaCss(e.color) : '') + ';';
+      return head + '<div class="color-row" data-copy="' + esc(css) + '">' + (e.color ? sw(e.color) : '') + '<span class="cn">' + pretty(e.type) + '</span><span class="cv">' + I.copy + '</span></div>' +
+        '<div class="props">' + prop('Offset', e.x + ', ' + e.y) + prop('Blur', px(e.radius)) + prop('Spread', px(e.spread)) + (e.color ? prop('Color', fmtColor(e.color)) : '') + '</div>';
+    }
+    return head + '<div class="props">' + prop(pretty(e.type), px(e.radius), (e.type === 'BACKGROUND_BLUR' ? 'backdrop-filter' : 'filter') + ': blur(' + e.radius + 'px);') + '</div>';
+  }).join(''));
+}
+function secVariables(sp) {
+  if (!sp.tokens || !sp.tokens.length) return '';
+  const modes = t => !t.modes ? '' : '<div></div><div class="modes">' + t.modes.map(m => '<span class="mk">' + esc(m.name) + (m.isDefault ? ' <span class="faint">default</span>' : '') + '</span><span class="mv cp" data-copy="' + esc(m.display || '') + '">' +
+    (m.color ? '<span class="sw"><i style="background:' + fmtColor(m.color) + '"></i></span>' : '') + esc(m.display === null ? '—' : m.display) + (m.alias ? ' <span class="faint">→ ' + esc(m.alias) + '</span>' : '') + '</span>').join('') + '</div>';
+  return sec('Variables', '', '<div class="props">' + sp.tokens.map(t => '<div class="pk">' + esc(t.property.replace(/([A-Z])/g, ' $1').replace(/^./, c => c.toUpperCase())) + '</div><div class="pv">' + tok(t) + '</div>' + modes(t)).join('') + '</div>' +
+    (sp.explicitModes ? '<div class="faint" style="margin-top:4px">Layer mode: ' + sp.explicitModes.map(m => esc(m.collection) + ' → ' + esc(m.mode)).join(', ') + '</div>' : ''), sp.tokens.length);
+}
+/* ---------- Accessibility ---------- */
+function a11yRow(i) {
+  let lead = '<span class="a-dot ' + i.status + '"></span>', sub, meta = '';
+  if (i.kind === 'contrast' && i.status !== 'unknown') {
+    lead = '<span class="a-sw" style="color:' + esc(i.fg) + ';background:' + esc(i.bg) + '">Aa</span>';
+    sub = esc(i.fg) + ' on ' + esc(i.bg) + (i.assumed ? ' (assumed white)' : '') + (i.large ? ' \u00b7 large text' : '');
+    meta = '<span class="a-ratio ' + i.status + '">' + i.ratio + ':1<small>' + (i.status === 'fail' ? 'needs ' + i.need : i.aaa ? 'AAA' : 'AA') + '</small></span>';
+  } else sub = esc(i.detail || '');
+  return '<div class="list-row a-row" data-select="' + esc(i.id) + '">' + lead + '<span class="ln"><span>' + esc(i.name) + '</span><small>' + sub + '</small></span>' + meta + '</div>';
+}
+function secA11y(d) {
+  const a = d.a11y;
+  if (!a || !a.items || !a.items.length) return '';
+  const c = a.counts, issues = a.items.filter(i => i.status !== 'pass');
+  const pills = '<div class="a-sum">' +
+    (c.fail ? '<span class="pill bad"><i></i>' + c.fail + ' failing</span>' : '') + (c.warn ? '<span class="pill warn"><i></i>' + c.warn + ' to review</span>' : '') +
+    (c.unknown ? '<span class="pill"><i></i>' + c.unknown + ' unmeasured</span>' : '') + (c.pass ? '<span class="pill ok"><i></i>' + c.pass + ' passing</span>' : '') + '</div>';
+  const rows = (S.a11yAll ? a.items : issues).map(a11yRow).join('');
+  const toggle = c.pass ? '<button class="mini" data-act="a11y-all" style="margin-top:4px">' + (S.a11yAll ? 'Show only issues' : 'Show ' + c.pass + ' passing') + '</button>' : '';
+  const empty = !issues.length && !S.a11yAll ? '<div class="muted" style="padding:2px 0 4px">No contrast or touch-target problems found in this layer.</div>' : '';
+  return sec('Accessibility', '', pills + rows + empty + toggle + '<div class="faint" style="margin-top:6px">WCAG 2.2 AA: text 4.5:1 (3:1 for large text), targets 24\u00d724 (44\u00d744 recommended on touch). Checked ' + a.scanned + ' layers' + (a.limited ? ' (stopped at the limit)' : '') + '.</div>', c.fail + c.warn);
+}
+
+/* ---------- Design tokens export ---------- */
+const TOK_FORMATS = { css: 'CSS variables', scss: 'SCSS variables', json: 'JSON (design tokens)', tailwind: 'Tailwind v4 theme' };
+function secTokens(d, fileOnly) {
+  S.tok = S.tok || { format: 'css', scope: fileOnly ? 'file' : 'selection', out: null, busy: false };
+  const T = S.tok;
+  if (fileOnly) T.scope = 'file';
+  const seg = fileOnly ? '' : '<div class="seg"><button class="' + (T.scope === 'selection' ? 'on' : '') + '" data-act="tok-scope-selection">This layer</button><button class="' + (T.scope === 'file' ? 'on' : '') + '" data-act="tok-scope-file">Whole file</button></div>';
+  const note = T.scope === 'selection' ? 'Variables used by this layer and everything inside it, with all of their modes.' : 'Every local variable with all modes, plus color and text styles.';
+  let body = '<div class="tok-bar">' + seg + '<span class="fill1"></span>' + ddBtn(TOK_FORMATS[T.format], 'tokfmt-menu') + '</div><div class="faint" style="margin-bottom:6px">' + note + '</div>';
+  const o = T.out;
+  if (T.busy) body += '<div class="faint">Reading variables\u2026</div>';
+  else if (o && o.format === T.format && o.scope === T.scope) {
+    if (o.empty) body += '<div class="muted">No variables' + (T.scope === 'selection' ? ' are bound to this layer.' : ' or styles in this file.') + '</div><button class="btn" data-act="tok-gen" style="margin-top:6px">Try again</button>';
+    else {body += codeBlock(o.text, o.lang || 'css') + '<div class="code-foot"><span class="stats">' + o.stats.variables + ' variables' + (o.stats.modes ? ' \u00b7 ' + o.stats.modes + ' modes' : '') + (o.stats.styles ? ' \u00b7 ' + o.stats.styles + ' styles' : '') + '</span>' +
+      '<button class="btn" data-act="tok-copy">' + I.copy + 'Copy</button><button class="btn blue" data-act="tok-dl">' + I.dl + esc(o.file) + '</button></div>';}
+  } else body += '<button class="btn blue" data-act="tok-gen">Generate ' + esc(TOK_FORMATS[T.format]) + '</button>';
+  return sec('Design tokens', '', body);
+}
+function secContent(sp) {
+  if (!sp.text) return '';
+  return sec('Content', '<button class="ibtn" data-copy="' + esc(sp.text.characters) + '" title="Copy text">' + I.copy + '</button>', '<div class="content" data-copy="' + esc(sp.text.characters) + '">' + esc(sp.text.characters) + '</div>');
+}
+const FMTS = [['SVG:1', 'SVG'], ['PNG:1', 'PNG 1x'], ['PNG:2', 'PNG 2x'], ['PNG:3', 'PNG 3x'], ['JPG:2', 'JPG 2x'], ['PDF:1', 'PDF']];
+/* ---------- code requests ---------- */
+let pending = {};
+function requestCode(lang) {
+  if (pending[lang]) return; pending[lang] = true;
+  if (S.demo) { setTimeout(() => { S.code[lang] = DEMO_CODE[lang]; pending[lang] = false; render(); }, 200); return; }
+  send({ type: 'gen-code', lang: lang });
+}
+
+/* ===================================================================
+ * Menus (Figma dark menu)
+ * =================================================================== */
+let menuHandlers = [];
+function openMenu(anchor, items) {
+  const m = $('menu'); menuHandlers = [];
+  m.innerHTML = items.map(it => {
+    if (it === '-') return '<div class="ms"></div>';
+    if (it.header) return '<div class="mh">' + esc(it.header) + '</div>';
+    menuHandlers.push(it.run);
+    return '<div class="mi' + (it.disabled ? ' dis' : '') + '" data-mi="' + (menuHandlers.length - 1) + '"><span class="ck">' + (it.checked ? I.check : '') + '</span>' + esc(it.label) + '</div>';
+  }).join('');
+  m.classList.add('on');
+  const r = anchor.getBoundingClientRect(), mw = m.offsetWidth, mh = m.offsetHeight;
+  m.style.left = Math.max(4, Math.min(innerWidth - mw - 4, r.right - mw)) + 'px';
+  m.style.top = (r.bottom + mh + 4 > innerHeight ? Math.max(4, r.top - mh - 4) : r.bottom + 4) + 'px';
+}
+function closeMenu() { $('menu').classList.remove('on'); }
+function setSetting(patch) {
+  S.data.settings = Object.assign({}, S.data.settings, patch); S.code = {}; pending = {};
+  send({ type: 'settings', settings: patch }); render();
+}
+function menuFor(act, el) {
+  const s = S.data.settings;
+  if (act === 'lang-menu') openMenu(el, Object.keys(LANGS).map(k => ({ label: LANGS[k], checked: S.lang === k, run: () => { S.lang = k; render(); } })));
+  if (act === 'code-menu') {openMenu(el, [
+    { header: 'Unit' },
+    { label: 'Pixels (px)', checked: s.unit === 'px', run: () => setSetting({ unit: 'px' }) },
+    { label: 'Rem (' + (s.remBase || 16) + 'px base)', checked: s.unit === 'rem', run: () => setSetting({ unit: 'rem' }) },
+    '-', { header: 'Rem base' }
+  ].concat([10, 14, 16, 18, 20].map(n => ({ label: n + 'px', checked: +s.remBase === n, run: () => setSetting({ remBase: n }) }))));}
+  if (act === 'color-menu') openMenu(el, [['hex', 'Hex'], ['rgb', 'RGB'], ['hsl', 'HSL']].map(f => ({ label: f[1], checked: s.colorFormat === f[0], run: () => setSetting({ colorFormat: f[0] }) })));
+  if (act === 'tokfmt-menu') openMenu(el, Object.keys(TOK_FORMATS).map(k => ({ label: TOK_FORMATS[k], checked: S.tok.format === k, run: () => { S.tok.format = k; S.tok.out = null; render(); } })));
+  if (act === 'lplang-menu') openMenu(el, [['css', 'CSS'], ['tailwind', 'Tailwind']].map(f => ({ label: f[1], checked: (S.lpLang || 'css') === f[0], run: () => { S.lpLang = f[0]; render(); } })));
+  if (act === 'expscale-menu') openMenu(el, EX_SCALES.map(n => ({ label: n + 'x', checked: S.exp.scale === n, run: () => { S.exp.scale = n; render(); } })));
+  if (act === 'expfmt-menu') openMenu(el, EX_FMTS.map(f => ({ label: f, checked: S.exp.fmt === f, run: () => { S.exp.fmt = f; render(); } })));
+  if (act === 'fmt-menu') openMenu(el, FMTS.map(f => ({ label: f[1], checked: S.assetFmt === f[0], run: () => { S.assetFmt = f[0]; render(); } })));
+  if (act === 'more-menu') {openMenu(el, [
+    { label: 'Load Google Fonts in preview', checked: s.previewFonts !== 'off', run: () => { setSetting({ previewFonts: s.previewFonts === 'off' ? 'google' : 'off' }); toast(s.previewFonts === 'off' ? 'Preview loads public Google Fonts' : 'Offline: the preview makes no network requests'); } },
+    { label: 'Dev-ready gate', checked: s.gate !== 'off', run: () => { setSetting({ gate: s.gate === 'off' ? 'strict' : 'off' }); toast(s.gate === 'off' ? 'Gate on — only ready designs unlock' : 'Gate off — inspecting everything'); } },
+    { label: 'Accept DevReady flags', checked: !!s.pluginFlag, run: () => setSetting({ pluginFlag: !s.pluginFlag }) },
+    '-',
+    { label: 'Clear redlines on page', disabled: S.data.isDev, run: () => send({ type: 'clear-redlines' }) },
+    { label: 'Remove canvas notes on page', disabled: S.data.isDev, run: () => send({ type: 'notes-clear' }) }
+  ]);}
+  if (act === 'status-menu') {
+    const st = S.data.status, id = st.nodeId;
+    openMenu(el, [
+      { header: st.nodeName },
+      { label: 'Ready for dev', checked: st.type === 'READY_FOR_DEV', run: () => mark(id, 'READY_FOR_DEV') },
+      { label: 'Completed', checked: st.type === 'COMPLETED', run: () => mark(id, 'COMPLETED') },
+      '-',
+      { label: 'Remove status', run: () => mark(id, '') }
+    ]);
+  }
+}
+function mark(id, status, note) { if (S.demo) return toast('Works inside Figma'); send({ type: 'mark', id: id, status: status, note: note || '' }); }
+
+/* ===================================================================
+ * Events
+ * =================================================================== */
+document.addEventListener('click', e => {
+  const t = e.target;
+  const mi = t.closest('[data-mi]');
+  if (mi) { closeMenu(); const fn = menuHandlers[+mi.getAttribute('data-mi')]; if (fn) fn(); return; }
+  if (!t.closest('#menu') && !t.closest('[data-act$="-menu"]')) closeMenu();
+
+  const c = t.closest('[data-copy]'); if (c) { const v = c.getAttribute('data-copy'); if (v) copy(v); return; }
+  const sel = t.closest('[data-select]'); if (sel) { send({ type: 'select', id: sel.getAttribute('data-select') }); return; }
+  const fl = t.closest('[data-file]'); if (fl) { S.file = fl.getAttribute('data-file'); render(); return; }
+  const sm = t.closest('summary'); if (sm && sm.parentElement.classList.contains('ann-help')) { S.annHelp = !sm.parentElement.open; return; }
+  const fu = t.closest('[data-act="font-up"]'); if (fu) { if (S.demo) return toast('Font upload works inside Figma'); fontFam = fu.getAttribute('data-fam'); $('font-file').click(); return; }
+  const fr = t.closest('[data-act="font-rm"]'); if (fr) { if (S.demo) return toast('Works inside Figma'); send({ type: 'font-remove', family: fr.getAttribute('data-fam'), key: fr.getAttribute('data-key') }); return; }
+  const ex = t.closest('[data-export]'); if (ex) {
+    if (S.demo) return toast('Export works inside Figma');
+    const f = S.assetFmt.split(':'); send({ type: 'export', id: ex.getAttribute('data-export'), format: f[0], scale: +f[1] }); toast('Exporting…'); return;
+  }
+  const a = t.closest('[data-act]'); if (!a) return;
+  const act = a.getAttribute('data-act');
+  if (/-menu$/.test(act)) { if ($('menu').classList.contains('on') && S.menuAnchor === a) { closeMenu(); S.menuAnchor = null; return; } S.menuAnchor = a; menuFor(act, a); return; }
+  const sp = S.data && S.data.spec;
+  const live = ['baseline-save', 'measure-native', 'measure-clear', 'ann-add', 'ann-del', 'res-add', 'res-del', 'map-save', 'map-del', 'notes-clear', 'goto-main'];
+  if (S.demo && live.indexOf(act) > -1) { S.form = null; render(); return toast('Works inside Figma'); }
+  if (act === 'sec-toggle') { const k = a.getAttribute('data-key'); S.closed[k] = !S.closed[k]; render(); return; }
+  if (act === 'a11y-all') { S.a11yAll = !S.a11yAll; render(); return; }
+  if (/^tok-scope-/.test(act)) { S.tok.scope = act.slice(10); S.tok.out = null; render(); return; }
+  if (act === 'tok-gen') {
+    if (S.demo) { S.tok.out = Object.assign({ format: S.tok.format, scope: S.tok.scope }, DEMO_TOKENS[S.tok.format]); render(); return; }
+    S.tok.busy = true; render(); send({ type: 'tokens-export', format: S.tok.format, scope: S.tok.scope }); return;
+  }
+  if (act === 'tok-copy') { if (S.tok.out) copy(S.tok.out.text); return; }
+  if (act === 'tok-dl') { const o = S.tok.out; if (o) { download(o.file, new TextEncoder().encode(o.text), 'text/plain'); toast('Downloaded ' + o.file); } return; }
+  if (act === 'ov-compare') { S.ovOpen = !S.ovOpen; render(); return; }
+  if (act === 'props-more') { S.propsAll = !S.propsAll; render(); return; }
+  if (act === 'lp-list' || act === 'lp-code') { S.lp = act.slice(3); render(); return; }
+  if (act === 'show-changes') { S.closed['Changes since ready'] = false; S.closed['Changes'] = false; render(); const el = $('sec-changes') || document.querySelector('#main .sec'); if (el) el.scrollIntoView({ behavior: 'smooth' }); return; }
+  if (act === 'goto-main') { const c = sp && sp.component; if (c && c.mainId) send({ type: 'select', id: c.mainId }); return; }
+  if (act === 'export-sel') {
+    if (S.demo) return toast('Export works inside Figma');
+    const e2 = S.exp, vec = e2.fmt === 'SVG' || e2.fmt === 'PDF';
+    send({ type: 'export', id: sp.id, format: e2.fmt, scale: vec ? 1 : e2.scale }); toast('Exporting ' + sp.name + '…'); return;
+  }
+  if (act === 'notes-clear') { send({ type: 'notes-clear' }); return; }
+  if (act === 'view-code' || act === 'view-preview') { S.view = act.slice(5); render(); return; }
+  if (/^cmp-/.test(act)) { S.cmp = act.slice(4); if (S.cmp === 'overlay' && S.demo) toast('Design overlay works inside Figma'); render(); return; }
+  if (act === 'copy-file') {
+    const c = S.code[S.lang]; const cur = c && ((c.files || []).find(x => x.name === S.file) || c.files[0]);
+    if (cur) copy(cur.code); return;
+  }
+  if (act === 'pv-download') {
+    const c = S.code['html-single'];
+    if (S.demo || !c) { if (c) { download(c.files[0].name, new TextEncoder().encode(c.files[0].code), 'text/html'); toast('Downloaded'); } return; }
+    send({ type: 'export-project', lang: 'html-single' }); toast('Building HTML…'); return;
+  }
+  if (/^form-/.test(act)) { S.form = act === 'form-cancel' ? null : act.slice(5); S.focusForm = true; render(); return; }
+  if (act === 'goto-changes') { const el = $('sec-changes'); if (el) el.scrollIntoView({ behavior: 'smooth' }); return; }
+  if (act === 'baseline-save') { send({ type: 'baseline-save', id: S.data.changes.containerId }); return; }
+  if (act === 'measure-native' || act === 'measure-clear') { send({ type: act }); return; }
+  if (act === 'ann-add') {
+    const t = $('ann-text').value.trim(), pr = $('ann-prop').value;
+    if (!t && !pr) return toast('Write a note or pin a property');
+    const cs = $('ann-cat'), pin = $('ann-pin');
+    const opt = cs && cs.selectedOptions[0];
+    if (pin) S.pinNote = pin.checked;
+    send({ type: 'annotate-add', id: sp.id, label: t, prop: pr, cat: cs ? cs.value : '', color: opt ? opt.getAttribute('data-color') || '' : '', pin: !!(pin && pin.checked) });
+    S.form = null; render(); return;
+  }
+  if (act === 'ann-del') { send({ type: 'annotate-remove', id: sp.id, index: +a.getAttribute('data-idx') }); return; }
+  if (act === 'res-add') { const u = $('res-url').value.trim(); if (!/^https?:\/\/\S+$/.test(u)) return toast('Enter a full https:// link'); send({ type: 'devres-add', id: sp.id, url: u, name: $('res-name').value.trim() }); S.form = null; return; }
+  if (act === 'res-del') { send({ type: 'devres-remove', id: sp.id, url: a.getAttribute('data-url') }); return; }
+  if (act === 'map-save') { const n = $('map-name').value.trim(); if (!/^[A-Za-z_$][\w$.]*$/.test(n)) return toast('Use a valid component name, e.g. Button'); const mp = $('map-path').value.trim(); if (mp && !/^[\w@~.\-][\w@~.\/\-]{0,199}$/.test(mp)) return toast('Import path can only use letters, numbers and @ ~ . / - _'); send({ type: 'map-save', key: sp.component.mapKey, name: n, path: $('map-path').value.trim() }); S.form = null; S.code = {}; pending = {}; return; }
+  if (act === 'map-del') { send({ type: 'map-remove', key: sp.component.mapKey }); S.code = {}; pending = {}; return; }
+  if (act === 'gate-off') { setSetting({ gate: 'off' }); toast('Gate off — turn it back on from ⋯'); }
+  else if (act === 'mark') { const n = $('note'); mark(S.data.target.id, a.getAttribute('data-status'), n ? n.value.trim() : ''); }
+  else if (act === 'export-project') {
+    if (S.demo && S.lang === 'html-single' && S.code['html-single']) { const f = S.code['html-single'].files[0]; download(f.name, new TextEncoder().encode(f.code), 'text/html'); return toast('Downloaded'); }
+    if (S.demo) return toast('Download works inside Figma');
+    send({ type: 'export-project', lang: S.lang }); toast('Building project ZIP…');
+  }
+  else if (act === 'redlines') send({ type: 'redlines' });
+  else if (act === 'clear-redlines') send({ type: 'clear-redlines' });
+  else if (act === 'export-all') {
+    if (S.demo) return toast('Export works inside Figma');
+    const f = S.assetFmt.split(':');
+    send({ type: 'export-all', items: (S.data.assets || []).map(x => ({ id: x.id, format: f[0], scale: +f[1] })), zipName: (S.data.spec.name.replace(/[^\w-]+/g, '-') || 'assets') + '-assets.zip' });
+    toast('Preparing ZIP…');
+  }
+});
+window.addEventListener('blur', closeMenu);
+document.addEventListener('input', e => {
+  if (e.target.id === 'pv-op') { S.opacity = +e.target.value; const v = $('pv-opv'); if (v) v.textContent = S.opacity + '%'; updateOverlay(); }
+  if (e.target.id === 'pv-diff') { S.diff = e.target.checked; if (S.diff && S.opacity < 100) { S.opacity = 100; const r = $('pv-op'); if (r) r.value = 100; const v = $('pv-opv'); if (v) v.textContent = '100%'; } updateOverlay(); }
+});
+
+window.onmessage = ev => {
+  const m = ev.data && ev.data.pluginMessage; if (!m) return;
+  if (['loading', 'state', 'code', 'download', 'error', 'thumb', 'project', 'design-shot', 'fonts-updated', 'ann-result', 'tokens'].indexOf(m.type) === -1) return;
+  S.got = true; S.demo = false;
+  if (m.type === 'loading') $('bar').classList.add('on');
+  else if (m.type === 'state') {
+    $('bar').classList.remove('on');
+    if (!S.data || !S.data.spec || !m.spec || S.data.spec.id !== m.spec.id) S.form = null;
+    S.data = m; S.code = {}; pending = {};
+    if (m.mode !== 'inspect') { Object.keys(S.thumbs).forEach(k => URL.revokeObjectURL(S.thumbs[k])); S.thumbs = {}; }
+    closeMenu(); render();
+  }
+  else if (m.type === 'thumb') {
+    if (S.thumbs[m.id]) URL.revokeObjectURL(S.thumbs[m.id]);
+    S.thumbs[m.id] = URL.createObjectURL(new Blob([m.bytes], { type: 'image/png' }));
+    const el = document.querySelector('[data-export="' + CSS.escape(m.id) + '"] .th');
+    if (el) { const ph = el.querySelector('.ph, img'); const img = document.createElement('img'); img.src = S.thumbs[m.id]; if (ph) ph.replaceWith(img); }
+    document.querySelectorAll('[data-thumb="' + CSS.escape(m.id) + '"]').forEach(x => { x.innerHTML = '<img src="' + S.thumbs[m.id] + '" alt="">'; });
+  }
+  else if (m.type === 'code') { S.code[m.lang] = m.out; pending[m.lang] = false; render(); }
+  else if (m.type === 'tokens') { S.tok = S.tok || { format: m.format, scope: m.scope }; S.tok.busy = false; S.tok.out = Object.assign({ format: m.format, scope: m.scope }, m.out); render(); }
+  else if (m.type === 'fonts-updated') { S.code = {}; pending = {}; render(); }
+  else if (m.type === 'ann-result') { if (!m.ok) { S.annHelp = true; render(); } }
+  else if (m.type === 'download') {
+    if (!m.files.length) return toast('Nothing to export');
+    if (m.zip) download(m.zipName, makeZip(m.files), MIME.zip);
+    else { const f = m.files[0]; download(f.name, f.bytes, MIME[f.name.split('.').pop()]); }
+    toast('Downloaded');
+  }
+  else if (m.type === 'design-shot') {
+    const fr = new FileReader();
+    fr.onload = () => { S.shot = { id: m.id, url: fr.result, w: m.w, h: m.h }; S.shotPending = null; render(); };
+    fr.readAsDataURL(new Blob([m.bytes], { type: 'image/png' }));
+  }
+  else if (m.type === 'project') {
+    const enc = new TextEncoder();
+    if (m.single) { const f = m.files[0]; download(f.name, f.bytes || enc.encode(f.text), 'text/html'); toast('Downloaded ' + f.name); return; }
+    download(m.zipName, makeZip(m.files.map(f => ({ name: f.name, bytes: f.bytes || enc.encode(f.text) }))), MIME.zip);
+    toast('Project downloaded');
+  }
+  else if (m.type === 'error') { $('bar').classList.remove('on'); toast(m.message); }
+};
+
+(function () {
+  const h = $('resize'); let st = null;
+  h.addEventListener('pointerdown', e => { st = { x: e.clientX, y: e.clientY, w: innerWidth, h: innerHeight }; h.setPointerCapture(e.pointerId); });
+  h.addEventListener('pointermove', e => { if (st) send({ type: 'resize', w: Math.round(st.w + e.clientX - st.x), h: Math.round(st.h + e.clientY - st.y) }); });
+  h.addEventListener('pointerup', () => { st = null; });
+})();
+
+/* ===================================================================
+ * Demo data — only when opened outside Figma
+ * =================================================================== */
+const DEMO_TOKENS = {
+  css: { file: 'tokens.css', lang: 'css', stats: { variables: 6, modes: 2, styles: 0 }, text: '/* Design tokens \u2014 exported from Figma by DevReady (all local variables and styles) */\n:root {\n  --blue-500: #0D99FF;\n  --color-brand-primary: var(--blue-500);\n  --color-surface: #FFFFFF;\n  --spacing-200: 8px;\n  --spacing-400: 16px;\n  --radius-300: 12px;\n}\n\n[data-theme="dark"] {\n  --blue-500: #3DADFF;\n  --color-surface: #121726;\n}\n\n[data-density="compact"] {\n  --spacing-400: 12px;\n}\n' },
+  json: { file: 'tokens.json', lang: 'json', stats: { variables: 3, modes: 1, styles: 0 }, text: '{\n  "color": {\n    "brand": {\n      "primary": {\n        "$type": "color",\n        "$value": "{blue.500}",\n        "$extensions": { "com.figma": { "collection": "Theme", "modes": { "Dark": "#3DADFF" } } }\n      }\n    }\n  },\n  "spacing": { "400": { "$type": "dimension", "$value": "16px" } }\n}\n' },
+  scss: { file: 'tokens.scss', lang: 'css', stats: { variables: 3, modes: 1, styles: 0 }, text: '// Design tokens \u2014 exported from Figma by DevReady\n\n$blue-500: #0D99FF;\n$blue-500--dark: #3DADFF;\n$color-brand-primary: $blue-500;\n$spacing-400: 16px;\n' },
+  tailwind: { file: 'theme.css', lang: 'css', stats: { variables: 3, modes: 1, styles: 0 }, text: '/* Design tokens \u2014 exported from Figma by DevReady */\n@import "tailwindcss";\n\n@theme {\n  --color-blue-500: #0D99FF;\n  --color-brand-primary: var(--color-blue-500);\n  --spacing-400: 16px;\n}\n\n[data-theme="dark"] {\n  --color-blue-500: #3DADFF;\n}\n' }
+};
+const DEMO = {
+  type: 'state', mode: 'inspect', editor: 'figma', isDev: false, count: 1,
+  settings: { gate: 'strict', unit: 'px', remBase: 16, colorFormat: 'hex', pluginFlag: true },
+  status: { type: 'READY_FOR_DEV', description: 'Updated CTA color and spacing after review.', nodeId: '1:1', nodeName: 'Checkout / Mobile', source: 'figma' },
+  target: { id: '1:1', name: 'Checkout / Mobile', type: 'FRAME' },
+  spec: {
+    id: '1:20', name: 'Pay button', type: 'INSTANCE', size: { w: 327, h: 48 }, pos: { x: 24, y: 712 },
+    component: { kind: 'Instance', name: 'Button', variant: 'Variant=Primary, Size=Large', description: 'Keywords: button, cta, action, submit, pay', mainId: '9:1', mapKey: 'k1',
+      props: [{ name: 'Has Icon', type: 'BOOLEAN', value: 'true' }, { name: 'Icon', type: 'INSTANCE_SWAP', value: 'icon/lock' }, { name: 'Label', type: 'TEXT', value: 'Pay ₹1,499' }, { name: 'State', type: 'VARIANT', value: 'Default' }],
+      overrideCount: 2, overrides: [{ id: '1:20', name: 'Pay button (this layer)', fields: ['width', 'paddingLeft', 'paddingRight'] }, { id: '1:23', name: 'Label', fields: ['characters'] }],
+      suggest: { name: 'Button', path: '@/components/button' } },
+    interactions: [{ trigger: 'While hovering', actions: ['Change to State=Hover'] }, { trigger: 'On click', actions: ['Navigate to Payment / Processing · smart animate 300ms'] }],
+    strokes: [{ type: 'SOLID', opacity: 1, color: { r: 0.03, g: 0.5, b: 0.85, a: 1 }, variable: { name: 'border/brand', web: 'var(--border-brand)' } }], strokeInfo: { weight: 1, align: 'INSIDE', dash: '' },
+    annCats: [{ id: 'c1', label: 'Development', color: 'blue' }, { id: 'c2', label: 'Interaction', color: 'violet' }, { id: 'c3', label: 'Accessibility', color: 'green' }],
+    box: { margin: { top: 712, right: 24, bottom: 52, left: 24 }, padding: { top: 12, right: 24, bottom: 12, left: 24 } },
+    layout: { mode: 'HORIZONTAL', wrap: false, gap: 8, crossGap: null, primary: 'CENTER', counter: 'CENTER', padding: [12, 24, 12, 24] },
+    sizing: { h: 'FILL', v: 'HUG' }, radius: [12],
+    fills: [{ type: 'SOLID', opacity: 1, color: { r: 0.05, g: 0.6, b: 1, a: 1 }, variable: { name: 'brand/primary', collection: 'Colors', web: 'var(--brand-primary)' } }],
+    effects: [{ type: 'DROP_SHADOW', color: { r: 0.05, g: 0.6, b: 1, a: 0.25 }, x: 0, y: 4, radius: 12, spread: 0 }],
+    tokens: [{ property: 'fills', name: 'brand/primary', web: 'var(--brand-primary)', modes: [{ name: 'Light', isDefault: true, display: '#0D99FF', color: { r: 0.05, g: 0.6, b: 1, a: 1 }, alias: 'blue/500' }, { name: 'Dark', display: '#3DADFF', color: { r: 0.24, g: 0.68, b: 1, a: 1 }, alias: 'blue/400' }] }, { property: 'itemSpacing', name: 'space/200', web: 'var(--space-200)' }, { property: 'topLeftRadius', name: 'radius/300', web: 'var(--radius-300)' }, { property: 'paddingLeft', name: 'space/600', web: 'var(--space-600)' }],
+    devResources: [{ name: 'Button - GitHub', url: 'https://github.com/' }, { name: 'Button - Storybook', url: 'https://storybook.js.org/' }],
+    annotations: [{ index: 0, label: 'Sticky on mobile — stays **24px** above the safe area.', properties: ['height'], categoryId: 'c1' }, { index: 1, label: 'Announce “Processing payment” to screen readers after tap.', properties: [], categoryId: 'c3' }],
+    canAnnotate: true, canMeasure: true,
+    layers: { ancestors: [{ id: '1:1', name: 'Checkout / Mobile', type: 'FRAME' }, { id: '1:15', name: 'Footer', type: 'FRAME' }],
+      children: [{ id: '1:21', name: 'icon/lock', type: 'INSTANCE', visible: true, kids: 1 }, { id: '1:23', name: 'Pay ₹1,499', type: 'TEXT', visible: true, kids: 0 }, { id: '1:22', name: 'icon/arrow-right', type: 'INSTANCE', visible: true, kids: 1 }], more: 0 }
+  },
+  changes: { at: '2026-10-18T10:42:00.000Z', values: true, count: 3, containerId: '1:1', containerName: 'Checkout / Mobile', changes: [
+    { id: '1:20', name: 'Pay button', kind: 'changed', parts: ['style'], detail: [{ prop: 'Fill', before: '#7B61FF', after: '#0D99FF' }, { prop: 'Radius', before: '8', after: '12' }] },
+    { id: '1:23', name: 'Pay ₹1,499', kind: 'changed', parts: ['text'], detail: [{ prop: 'Text', before: 'Pay ₹1,299', after: 'Pay ₹1,499' }] },
+    { id: null, name: 'Promo banner', kind: 'removed', parts: [] }] },
+  css: '/* Auto layout */\ndisplay: flex;\npadding: 12px 24px;\njustify-content: center;\nalign-items: center;\ngap: var(--space-200, 8px);\n\n/* Layout */\nalign-self: stretch;\n\n/* Style */\nborder-radius: var(--radius-300, 12px);\nbackground: var(--brand-primary, #0D99FF);\nbox-shadow: 0 4px 12px 0 rgba(13, 153, 255, 0.25);',
+  tailwind: 'flex px-6 py-3 justify-center items-center gap-[var(--space-200,8px)] self-stretch rounded-[var(--radius-300,12px)] bg-[var(--brand-primary,#0D99FF)] shadow-[0_4px_12px_0_rgba(13,153,255,0.25)]',
+  a11y: { scanned: 12, limited: false, counts: { fail: 2, warn: 2, pass: 3, unknown: 0 }, items: [
+    { id: '1:23', name: 'Pay \u20b91,499', kind: 'contrast', status: 'fail', ratio: 3.02, need: 4.5, aaa: false, large: false, fg: '#7BC4FF', bg: '#0D99FF', assumed: false, size: 14 },
+    { id: '1:30', name: 'Promo terms', kind: 'contrast', status: 'fail', ratio: 2.48, need: 4.5, aaa: false, large: false, fg: '#9CA3AF', bg: '#FFFFFF', assumed: true, size: 12 },
+    { id: '1:20', name: 'Pay button', kind: 'target', status: 'warn', detail: '327\u00d740 \u2014 aim for 44\u00d744 on touch screens' },
+    { id: '1:31', name: 'Close', kind: 'label', status: 'warn', detail: 'No visible text \u2014 give it an accessible name (aria-label / contentDescription)' },
+    { id: '1:25', name: 'Subtotal', kind: 'contrast', status: 'pass', ratio: 12.63, need: 4.5, aaa: true, large: false, fg: '#111827', bg: '#FFFFFF', assumed: false, size: 14 }] },
+  measure: { mode: 'inset', outer: 'Checkout / Mobile', inner: 'Button', top: 712, right: 24, bottom: 52, left: 24, segments: [] },
+  assets: [{ id: '1:20', name: 'Pay button', type: 'INSTANCE', kind: 'selection', w: 327, h: 48 }, { id: '1:21', name: 'icon/lock', type: 'INSTANCE', kind: 'icon', w: 20, h: 20 }, { id: '1:22', name: 'icon/arrow-right', type: 'INSTANCE', kind: 'icon', w: 20, h: 20 }]
+};
+const DEMO_CODE = {"html-css": {"files": [{"name": "index.html", "lang": "html", "code": "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n  <meta charset=\"UTF-8\" />\n  <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\" />\n  <title>insights<\/title>\n  <link rel=\"preconnect\" href=\"https://fonts.googleapis.com\" />\n  <link href=\"https://fonts.googleapis.com/css2?family=Inter:wght@500;600;700&display=swap\" rel=\"stylesheet\" />\n  <link rel=\"stylesheet\" href=\"styles.css\" />\n<\/head>\n<body>\n  <div class=\"insights\">\n    <div class=\"insights__header\">\n      <h2 class=\"insights__title\">Weekly puff Volume<\/h2>\n      <img class=\"insights__icon\" src=\"assets/user-circle.svg\" alt=\"\" aria-hidden=\"true\" />\n    <\/div>\n    <div class=\"insights__row\">\n      <p class=\"insights__value\">1284<\/p>\n      <div class=\"insights__badge\">\n        <img class=\"insights__icon\" src=\"assets/icon.svg\" alt=\"\" aria-hidden=\"true\" />\n        <p class=\"insights__change\">12.4%<\/p>\n      <\/div>\n      <p class=\"insights__vs-last-week\">vs Last Week<\/p>\n    <\/div>\n    <p class=\"insights__text\">Revenue up <span class=\"insights__text-accent\">12%<\/span> this week<\/p>\n    <ul class=\"insights__list\">\n      <li class=\"stat-card\">\n        <p class=\"stat-card__label\">Sessions<\/p>\n        <p class=\"stat-card__value\">342<\/p>\n      <\/li>\n      <li class=\"stat-card\">\n        <p class=\"stat-card__label\">Avg puffs<\/p>\n        <p class=\"stat-card__value\">18.2<\/p>\n      <\/li>\n      <li class=\"stat-card\">\n        <p class=\"stat-card__label\">Peak day<\/p>\n        <p class=\"stat-card__value\">Friday<\/p>\n      <\/li>\n    <\/ul>\n    <img class=\"insights__image\" src=\"assets/simple-bar-representation.png\" alt=\"Simple Bar Representation\" />\n    <button class=\"primary-button\" type=\"button\">\n      <span class=\"primary-button__text\">View report<\/span>\n    <\/button>\n  <\/div>\n<\/body>\n<\/html>\n"}, {"name": "styles.css", "lang": "css", "code": "/* Design tokens */\n:root {\n  --space-4: 16px;\n  --surface: #FFFFFF;\n  --text-primary: #111827;\n  --brand: #0D99FF;\n}\n\n[data-theme=\"dark\"] {\n  --surface: #121726;\n}\n\n[data-density=\"compact\"] {\n  --space-4: 12px;\n}\n\n/* Scoped reset \u2014 Figma has no default margins */\n.insights, .insights *, .insights *::before, .insights *::after { box-sizing: border-box; }\n.insights :where(h1, h2, h3, p, ul, li, figure) { margin: 0; padding: 0; }\n.insights :where(button) { border: 0; background: none; padding: 0; font: inherit; color: inherit; cursor: pointer; }\n.insights :where(a) { color: inherit; text-decoration: none; }\n.insights :where(img) { display: block; }\n\n.insights {\n  display: flex;\n  width: 420px;\n  padding: 24px;\n  flex-direction: column;\n  gap: var(--space-4);\n  border-radius: 16px;\n  background: var(--surface);\n  font-family: Inter;\n}\n\n.insights__header {\n  display: flex;\n  justify-content: space-between;\n  align-items: center;\n  align-self: stretch;\n}\n\n.insights__title {\n  color: var(--text-primary);\n  font-size: 14px;\n  font-weight: 500;\n  line-height: 20px;\n}\n\n.insights__icon {\n  width: 24px;\n  height: 24px;\n  flex-shrink: 0;\n}\n\n.insights__row {\n  display: flex;\n  align-items: center;\n  gap: 8px;\n}\n\n.insights__value {\n  color: var(--text-primary);\n  font-size: 36px;\n  font-weight: 700;\n  line-height: 20px;\n}\n\n.insights__badge {\n  display: flex;\n  padding: 2px 6px;\n  align-items: center;\n  gap: 2px;\n  border-radius: 99px;\n  background: #DCFCE7;\n}\n\n.insights__change {\n  color: #16A34A;\n  font-size: 12px;\n  font-weight: 500;\n  line-height: 20px;\n}\n\n.insights__vs-last-week {\n  color: #6B7280;\n  font-size: 12px;\n  font-weight: 500;\n  line-height: 20px;\n}\n\n.insights__text {\n  color: var(--text-primary);\n  font-size: 14px;\n  font-weight: 500;\n  line-height: 20px;\n}\n\n.insights__text-accent {\n  font-weight: 700;\n  color: #00994D;\n}\n\n.insights__list {\n  display: flex;\n  gap: 12px;\n  align-self: stretch;\n  padding: 0;\n  margin: 0;\n  list-style: none;\n}\n\n.stat-card {\n  display: flex;\n  padding: 16px;\n  flex-direction: column;\n  gap: 4px;\n  border-radius: 12px;\n  background: var(--surface);\n  flex: 1 0 0;\n}\n\n.stat-card__label {\n  color: #6B7280;\n  font-size: 12px;\n  font-weight: 500;\n  line-height: 20px;\n}\n\n.stat-card__value {\n  color: var(--text-primary);\n  font-size: 20px;\n  font-weight: 700;\n  line-height: 20px;\n}\n\n.insights__image {\n  width: 372px;\n  height: 120px;\n}\n\n.primary-button {\n  display: flex;\n  padding: 12px 24px;\n  justify-content: center;\n  border-radius: 8px;\n  background: var(--brand);\n}\n\n.primary-button__text {\n  color: #FFF;\n  font-size: 14px;\n  font-weight: 600;\n  line-height: 20px;\n}\n"}], "assets": [{"id": "28", "file": "simple-bar-representation.png", "format": "PNG", "scale": 2}, {"id": "6", "file": "user-circle.svg", "format": "SVG", "scale": 1}, {"id": "10", "file": "icon.svg", "format": "SVG", "scale": 1}], "preview": {"w": 420, "h": 400, "inlinedKB": 0}, "truncated": false, "stats": {"layers": 24, "classes": 18, "assets": 3, "tokens": 4, "modes": 2, "mapped": 0}, "fonts": [{"family": "Inter", "kind": "sans", "source": "google", "variants": [{"key": "0,500", "weight": 500, "italic": false, "style": "Medium", "uploaded": false, "onGoogle": true}, {"key": "0,600", "weight": 600, "italic": false, "style": "Semi Bold", "uploaded": false, "onGoogle": true}, {"key": "0,700", "weight": 700, "italic": false, "style": "Bold", "uploaded": false, "onGoogle": true}]}]}, "html-single": {"files": [{"name": "insights.html", "lang": "html", "code": "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n  <meta charset=\"UTF-8\" />\n  <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\" />\n  <title>insights<\/title>\n  <link rel=\"preconnect\" href=\"https://fonts.googleapis.com\" />\n  <link href=\"https://fonts.googleapis.com/css2?family=Inter:wght@500;600;700&display=swap\" rel=\"stylesheet\" />\n  <!-- Single-file build from Figma (DevReady) \u00b7 open it directly in any browser. CSS and assets are embedded. -->\n  <style>\n/* Page preview canvas */\nbody { margin: 0; min-height: 100vh; display: flex; justify-content: center; align-items: flex-start; padding: 40px 16px; box-sizing: border-box; background: #F5F5F5; }\n\n/* Design tokens */\n:root {\n  --space-4: 16px;\n  --surface: #FFFFFF;\n  --text-primary: #111827;\n  --brand: #0D99FF;\n}\n\n[data-theme=\"dark\"] {\n  --surface: #121726;\n}\n\n[data-density=\"compact\"] {\n  --space-4: 12px;\n}\n\n/* Scoped reset \u2014 Figma has no default margins */\n.insights, .insights *, .insights *::before, .insights *::after { box-sizing: border-box; }\n.insights :where(h1, h2, h3, p, ul, li, figure) { margin: 0; padding: 0; }\n.insights :where(button) { border: 0; background: none; padding: 0; font: inherit; color: inherit; cursor: pointer; }\n.insights :where(a) { color: inherit; text-decoration: none; }\n.insights :where(img) { display: block; }\n\n.insights {\n  display: flex;\n  width: 420px;\n  padding: 24px;\n  flex-direction: column;\n  gap: var(--space-4);\n  border-radius: 16px;\n  background: var(--surface);\n  font-family: Inter;\n}\n\n.insights__header {\n  display: flex;\n  justify-content: space-between;\n  align-items: center;\n  align-self: stretch;\n}\n\n.insights__title {\n  color: var(--text-primary);\n  font-size: 14px;\n  font-weight: 500;\n  line-height: 20px;\n}\n\n.insights__icon {\n  width: 24px;\n  height: 24px;\n  flex-shrink: 0;\n}\n\n.insights__row {\n  display: flex;\n  align-items: center;\n  gap: 8px;\n}\n\n.insights__value {\n  color: var(--text-primary);\n  font-size: 36px;\n  font-weight: 700;\n  line-height: 20px;\n}\n\n.insights__badge {\n  display: flex;\n  padding: 2px 6px;\n  align-items: center;\n  gap: 2px;\n  border-radius: 99px;\n  background: #DCFCE7;\n}\n\n.insights__change {\n  color: #16A34A;\n  font-size: 12px;\n  font-weight: 500;\n  line-height: 20px;\n}\n\n.insights__vs-last-week {\n  color: #6B7280;\n  font-size: 12px;\n  font-weight: 500;\n  line-height: 20px;\n}\n\n.insights__text {\n  color: var(--text-primary);\n  font-size: 14px;\n  font-weight: 500;\n  line-height: 20px;\n}\n\n.insights__text-accent {\n  font-weight: 700;\n  color: #00994D;\n}\n\n.insights__list {\n  display: flex;\n  gap: 12px;\n  align-self: stretch;\n  padding: 0;\n  margin: 0;\n  list-style: none;\n}\n\n.stat-card {\n  display: flex;\n  padding: 16px;\n  flex-direction: column;\n  gap: 4px;\n  border-radius: 12px;\n  background: var(--surface);\n  flex: 1 0 0;\n}\n\n.stat-card__label {\n  color: #6B7280;\n  font-size: 12px;\n  font-weight: 500;\n  line-height: 20px;\n}\n\n.stat-card__value {\n  color: var(--text-primary);\n  font-size: 20px;\n  font-weight: 700;\n  line-height: 20px;\n}\n\n.insights__image {\n  width: 372px;\n  height: 120px;\n}\n\n.primary-button {\n  display: flex;\n  padding: 12px 24px;\n  justify-content: center;\n  border-radius: 8px;\n  background: var(--brand);\n}\n\n.primary-button__text {\n  color: #FFF;\n  font-size: 14px;\n  font-weight: 600;\n  line-height: 20px;\n}\n  <\/style>\n<\/head>\n<body>\n  <div class=\"insights\">\n    <div class=\"insights__header\">\n      <h2 class=\"insights__title\">Weekly puff Volume<\/h2>\n      <img class=\"insights__icon\" src=\"data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIyNCIgaGVpZ2h0PSIyNCIgdmlld0JveD0iMCAwIDI0IDI0IiBmaWxsPSJub25lIiBzdHJva2U9IiM2QjcyODAiIHN0cm9rZS13aWR0aD0iMS42Ij48Y2lyY2xlIGN4PSIxMiIgY3k9IjEyIiByPSI5LjIiLz48Y2lyY2xlIGN4PSIxMiIgY3k9IjEwIiByPSIzIi8+PHBhdGggZD0iTTYuMiAxOC40YzEuNC0yIDMuNC0zIDUuOC0zczQuNCAxIDUuOCAzIi8+PC9zdmc+\" alt=\"\" aria-hidden=\"true\" />\n    <\/div>\n    <div class=\"insights__row\">\n      <p class=\"insights__value\">1284<\/p>\n      <div class=\"insights__badge\">\n        <img class=\"insights__icon\" src=\"data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIyNCIgaGVpZ2h0PSIyNCIgdmlld0JveD0iMCAwIDI0IDI0IiBmaWxsPSJub25lIiBzdHJva2U9IiMxNkEzNEEiIHN0cm9rZS13aWR0aD0iMiI+PHBhdGggZD0iTTcgMTRsNS01IDUgNSIvPjwvc3ZnPg==\" alt=\"\" aria-hidden=\"true\" />\n        <p class=\"insights__change\">12.4%<\/p>\n      <\/div>\n      <p class=\"insights__vs-last-week\">vs Last Week<\/p>\n    <\/div>\n    <p class=\"insights__text\">Revenue up <span class=\"insights__text-accent\">12%<\/span> this week<\/p>\n    <ul class=\"insights__list\">\n      <li class=\"stat-card\">\n        <p class=\"stat-card__label\">Sessions<\/p>\n        <p class=\"stat-card__value\">342<\/p>\n      <\/li>\n      <li class=\"stat-card\">\n        <p class=\"stat-card__label\">Avg puffs<\/p>\n        <p class=\"stat-card__value\">18.2<\/p>\n      <\/li>\n      <li class=\"stat-card\">\n        <p class=\"stat-card__label\">Peak day<\/p>\n        <p class=\"stat-card__value\">Friday<\/p>\n      <\/li>\n    <\/ul>\n    <img class=\"insights__image\" src=\"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAugAAADwCAYAAABSQJFPAAAFuklEQVR42u3dwXHiQBBAUUalKzEoFkVDTESjWBQDAYxPvqgQuFQg9/S8d94D021Rn1l2fbkAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAACQVzECAHjueq8169ket6IBQKADgDAX6oBABwBhLtShIYMRAEDfce78INABQJyaAyDQAUCUmgcIdAAAQKADwHtui80FBDoAACDQAWDLLbH5gEAHAAAEOgAACHQAAECgAwCAQAcAAAQ6AAAIdAAAQKADAIBABwAABDoAAAh0AABAoAMAAAIdAAAEOgAAINABAECgAwAAAh0AAAQ6AAAg0AEAQKADAAACHQAABDoAACDQAQBAoAMAADGMRgDwPctaa9azzVMpNgwg0AGEebAzCnUAgQ4gzIU6QFq+gw4gzp0fQKADiFNzAECgA4hS8wAQ6AAAgEAHOIHbYnMBEOgAACDQAdhyS2w+AAIdAAAEOgAAINABAECgAwAAAh0AABDoAAAg0AEAAIEOAAACHQAAEOgAACDQAQAAgQ4AAAIdAAD4itEIAICMlrXWrGebp1JsWKADAAjzYGcU6gIdAECYC3W+zHfQAQBx7vwIdAAAcWoOCHQAQJSaBwIdAAAQ6ABAam6LzUWgAwAAAh0AYMstsfkIdAAAQKADAEBv/CbRDmT+ay6/OQ0AEOgI84BnFOoAgEBHmAt1AICP8x10ce78AAACHXFqDgAAAl2UmgcAgEAHAAAEekfcFpsLACDQAQAAgc6WW2LzAQAEOgAAINABAECgAwAAAh0AAAQ6AAAg0AEAgF+jEQAAEE3m/yp5nkoR6AAACPNgZ9wLdYEOAIAwDxTqvoMOAIA4D3R+gQ4AgDgPNAeBDgCAOA80D4EOAACBCHQAAE7n9nx/LgIdAAACEegAAJzK7blABwAAgQ4AAAh0AAAQ6AAAwGeMRgCxZf6HNPNUig0DgEAHYR7sjEIdAAQ6CHOhDgAh+Q46iHPnBwCBDohTcwAAgQ6i1DwAQKADAAACHRrhtthcAECgAwCAQAe23BKbDwAIdAAAEOgAAIBABwAAgQ4AAAh0AAAQ6AAAgEAHAACBDgAACHQAABDoAACAQAcAAIEOAAAIdAAAQKADAIBABwAABDoAAAh0AADgsPEvf2hZa806gHkqxY8BAABNBHrmMN+eUagDABA20HsIc6EOAEBEgzh3fgAAgga6ODUHAACCBLooFekAAAQKdAAAIEiguy1+zlwAAPiXQAcAAIIEulvi18wHAIBTA90IAABAoAMAAAIdAAAEOgAAINABAECgAwAAAh0AAAQ6AAAg0AEAQKADAAACHQAABDoAACDQAQAAgQ4AAAIdAAAQ6AAAINABAACBDgAAAh0AABDoAAAg0AEAAIEOAAACHQAAEOgAACDQAQAAgQ4AAAh0AAAQ6AAAgEAHAACBDgAACHQAABDoAACAQAcAAIEOAAAIdAAAEOgAAIBABwAAgQ4AAAh0AABAoAMAgEAHAAAEOgAACHQAAECgAwCAQAcAAAQ6AAAIdAAAQKADAIBABwAABDoAAAh0AABAoAMAAAIdAAAEOgAAINABAECgAwAAAh0AAAQ6AAAg0AEAQKADAAACHQAABDoAACDQAQBAoAMAAAIdAAAQ6AAAINABAACBDgAAAh0AABDoAAAg0AEAAIEOAAACHQAAEOgAAJA90OepFGPYF30+9md/9uf1mc8xj5v9tTwfz5/3z9SBbgQAABAs0H2KafvTnf3Zn/15neZyjFv0tufi+fP+mXV/btABACCQwaeYHJ/q7M/+7M/rNY9j3KK3PQ/Pn/fPjPsbDCnPD4v92Z/9ed3mINJ7nIPnz/tntv0NhpTr/PZnf87v9Tu/SO/x/J4/+8t0/pfDWNZa/WC3y/7sz/7sz/6Oud772V/GDyaeP/trfX8/azWxTK9nTcwAAAAASUVORK5CYII=\" alt=\"Simple Bar Representation\" />\n    <button class=\"primary-button\" type=\"button\">\n      <span class=\"primary-button__text\">View report<\/span>\n    <\/button>\n  <\/div>\n<\/body>\n<\/html>\n"}], "assets": [], "preview": {"w": 420, "h": 400, "inlinedKB": 2}, "truncated": false, "stats": {"layers": 24, "classes": 18, "assets": 3, "tokens": 4, "modes": 2, "mapped": 0}, "fonts": [{"family": "Inter", "kind": "sans", "source": "google", "variants": [{"key": "0,500", "weight": 500, "italic": false, "style": "Medium", "uploaded": false, "onGoogle": true}, {"key": "0,600", "weight": 600, "italic": false, "style": "Semi Bold", "uploaded": false, "onGoogle": true}, {"key": "0,700", "weight": 700, "italic": false, "style": "Bold", "uploaded": false, "onGoogle": true}]}]}, "react-tailwind": {"files": [{"name": "Insights.jsx", "lang": "jsx", "code": "import { Button } from '@/components/ui/button';\nimport simpleBarRepresentationImg from './assets/simple-bar-representation.png';\nimport userCircleIcon from './assets/user-circle.svg';\nimport icon from './assets/icon.svg';\nimport './tokens.css';\n\nfunction StatCard({ label, value }) {\n  return (\n    <li className=\"flex p-4 flex-col gap-1 rounded-xl bg-[var(--surface)] grow shrink-0 basis-0\">\n      <p className=\"text-[#6B7280] text-xs font-medium leading-[20px]\">{label}<\/p>\n      <p className=\"text-[color:var(--text-primary)] text-xl font-bold leading-[20px]\">{value}<\/p>\n    <\/li>\n  );\n}\n\nexport default function Insights() {\n  return (\n    <div className=\"flex w-[420px] p-6 flex-col gap-[var(--space-4)] rounded-2xl bg-[var(--surface)] font-['Inter']\">\n      <div className=\"flex justify-between items-center self-stretch\">\n        <h2 className=\"text-[color:var(--text-primary)] text-sm font-medium leading-[20px]\">Weekly puff Volume<\/h2>\n        <img className=\"size-6 shrink-0\" src={userCircleIcon} alt=\"\" aria-hidden=\"true\" />\n      <\/div>\n      <div className=\"flex items-center gap-2\">\n        <p className=\"text-[color:var(--text-primary)] text-4xl font-bold leading-[20px]\">1284<\/p>\n        <div className=\"flex px-1.5 py-0.5 items-center gap-0.5 rounded-[99px] bg-[#DCFCE7]\">\n          <img className=\"size-6 shrink-0\" src={icon} alt=\"\" aria-hidden=\"true\" />\n          <p className=\"text-[#16A34A] text-xs font-medium leading-[20px]\">12.4%<\/p>\n        <\/div>\n        <p className=\"text-[#6B7280] text-xs font-medium leading-[20px]\">vs Last Week<\/p>\n      <\/div>\n      <p className=\"text-[color:var(--text-primary)] text-sm font-medium leading-[20px]\">{\"Revenue up \"}<span className=\"font-bold text-[#00994D]\">12%<\/span>{\" this week\"}<\/p>\n      <ul className=\"flex gap-3 self-stretch p-0 m-0 list-none\">\n        <StatCard label=\"Sessions\" value=\"342\" />\n        <StatCard label=\"Avg puffs\" value=\"18.2\" />\n        <StatCard label=\"Peak day\" value=\"Friday\" />\n      <\/ul>\n      <img className=\"w-[372px] h-[120px]\" src={simpleBarRepresentationImg} alt=\"Simple Bar Representation\" />\n      <Button variant=\"primary\" size=\"large\" showIcon>View report<\/Button>\n    <\/div>\n  );\n}\n"}, {"name": "tokens.css", "lang": "css", "code": "/* Design tokens from Figma variables */\n:root {\n  --space-4: 16px;\n  --surface: #FFFFFF;\n  --text-primary: #111827;\n}\n\n[data-theme=\"dark\"] {\n  --surface: #121726;\n}\n\n[data-density=\"compact\"] {\n  --space-4: 12px;\n}\n"}], "assets": [{"id": "28", "file": "simple-bar-representation.png", "format": "PNG", "scale": 2}, {"id": "6", "file": "user-circle.svg", "format": "SVG", "scale": 1}, {"id": "10", "file": "icon.svg", "format": "SVG", "scale": 1}], "preview": {"w": 420, "h": 400, "inlinedKB": 0}, "truncated": false, "stats": {"layers": 23, "classes": 16, "assets": 3, "tokens": 3, "modes": 2, "mapped": 1}, "fonts": [{"family": "Inter", "kind": "sans", "source": "google", "variants": [{"key": "0,500", "weight": 500, "italic": false, "style": "Medium", "uploaded": false, "onGoogle": true}, {"key": "0,600", "weight": 600, "italic": false, "style": "Semi Bold", "uploaded": false, "onGoogle": true}, {"key": "0,700", "weight": 700, "italic": false, "style": "Bold", "uploaded": false, "onGoogle": true}]}]}, "react-css": {"files": [{"name": "Insights.jsx", "lang": "jsx", "code": "import { Button } from '@/components/ui/button';\nimport simpleBarRepresentationImg from './assets/simple-bar-representation.png';\nimport userCircleIcon from './assets/user-circle.svg';\nimport icon from './assets/icon.svg';\nimport './Insights.css';\n\nfunction StatCard({ label, value }) {\n  return (\n    <li className=\"stat-card\">\n      <p className=\"stat-card__label\">{label}<\/p>\n      <p className=\"stat-card__value\">{value}<\/p>\n    <\/li>\n  );\n}\n\nexport default function Insights() {\n  return (\n    <div className=\"insights\">\n      <div className=\"insights__header\">\n        <h2 className=\"insights__title\">Weekly puff Volume<\/h2>\n        <img className=\"insights__icon\" src={userCircleIcon} alt=\"\" aria-hidden=\"true\" />\n      <\/div>\n      <div className=\"insights__row\">\n        <p className=\"insights__value\">1284<\/p>\n        <div className=\"insights__badge\">\n          <img className=\"insights__icon\" src={icon} alt=\"\" aria-hidden=\"true\" />\n          <p className=\"insights__change\">12.4%<\/p>\n        <\/div>\n        <p className=\"insights__vs-last-week\">vs Last Week<\/p>\n      <\/div>\n      <p className=\"insights__text\">{\"Revenue up \"}<span className=\"insights__text-accent\">12%<\/span>{\" this week\"}<\/p>\n      <ul className=\"insights__list\">\n        <StatCard label=\"Sessions\" value=\"342\" />\n        <StatCard label=\"Avg puffs\" value=\"18.2\" />\n        <StatCard label=\"Peak day\" value=\"Friday\" />\n      <\/ul>\n      <img className=\"insights__image\" src={simpleBarRepresentationImg} alt=\"Simple Bar Representation\" />\n      <Button variant=\"primary\" size=\"large\" showIcon>View report<\/Button>\n    <\/div>\n  );\n}\n"}, {"name": "Insights.css", "lang": "css", "code": "/* Design tokens */\n:root {\n  --space-4: 16px;\n  --surface: #FFFFFF;\n  --text-primary: #111827;\n}\n\n[data-theme=\"dark\"] {\n  --surface: #121726;\n}\n\n[data-density=\"compact\"] {\n  --space-4: 12px;\n}\n\n/* Scoped reset \u2014 Figma has no default margins */\n.insights, .insights *, .insights *::before, .insights *::after { box-sizing: border-box; }\n.insights :where(h1, h2, h3, p, ul, li, figure) { margin: 0; padding: 0; }\n.insights :where(button) { border: 0; background: none; padding: 0; font: inherit; color: inherit; cursor: pointer; }\n.insights :where(a) { color: inherit; text-decoration: none; }\n.insights :where(img) { display: block; }\n\n.insights {\n  display: flex;\n  width: 420px;\n  padding: 24px;\n  flex-direction: column;\n  gap: var(--space-4);\n  border-radius: 16px;\n  background: var(--surface);\n  font-family: Inter;\n}\n\n.insights__header {\n  display: flex;\n  justify-content: space-between;\n  align-items: center;\n  align-self: stretch;\n}\n\n.insights__title {\n  color: var(--text-primary);\n  font-size: 14px;\n  font-weight: 500;\n  line-height: 20px;\n}\n\n.insights__icon {\n  width: 24px;\n  height: 24px;\n  flex-shrink: 0;\n}\n\n.insights__row {\n  display: flex;\n  align-items: center;\n  gap: 8px;\n}\n\n.insights__value {\n  color: var(--text-primary);\n  font-size: 36px;\n  font-weight: 700;\n  line-height: 20px;\n}\n\n.insights__badge {\n  display: flex;\n  padding: 2px 6px;\n  align-items: center;\n  gap: 2px;\n  border-radius: 99px;\n  background: #DCFCE7;\n}\n\n.insights__change {\n  color: #16A34A;\n  font-size: 12px;\n  font-weight: 500;\n  line-height: 20px;\n}\n\n.insights__vs-last-week {\n  color: #6B7280;\n  font-size: 12px;\n  font-weight: 500;\n  line-height: 20px;\n}\n\n.insights__text {\n  color: var(--text-primary);\n  font-size: 14px;\n  font-weight: 500;\n  line-height: 20px;\n}\n\n.insights__text-accent {\n  font-weight: 700;\n  color: #00994D;\n}\n\n.insights__list {\n  display: flex;\n  gap: 12px;\n  align-self: stretch;\n  padding: 0;\n  margin: 0;\n  list-style: none;\n}\n\n.stat-card {\n  display: flex;\n  padding: 16px;\n  flex-direction: column;\n  gap: 4px;\n  border-radius: 12px;\n  background: var(--surface);\n  flex: 1 0 0;\n}\n\n.stat-card__label {\n  color: #6B7280;\n  font-size: 12px;\n  font-weight: 500;\n  line-height: 20px;\n}\n\n.stat-card__value {\n  color: var(--text-primary);\n  font-size: 20px;\n  font-weight: 700;\n  line-height: 20px;\n}\n\n.insights__image {\n  width: 372px;\n  height: 120px;\n}\n"}], "assets": [{"id": "28", "file": "simple-bar-representation.png", "format": "PNG", "scale": 2}, {"id": "6", "file": "user-circle.svg", "format": "SVG", "scale": 1}, {"id": "10", "file": "icon.svg", "format": "SVG", "scale": 1}], "preview": {"w": 420, "h": 400, "inlinedKB": 0}, "truncated": false, "stats": {"layers": 23, "classes": 16, "assets": 3, "tokens": 3, "modes": 2, "mapped": 1}, "fonts": [{"family": "Inter", "kind": "sans", "source": "google", "variants": [{"key": "0,500", "weight": 500, "italic": false, "style": "Medium", "uploaded": false, "onGoogle": true}, {"key": "0,600", "weight": 600, "italic": false, "style": "Semi Bold", "uploaded": false, "onGoogle": true}, {"key": "0,700", "weight": 700, "italic": false, "style": "Bold", "uploaded": false, "onGoogle": true}]}]}, "swiftui": {"files": [{"name": "Insights.swift", "lang": "swift", "code": "import SwiftUI\n\nstruct StatCard: View {\n    let label: String\n    let value: String\n\n    var body: some View {\n        VStack(alignment: .leading, spacing: 4) {\n            Text(label)\n                .font(.custom(\"Inter\", size: 12).weight(.medium))\n                .foregroundStyle(Color(red: 0.42, green: 0.45, blue: 0.5))\n                .lineSpacing(5.6)\n            Text(value)\n                .font(.custom(\"Inter\", size: 20).weight(.bold))\n                .foregroundStyle(Color.textPrimary)\n        }\n        .padding(16)\n        .frame(maxWidth: .infinity, alignment: .topLeading)\n        .background(Color.surface)\n        .clipShape(RoundedRectangle(cornerRadius: 12))\n    }\n}\n\nstruct Insights: View {\n    var body: some View {\n        VStack(alignment: .leading, spacing: 16) {\n            HStack(alignment: .center, spacing: 0) {\n                Text(\"Weekly puff Volume\")\n                    .font(.custom(\"Inter\", size: 14).weight(.medium))\n                    .foregroundStyle(Color.textPrimary)\n                    .lineSpacing(3.2)\n                Spacer(minLength: 0)\n                Image(\"user-circle\")\n                    .resizable()\n                    .scaledToFit()\n                    .frame(width: 24, height: 24)\n                    .accessibilityHidden(true)\n            }\n            .frame(maxWidth: .infinity, alignment: .leading)\n            HStack(alignment: .center, spacing: 8) {\n                Text(\"1284\")\n                    .font(.custom(\"Inter\", size: 36).weight(.bold))\n                    .foregroundStyle(Color.textPrimary)\n                HStack(alignment: .center, spacing: 2) {\n                    Image(\"icon\")\n                        .resizable()\n                        .scaledToFit()\n                        .frame(width: 24, height: 24)\n                        .accessibilityHidden(true)\n                    Text(\"12.4%\")\n                        .font(.custom(\"Inter\", size: 12).weight(.medium))\n                        .foregroundStyle(Color(red: 0.09, green: 0.64, blue: 0.29))\n                        .lineSpacing(5.6)\n                }\n                .padding(.horizontal, 6)\n                .padding(.vertical, 2)\n                .background(Color(red: 0.86, green: 0.99, blue: 0.91))\n                .clipShape(RoundedRectangle(cornerRadius: 99))\n                Text(\"vs Last Week\")\n                    .font(.custom(\"Inter\", size: 12).weight(.medium))\n                    .foregroundStyle(Color(red: 0.42, green: 0.45, blue: 0.5))\n                    .lineSpacing(5.6)\n            }\n            (Text(\"Revenue up \") + Text(\"12%\").fontWeight(.bold).foregroundColor(Color(red: 0, green: 0.6, blue: 0.3)) + Text(\" this week\"))\n                .font(.custom(\"Inter\", size: 14).weight(.medium))\n                .foregroundStyle(Color.textPrimary)\n                .lineSpacing(3.2)\n            HStack(alignment: .top, spacing: 12) {\n                StatCard(label: \"Sessions\", value: \"342\")\n                StatCard(label: \"Avg puffs\", value: \"18.2\")\n                StatCard(label: \"Peak day\", value: \"Friday\")\n            }\n            .frame(maxWidth: .infinity, alignment: .leading)\n            Image(\"simple-bar-representation\")\n                .resizable()\n                .scaledToFit()\n                .frame(width: 372, height: 120)\n            Button(action: {}) {\n                HStack(alignment: .top, spacing: 0) {\n                    Text(\"View report\")\n                        .font(.custom(\"Inter\", size: 14).weight(.semibold))\n                        .foregroundStyle(Color(red: 1, green: 1, blue: 1))\n                        .lineSpacing(3.2)\n                }\n            }\n            .buttonStyle(.plain)\n            .padding(.horizontal, 24)\n            .padding(.vertical, 12)\n            .background(Color.brand)\n            .clipShape(RoundedRectangle(cornerRadius: 8))\n        }\n        .padding(24)\n        .frame(width: 420)\n        .background(Color.surface)\n        .clipShape(RoundedRectangle(cornerRadius: 16))\n    }\n}\n\n#Preview {\n    Insights()\n}\n\n// MARK: - Design tokens (from Figma variables)\nextension Color {\n    static let textPrimary = Color(red: 0.07, green: 0.09, blue: 0.15)\n    static let surface = Color(light: Color(red: 1, green: 1, blue: 1), dark: Color(red: 0.07, green: 0.09, blue: 0.15))\n    static let brand = Color(red: 0.05, green: 0.6, blue: 1)\n}\n\nextension Color {\n    /// Light/dark aware color, mirroring Figma variable modes.\n    init(light: Color, dark: Color) {\n        self.init(UIColor { $0.userInterfaceStyle == .dark ? UIColor(dark) : UIColor(light) })\n    }\n}\n\n// Assets: add to Assets.xcassets \u2192 simple-bar-representation, user-circle, icon\n"}], "assets": [{"id": "28", "file": "simple-bar-representation.png", "format": "PNG", "scale": 2}, {"id": "6", "file": "user-circle.svg", "format": "SVG", "scale": 1}, {"id": "10", "file": "icon.svg", "format": "SVG", "scale": 1}], "preview": {"w": 420, "h": 400, "inlinedKB": 0}, "truncated": false, "stats": {"layers": 24, "classes": 18, "assets": 3, "tokens": 4, "modes": 2, "mapped": 0}}, "compose": {"files": [{"name": "Insights.kt", "lang": "kotlin", "code": "import androidx.compose.foundation.Image\nimport androidx.compose.foundation.background\nimport androidx.compose.foundation.border\nimport androidx.compose.foundation.clickable\nimport androidx.compose.foundation.layout.*\nimport androidx.compose.foundation.shape.RoundedCornerShape\nimport androidx.compose.material3.Text\nimport androidx.compose.runtime.Composable\nimport androidx.compose.ui.Alignment\nimport androidx.compose.ui.Modifier\nimport androidx.compose.ui.draw.alpha\nimport androidx.compose.ui.draw.clip\nimport androidx.compose.ui.draw.shadow\nimport androidx.compose.ui.graphics.Color\nimport androidx.compose.ui.res.painterResource\nimport androidx.compose.ui.semantics.Role\nimport androidx.compose.ui.text.SpanStyle\nimport androidx.compose.ui.text.buildAnnotatedString\nimport androidx.compose.ui.text.withStyle\nimport androidx.compose.ui.text.style.TextDecoration\nimport androidx.compose.ui.text.font.FontWeight\nimport androidx.compose.ui.text.style.TextAlign\nimport androidx.compose.ui.tooling.preview.Preview\nimport androidx.compose.ui.unit.dp\nimport androidx.compose.ui.unit.sp\n\n@Composable\nfun StatCard(label: String, value: String, modifier: Modifier = Modifier) {\n    Column(\n        modifier = modifier\n            .clip(RoundedCornerShape(12.dp))\n            .background(AppColors.Surface)\n            .padding(16.dp),\n        verticalArrangement = Arrangement.spacedBy(4.dp),\n    ) {\n        Text(\n            text = label,\n            fontSize = 12.sp,\n            fontWeight = FontWeight.Medium,\n            color = Color(0xFF6B7280),\n            lineHeight = 20.sp,\n        )\n        Text(\n            text = value,\n            fontSize = 20.sp,\n            fontWeight = FontWeight.Bold,\n            color = AppColors.TextPrimary,\n            lineHeight = 20.sp,\n        )\n    }\n}\n\n@Composable\nfun Insights(modifier: Modifier = Modifier) {\n    Column(\n        modifier = modifier\n            .width(420.dp)\n            .clip(RoundedCornerShape(16.dp))\n            .background(AppColors.Surface)\n            .padding(24.dp),\n        verticalArrangement = Arrangement.spacedBy(16.dp),\n    ) {\n        Row(\n            modifier = Modifier\n                .fillMaxWidth(),\n            horizontalArrangement = Arrangement.SpaceBetween,\n            verticalAlignment = Alignment.CenterVertically,\n        ) {\n            Text(\n                text = \"Weekly puff Volume\",\n                fontSize = 14.sp,\n                fontWeight = FontWeight.Medium,\n                color = AppColors.TextPrimary,\n                lineHeight = 20.sp,\n            )\n            Image(\n                painter = painterResource(R.drawable.user_circle),\n                contentDescription = null,\n                modifier = Modifier\n                    .size(24.dp),\n            )\n        }\n        Row(\n            horizontalArrangement = Arrangement.spacedBy(8.dp),\n            verticalAlignment = Alignment.CenterVertically,\n        ) {\n            Text(\n                text = \"1284\",\n                fontSize = 36.sp,\n                fontWeight = FontWeight.Bold,\n                color = AppColors.TextPrimary,\n                lineHeight = 20.sp,\n            )\n            Row(\n                modifier = Modifier\n                    .clip(RoundedCornerShape(99.dp))\n                    .background(Color(0xFFDCFCE7))\n                    .padding(horizontal = 6.dp, vertical = 2.dp),\n                horizontalArrangement = Arrangement.spacedBy(2.dp),\n                verticalAlignment = Alignment.CenterVertically,\n            ) {\n                Image(\n                    painter = painterResource(R.drawable.icon),\n                    contentDescription = null,\n                    modifier = Modifier\n                        .size(24.dp),\n                )\n                Text(\n                    text = \"12.4%\",\n                    fontSize = 12.sp,\n                    fontWeight = FontWeight.Medium,\n                    color = Color(0xFF16A34A),\n                    lineHeight = 20.sp,\n                )\n            }\n            Text(\n                text = \"vs Last Week\",\n                fontSize = 12.sp,\n                fontWeight = FontWeight.Medium,\n                color = Color(0xFF6B7280),\n                lineHeight = 20.sp,\n            )\n        }\n        Text(\n            text = buildAnnotatedString {\n                append(\"Revenue up \")\n                withStyle(SpanStyle(fontWeight = FontWeight.Bold, color = Color(0xFF00994D))) { append(\"12%\") }\n                append(\" this week\")\n            },\n            fontSize = 14.sp,\n            fontWeight = FontWeight.Medium,\n            color = AppColors.TextPrimary,\n            lineHeight = 20.sp,\n        )\n        Row(\n            modifier = Modifier\n                .fillMaxWidth(),\n            horizontalArrangement = Arrangement.spacedBy(12.dp),\n        ) {\n            StatCard(label = \"Sessions\", value = \"342\", modifier = Modifier.weight(1f))\n            StatCard(label = \"Avg puffs\", value = \"18.2\", modifier = Modifier.weight(1f))\n            StatCard(label = \"Peak day\", value = \"Friday\", modifier = Modifier.weight(1f))\n        }\n        Image(\n            painter = painterResource(R.drawable.simple_bar_representation),\n            contentDescription = \"Simple Bar Representation\",\n            modifier = Modifier\n                .width(372.dp)\n                .height(120.dp),\n        )\n        Row(\n            modifier = Modifier\n                .clip(RoundedCornerShape(8.dp))\n                .background(AppColors.Brand)\n                .padding(horizontal = 24.dp, vertical = 12.dp)\n                .clickable(role = Role.Button) { /* TODO: onClick */ },\n            horizontalArrangement = Arrangement.spacedBy(0.dp, Alignment.CenterHorizontally),\n        ) {\n            Text(\n                text = \"View report\",\n                fontSize = 14.sp,\n                fontWeight = FontWeight.SemiBold,\n                color = Color(0xFFFFFFFF),\n                lineHeight = 20.sp,\n            )\n        }\n    }\n}\n\n@Preview(showBackground = true)\n@Composable\nprivate fun InsightsPreview() {\n    Insights()\n}\n\n// Design tokens (from Figma variables)\nobject AppColors {\n    val Surface = Color(0xFFFFFFFF)\n    val TextPrimary = Color(0xFF111827)\n    val Brand = Color(0xFF0D99FF)\n}\n\nobject AppColorsDark {\n    val Surface = Color(0xFF121726)\n}\n\n// Drawables: import into res/drawable (SVG \u2192 Vector Asset): simple_bar_representation, user_circle, icon\n"}], "assets": [{"id": "28", "file": "simple-bar-representation.png", "format": "PNG", "scale": 2}, {"id": "6", "file": "user-circle.svg", "format": "SVG", "scale": 1}, {"id": "10", "file": "icon.svg", "format": "SVG", "scale": 1}], "preview": {"w": 420, "h": 400, "inlinedKB": 0}, "truncated": false, "stats": {"layers": 24, "classes": 18, "assets": 3, "tokens": 4, "modes": 2, "mapped": 0}}};
+const DEMO_THUMBS = {
+  '1:20': '<svg xmlns="http://www.w3.org/2000/svg" width="164" height="24" viewBox="0 0 164 24"><rect width="164" height="24" rx="6" fill="#0D99FF"/><text x="82" y="16" font-family="Inter,Arial" font-size="10" font-weight="600" fill="#fff" text-anchor="middle">Pay ₹1,499</text></svg>',
+  '1:21': '<svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" viewBox="0 0 16 16" fill="none" stroke="#333" stroke-width="1.2"><rect x="3.5" y="7.5" width="9" height="6" rx="1"/><path d="M5.5 7.5V5.5a2.5 2.5 0 0 1 5 0v2"/></svg>',
+  '1:22': '<svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" viewBox="0 0 16 16" fill="none" stroke="#333" stroke-width="1.2"><path d="M3 8h10M9 4l4 4-4 4"/></svg>'
+};
+
+render();
+send({ type: 'ui-ready' });
+setTimeout(() => {
+  if (S.got) return;
+  S.demo = true; S.data = JSON.parse(JSON.stringify(DEMO));
+  Object.keys(DEMO_THUMBS).forEach(k => { S.thumbs[k] = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(DEMO_THUMBS[k]); });
+  render();
+}, 1500);
+</script>
+</body>
+</html>

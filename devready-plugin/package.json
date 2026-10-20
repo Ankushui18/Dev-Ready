@@ -1,18 +1,31 @@
 {
   "name": "dev-ready",
-  "version": "1.0.0",
-  "description": "Free Figma plugin: Dev Mode-style inspect, change tracking and design-to-code (React, HTML, SwiftUI, Compose), gated on Ready for dev.",
+  "version": "1.2.0",
+  "description": "Free Figma plugin: Dev Mode-style inspect, change tracking and design-to-code (React, Tailwind, HTML, SwiftUI, Compose), gated on Ready for dev.",
   "private": true,
   "license": "MIT",
-  "repository": { "type": "git", "url": "https://github.com/Ankushui18/Dev-Ready.git" },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Ankushui18/Dev-Ready.git"
+  },
   "scripts": {
     "test": "node tests/run.js",
     "test:report": "node tests/run.js --report",
+    "test:browser": "python3 tests/browser.py",
+    "lint": "node scripts/lint.js",
+    "lint:fix": "node scripts/lint.js --fix",
     "check": "node devready-plugin/check-sandbox.js",
+    "check:layout": "node scripts/check-layout.js",
+    "verify": "npm run check:layout && npm run check && npm run lint && npm test",
     "zip": "node scripts/zip.js"
   },
   "devDependencies": {
-    "esbuild": "0.24.2"
+    "@eslint/js": "^10.0.1",
+    "esbuild": "0.24.2",
+    "eslint": "^10.13.0",
+    "globals": "^17.13.0"
   },
-  "engines": { "node": ">=18" }
+  "engines": {
+    "node": ">=18"
+  }
 }
