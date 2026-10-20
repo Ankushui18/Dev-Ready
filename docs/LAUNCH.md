@@ -75,22 +75,52 @@ A 30–45 second screen recording works better than any still image. Show: selec
 
 Test each row on a real file. Record ✅ / ⚠️ / ❌ and a one-line note.
 
+**Already run, 20 October 2026**, on a real file (a 393×852 mobile "home" frame,
+292 layers beneath it). Screenshots: [`docs/screenshots/real-file/`](screenshots/real-file/).
+Rows marked ✅ below are what those screenshots actually show — nothing more.
+
 | # | Environment | What to check | Result |
 |---|---|---|---|
-| 1 | Design Mode, panel | Mark ready (native + flag), gate lock/unlock, Inspect, all sections render | |
-| 2 | Design Mode, panel | Annotate: native annotation appears (Shift+Y); canvas note on a free plan; group → note fallback | |
-| 3 | Design Mode, panel | Start tracking → edit text/fill/padding/rename → change list shows correct before → after; 1,000+ layer frame doesn't error | |
-| 4 | Design Mode, panel | Export PNG/SVG/PDF; ZIP download; project ZIP with fonts | |
-| 5 | Dev Mode, Inspect → Plugins | Read-only behaviour: flag instead of native status; no canvas writes | |
-| 6 | Dev Mode, Inspect → Code | Each DevReady language returns within 3 s on a medium frame; preferences (unit, gate) apply | |
-| 7 | Figma for VS Code | Codegen languages appear and produce output | |
-| 8 | Panel width | Narrowest and widest Inspect panel: no overflow or clipped buttons | |
-| 9 | Themes | Light and dark: all text readable, chips and buttons visible | |
-| 10 | Fonts | Google font, variable weight (e.g. 450), custom font (upload), system font (SF); ⋯ → Load Google Fonts in preview off → no font requests | |
-| 11 | Variables | Light/dark collection: tokens and modes correct in CSS, SwiftUI and Compose | |
-| 12 | Remote library | Instance of a library component; variables from a library | |
-| 13 | Preview sandbox | Preview renders, height fits, Overlay/Difference work inside Figma's UI iframe (sandboxed `srcdoc` + CSP) | |
-| 14 | Message validation | Normal use never shows a "DevReady: invalid …" toast (component mapping, export at 0.5x–4x, font upload, dev resources, settings) | |
+| 1 | Design Mode, panel | Mark ready (native + flag), gate lock/unlock, Inspect, all sections render | ✅ Panel renders; frame reported as **Ready for dev · home · Figma status**; empty state lists both ready frames. *DevReady flag (free plan) not exercised.* |
+| 2 | Design Mode, panel | Annotate: native annotation appears (Shift+Y); canvas note on a free plan; group → note fallback | ❌ Not run. The section and its "not seeing annotations?" help render, but no annotation was added. |
+| 3 | Design Mode, panel | Start tracking → edit text/fill/padding/rename → change list shows correct before → after; 1,000+ layer frame doesn't error | ⚠️ A baseline exists ("No changes since ready for dev · 20 Oct, 17:09", **Clear** works). No edit was made, so before → after was not exercised. |
+| 4 | Design Mode, panel | Export PNG/SVG/PDF; ZIP download; project ZIP with fonts | ⚠️ UI verified: 19 assets detected, per-asset SVG download and **Download project** render. The downloaded files were not opened. |
+| 5 | Dev Mode, Inspect → Plugins | Read-only behaviour: flag instead of native status; no canvas writes | ❌ Not run. |
+| 6 | Dev Mode, Inspect → Code | Each DevReady language returns within 3 s on a medium frame; preferences (unit, gate) apply | ❌ Not run. |
+| 7 | Figma for VS Code | Codegen languages appear and produce output | ❌ Not run. |
+| 8 | Panel width | Narrowest and widest Inspect panel: no overflow or clipped buttons | ⚠️ One width (single column, Figma's default Inspect panel): no overflow, no clipped buttons. |
+| 9 | Themes | Light and dark: all text readable, chips and buttons visible | ⚠️ Dark only. Light theme not captured. |
+| 10 | Fonts | Google font, variable weight (e.g. 450), custom font (upload), system font (SF); ⋯ → Load Google Fonts in preview off → no font requests | ⚠️ "Fonts · 5 families" detected. Upload, variable weight and preview-off were not exercised. |
+| 11 | Variables | Light/dark collection: tokens and modes correct in CSS, SwiftUI and Compose | ⚠️ A single-mode variable resolved correctly (`background: var(--zinc-950, #09090B)` in the CSS panel and under Variables). Multi-mode not exercised. |
+| 12 | Remote library | Instance of a library component; variables from a library | ❌ Not run. |
+| 13 | Preview sandbox | Preview renders, height fits, Overlay/Difference work inside Figma's UI iframe (sandboxed `srcdoc` + CSP) | ❌ Not run (the Preview tab exists; it was not opened inside Figma). |
+| 14 | Message validation | Normal use never shows a "DevReady: invalid …" toast (component mapping, export at 0.5x–4x, font upload, dev resources, settings) | ⚠️ No invalid-input toast appeared during the session. That is consistent with validation working, not proof of it. |
+
+### What the 20 October session did establish
+
+- The panel runs in the **real Figma desktop app**, in Design mode, at Figma's default
+  Inspect width, in the dark theme.
+- **Gate and status source** are correct: a native *Ready for dev* frame is labelled
+  **Figma status**, and two ready frames are listed when nothing is selected.
+- **Inspect sections populate from a real file**: dimensions (393 × 852), box model,
+  background colour (`zinc/950` → `#09090B`), variables, 12 child layers, 19 assets.
+- **Full-tree HTML + CSS generation on a 214-layer frame**: semantic class names
+  (`home__heading-3`, `home__caption`), 50 tokens, 19 assets, no truncation warning.
+- **The accessibility audit produces real findings** on real content (4.5:1 body text
+  failing at 3.71:1, 9–10px text, gradient backgrounds flagged as unmeasurable
+  rather than guessed).
+
+### Known gaps this session exposed (fixed in 1.5.0)
+
+- The Accessibility section rendered **one row per layer**, so a design with repeated
+  text produced ~40 near-identical rows and pushed Variables and Assets below the
+  fold. Identical findings are now grouped (`40 layers · #6B7280 on #09090B · 4.12:1`)
+  and the list is capped with "Show N more".
+
+### Still required before publishing
+
+Rows 2, 5, 6, 7, 12, 13 and the light theme. In particular **Dev Mode is the surface
+most developers will use**, and it has not been run at all yet.
 
 ## 4. First 30 days after approval
 

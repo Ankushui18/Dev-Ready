@@ -2,6 +2,33 @@
 
 All notable changes to DevReady are listed here. The format follows [Keep a Changelog](https://keepachangelog.com/), and versions follow [SemVer](https://semver.org/).
 
+## [1.5.0] — 2026-10-20
+
+First run on a real Figma file, and the two things that run exposed.
+
+### Added
+- **Environment test matrix filled in** (`docs/LAUNCH.md`), row by row, from a real
+  session on 20 October 2026: Design mode, Figma's default Inspect width, dark theme,
+  a 393×852 "home" frame with 292 layers beneath it. Screenshots are in
+  `docs/screenshots/real-file/`.
+  - Verified: the panel renders, a native *Ready for dev* frame is labelled
+    **Figma status**, dimensions/box model/background/variables/layers/assets populate
+    from the file, full-tree HTML + CSS on a **214-layer** frame (50 tokens, 19 assets,
+    no truncation), and the accessibility audit reports real findings on real content.
+  - **Not yet run:** Dev Mode → Plugins, Dev Mode → Code section, Figma for VS Code,
+    annotations, exports (opened), the preview overlay, remote libraries, light theme.
+    The README says so instead of implying full coverage.
+
+### Fixed
+- **The Accessibility section produced one row per layer.** On a design with repeated
+  content — a carousel, a list of identical cards — that meant ~40 near-identical rows
+  that pushed Variables and Assets below the fold. Identical findings are now grouped:
+  `40 layers · #6B7280 on #09090B · 4.12:1 needs 4.5`, with a count, the real layer ids
+  behind it, and click-to-select. Different problems stay separate, and passing rows
+  never merge with failing ones.
+- **The list is capped** at 25 groups with *Show N more*, so a frame with thousands of
+  text layers cannot make the panel slow to render.
+
 ## [1.4.0] — 2026-10-20
 
 Follow-up to a second audit. Two of its findings were real; one was a stale read.

@@ -99,6 +99,7 @@
   .a-sum .pill.warn { background: var(--warn-tint); color: var(--warn-fg); }
   .a-sum .pill.ok { background: var(--green-tint); color: var(--green-fg); }
   .a-row { height: auto; min-height: 32px; padding-top: 3px; padding-bottom: 3px; }
+  .a-count { flex-shrink: 0; height: 16px; padding: 0 5px; border-radius: 8px; background: var(--bg3); color: var(--fg2); font-size: 10px; font-weight: 600; display: inline-flex; align-items: center; margin-right: 6px; }
   .a-row .ln { display: flex; flex-direction: column; min-width: 0; line-height: 15px; }
   .a-row .ln small { color: var(--fg2); font-size: 11px; white-space: normal; }
   .a-sw { width: 28px; height: 20px; border-radius: 4px; display: inline-grid; place-items: center; font-weight: 700; font-size: 11px; box-shadow: inset 0 0 0 1px rgba(128,128,128,.35); flex-shrink: 0; }
@@ -1337,26 +1338,36 @@ function secVariables(sp) {
     (sp.explicitModes ? '<div class="faint" style="margin-top:4px">Layer mode: ' + sp.explicitModes.map(m => esc(m.collection) + ' → ' + esc(m.mode)).join(', ') + '</div>' : ''), sp.tokens.length);
 }
 /* ---------- Accessibility ---------- */
-function a11yRow(i) {
+const A11Y_MAX_ROWS = 25;
+/* One row per distinct problem; g.count says how many layers share it. */
+function a11yRow(g) {
+  const i = g.item || g;
   let lead = '<span class="a-dot ' + i.status + '"></span>', sub, meta = '';
   if (i.kind === 'contrast' && i.status !== 'unknown') {
     lead = '<span class="a-sw" style="color:' + esc(i.fg) + ';background:' + esc(i.bg) + '">Aa</span>';
     sub = esc(i.fg) + ' on ' + esc(i.bg) + (i.assumed ? ' (assumed white)' : '') + (i.large ? ' \u00b7 large text' : '');
     meta = '<span class="a-ratio ' + i.status + '">' + i.ratio + ':1<small>' + (i.status === 'fail' ? 'needs ' + i.need : i.aaa ? 'AAA' : 'AA') + '</small></span>';
   } else sub = esc(i.detail || '');
-  return '<div class="list-row a-row" data-select="' + esc(i.id) + '">' + lead + '<span class="ln"><span>' + esc(i.name) + '</span><small>' + sub + '</small></span>' + meta + '</div>';
+  const many = g.count > 1 ? '<span class="a-count" title="' + g.count + ' layers have this exact problem">+' + (g.count - 1) + ' more</span>' : '';
+  const name = esc(i.name);
+  return '<div class="list-row a-row" data-select="' + esc(g.ids ? g.ids[0] : i.id) + '">' + lead + '<span class="ln"><span>' + name + '</span><small>' + sub + '</small></span>' + many + meta + '</div>';
 }
 function secA11y(d) {
   const a = d.a11y;
   if (!a || !a.items || !a.items.length) return '';
-  const c = a.counts, issues = a.items.filter(i => i.status !== 'pass');
+  const c = a.counts;
+  const groups = a.groups && a.groups.length ? a.groups : a.items.map(i => ({ kind: i.kind, status: i.status, count: 1, ids: [i.id], item: i }));
+  const issues = groups.filter(g => g.status !== 'pass');
   const pills = '<div class="a-sum">' +
     (c.fail ? '<span class="pill bad"><i></i>' + c.fail + ' failing</span>' : '') + (c.warn ? '<span class="pill warn"><i></i>' + c.warn + ' to review</span>' : '') +
     (c.unknown ? '<span class="pill"><i></i>' + c.unknown + ' unmeasured</span>' : '') + (c.pass ? '<span class="pill ok"><i></i>' + c.pass + ' passing</span>' : '') + '</div>';
-  const rows = (S.a11yAll ? a.items : issues).map(a11yRow).join('');
+  const shown = (S.a11yAll ? groups : issues);
+  const capped = shown.slice(0, S.a11yMore ? shown.length : A11Y_MAX_ROWS);
+  const rows = capped.map(a11yRow).join('');
+  const more = shown.length > capped.length ? '<button class="mini" data-act="a11y-more" style="margin-top:4px">Show ' + (shown.length - capped.length) + ' more</button>' : '';
   const toggle = c.pass ? '<button class="mini" data-act="a11y-all" style="margin-top:4px">' + (S.a11yAll ? 'Show only issues' : 'Show ' + c.pass + ' passing') + '</button>' : '';
   const empty = !issues.length && !S.a11yAll ? '<div class="muted" style="padding:2px 0 4px">No contrast or touch-target problems found in this layer.</div>' : '';
-  return sec('Accessibility', '', pills + rows + empty + toggle + '<div class="faint" style="margin-top:6px">WCAG 2.2 AA: text 4.5:1 (3:1 for large text), targets 24\u00d724 (44\u00d744 recommended on touch). Checked ' + a.scanned + ' layers' + (a.limited ? ' (stopped at the limit)' : '') + '.</div>', c.fail + c.warn);
+  return sec('Accessibility', '', pills + rows + more + empty + toggle + '<div class="faint" style="margin-top:6px">WCAG 2.2 AA: text 4.5:1 (3:1 for large text), targets 24\u00d724 (44\u00d744 recommended on touch). Checked ' + a.scanned + ' layers' + (a.limited ? ' (stopped at the limit)' : '') + '.</div>', c.fail + c.warn);
 }
 
 /* ---------- Design tokens export ---------- */
@@ -1474,7 +1485,8 @@ document.addEventListener('click', e => {
   const live = ['baseline-save', 'baseline-clear', 'measure-native', 'measure-clear', 'ann-add', 'ann-del', 'res-add', 'res-del', 'map-save', 'map-del', 'notes-clear', 'goto-main'];
   if (S.demo && live.indexOf(act) > -1) { S.form = null; render(); return toast('Works inside Figma'); }
   if (act === 'sec-toggle') { const k = a.getAttribute('data-key'); S.closed[k] = !S.closed[k]; render(); return; }
-  if (act === 'a11y-all') { S.a11yAll = !S.a11yAll; render(); return; }
+  if (act === 'a11y-all') { S.a11yAll = !S.a11yAll; S.a11yMore = false; render(); return; }
+  if (act === 'a11y-more') { S.a11yMore = !S.a11yMore; render(); return; }
   if (/^tok-scope-/.test(act)) { S.tok.scope = act.slice(10); S.tok.out = null; render(); return; }
   if (act === 'tok-gen') {
     if (S.demo) { S.tok.out = Object.assign({ format: S.tok.format, scope: S.tok.scope }, DEMO_TOKENS[S.tok.format]); render(); return; }

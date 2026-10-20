@@ -2714,7 +2714,27 @@ function a11yAudit(root, limit) {
   items.forEach(i => { counts[i.status]++; });
   const order = { fail: 0, warn: 1, unknown: 2, pass: 3 };
   items.sort((a, b) => order[a.status] - order[b.status]);
-  return { items: items.slice(0, 120), counts: counts, scanned: scanned, limited: limited };
+  // Designs repeat themselves (a carousel of 30 identical cards), so one issue per
+  // layer produces a wall of identical rows. Group findings that carry the same
+  // problem: the count is the useful part ("12 layers fail 3.71:1"), and each group
+  // still points at real layers.
+  const groups = [];
+  const byKey = {};
+  items.forEach(it => {
+    const key = it.kind === 'contrast' && it.status !== 'unknown'
+      ? ['c', it.status, it.fg, it.bg, it.ratio, it.need, it.large ? 1 : 0, it.assumed ? 1 : 0].join('|')
+      : [it.kind, it.status, it.detail || ''].join('|');
+    const g = byKey[key];
+    if (!g) {
+      byKey[key] = { key: key, kind: it.kind, status: it.status, count: 1, ids: [it.id], item: it };
+      groups.push(byKey[key]);
+      return;
+    }
+    g.count++;
+    if (g.ids.length < 50) g.ids.push(it.id);
+  });
+  groups.sort((a, b) => order[a.status] - order[b.status] || b.count - a.count);
+  return { items: items.slice(0, 120), groups: groups.slice(0, 120), counts: counts, scanned: scanned, limited: limited };
 }
 
 /* ------------------------------------------------------------------ */
