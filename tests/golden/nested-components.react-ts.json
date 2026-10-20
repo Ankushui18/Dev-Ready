@@ -1,0 +1,17 @@
+[
+  {
+    "name": "Dashboard.tsx",
+    "lang": "tsx",
+    "code": "import './Dashboard.css';\n\ntype StatCardProps = {\n  label: string;\n  value: string;\n};\n\nfunction StatCard({ label, value }: StatCardProps) {\n  return (\n    <li className=\"stat-card\">\n      <p className=\"stat-card__label\">{label}</p>\n      <p className=\"stat-card__value\">{value}</p>\n    </li>\n  );\n}\n\nexport default function Dashboard() {\n  return (\n    <div className=\"dashboard\">\n      <h2 className=\"dashboard__title\">Weekly insights</h2>\n      <ul className=\"dashboard__stats\">\n        <StatCard label=\"Sessions\" value=\"342\" />\n        <StatCard label=\"Avg time\" value=\"18.2\" />\n        <StatCard label=\"Peak day\" value=\"Friday\" />\n      </ul>\n      <button className=\"primary-button\" type=\"button\">\n        <span className=\"primary-button__text\">View report</span>\n      </button>\n    </div>\n  );\n}\n"
+  },
+  {
+    "name": "assets.d.ts",
+    "lang": "ts",
+    "code": "/* Ambient declarations for asset and stylesheet imports. */\ndeclare module '*.css';\n"
+  },
+  {
+    "name": "Dashboard.css",
+    "lang": "css",
+    "code": "@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap');\n\n/* Scoped reset — Figma has no default margins */\n.dashboard, .dashboard *, .dashboard *::before, .dashboard *::after { box-sizing: border-box; }\n.dashboard :where(h1, h2, h3, p, ul, li, figure) { margin: 0; padding: 0; }\n.dashboard :where(button) { border: 0; background: none; padding: 0; font: inherit; color: inherit; cursor: pointer; }\n.dashboard :where(a) { color: inherit; text-decoration: none; }\n.dashboard :where(img) { display: block; }\n\n.dashboard {\n  display: flex;\n  flex-direction: column;\n  padding: 24px;\n  gap: 16px;\n  width: 420px;\n  background: #FFFFFF;\n  font-family: Inter, system-ui, -apple-system, \"Segoe UI\", Roboto, \"Helvetica Neue\", Arial, sans-serif;\n}\n\n.dashboard__title {\n  color: #111827;\n  font-size: 18px;\n  font-weight: 600;\n  line-height: 20px;\n  white-space: nowrap;\n}\n\n.dashboard__stats {\n  display: flex;\n  flex-direction: row;\n  gap: 12px;\n  align-self: stretch;\n  padding: 0;\n  margin: 0;\n  list-style: none;\n}\n\n.stat-card {\n  display: flex;\n  flex-direction: column;\n  padding: 16px;\n  gap: 4px;\n  border-radius: 12px;\n  background: #F9FAFB;\n  flex: 1 0 0;\n}\n\n.stat-card__label {\n  color: #6B7280;\n  font-size: 12px;\n  font-weight: 400;\n  line-height: 20px;\n  white-space: nowrap;\n}\n\n.stat-card__value {\n  color: #111827;\n  font-size: 20px;\n  font-weight: 700;\n  line-height: 20px;\n  white-space: nowrap;\n}\n\n.primary-button {\n  display: flex;\n  flex-direction: row;\n  padding: 12px 24px;\n  border-radius: 8px;\n  background: #0D99FF;\n  justify-content: center;\n}\n\n.primary-button__text {\n  color: #FFFFFF;\n  font-size: 14px;\n  font-weight: 600;\n  line-height: 20px;\n  white-space: nowrap;\n}\n"
+  }
+]

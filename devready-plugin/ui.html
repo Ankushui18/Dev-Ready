@@ -532,6 +532,7 @@ const I = {
   chevS: '<svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.2"><path d="M3.5 4.75L6 7.25l2.5-2.5"/></svg>',
   clock: '<svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor"><path d="M2.5 8a5.5 5.5 0 1 0 1.6-3.9M2.5 3v2.5H5"/><path d="M8 5.5V8l1.8 1.3"/></svg>',
   info: '<svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor"><circle cx="8" cy="8" r="6"/><path d="M8 7.2v3.6"/><circle cx="8" cy="5.2" r=".4" fill="currentColor"/></svg>',
+  trash: '<svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.2"><path d="M3.5 4.5h9M6.5 4.5V3.2c0-.4.3-.7.7-.7h1.6c.4 0 .7.3.7.7v1.3M4.6 4.5l.5 8.1c0 .5.4.9.9.9h4c.5 0 .9-.4.9-.9l.5-8.1"/></svg>',
   github: '<svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M8 .7a7.3 7.3 0 0 0-2.3 14.2c.4.1.5-.2.5-.4v-1.3c-2 .4-2.5-.9-2.5-.9-.3-.8-.8-1.1-.8-1.1-.7-.4 0-.4 0-.4.7 0 1.1.8 1.1.8.7 1.1 1.7.8 2.1.6.1-.5.3-.8.5-1-1.6-.2-3.3-.8-3.3-3.6 0-.8.3-1.5.8-2-.1-.2-.3-.9.1-2 0 0 .6-.2 2 .8a7 7 0 0 1 3.7 0c1.4-1 2-.8 2-.8.4 1 .2 1.8.1 2 .5.5.8 1.2.8 2 0 2.8-1.7 3.4-3.3 3.6.3.2.5.7.5 1.4v2c0 .2.1.5.5.4A7.3 7.3 0 0 0 8 .7z"/></svg>',
   storybook: '<svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M3 1.8l9.6-.5c.3 0 .6.2.6.6v12.2c0 .3-.3.6-.6.6L3 14.2a.6.6 0 0 1-.6-.6V2.4c0-.3.3-.6.6-.6z" fill="#FF4785"/><path d="M10.4 1.4l.1 1.9.9-.6.8.6V1.3z" fill="#fff"/><path d="M8.9 6.3c0 .3 1.8.2 2.1-.1 0-2-1-3-3-3S5 4.3 5 5.8c0 2.6 3.5 2.6 3.5 4 0 .4-.2.6-.6.6-.5 0-.8-.3-.7-1.2 0-.2-1.8-.2-2.1 0-.1 2.2 1.2 2.8 2.8 2.8 1.5 0 2.7-.8 2.7-2.3 0-2.6-3.6-2.6-3.6-3.9 0-.5.4-.6.6-.6.3 0 .7 0 .7 1.1z" fill="#fff"/></svg>',
   ticket: '<svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor"><path d="M2.5 5.5V4a1 1 0 0 1 1-1h9a1 1 0 0 1 1 1v1.5a1.5 1.5 0 0 0 0 3V10a1 1 0 0 1-1 1h-9a1 1 0 0 1-1-1V8.5a1.5 1.5 0 0 0 0-3z"/></svg>',
@@ -1082,14 +1083,17 @@ function fmtDate(iso) { if (!iso) return ''; const d = new Date(iso); return d.t
 function secChanges(d) {
   const c = d.changes; if (!c) return '';
   const save = '<button class="btn" data-act="baseline-save" title="Treat the current design as the new handoff baseline">' + (c.none ? 'Start tracking' : 'Mark as reviewed') + '</button>';
+  const clear = c.none ? '' : '<button class="btn" data-act="baseline-clear" title="Delete the snapshot from this file">' + I.trash + 'Clear</button>';
+  // Say where the snapshot lives: it is shared plugin data, not private state.
+  const stored = '<div class="faint" style="margin-top:6px">' + I.info + 'The snapshot is stored <b>in this Figma file</b>, so anyone with edit access — and other plugins — can read it. It holds layer ids, the first 40 characters of layer names, colours, sizes and the first 80 characters of text. No images. <b>Clear</b> deletes it.</div>';
   if (c.none) return sec('Changes', '', '<div class="muted" style="margin-bottom:8px">This design was marked ready before change tracking was on. Save a snapshot to see future edits here.</div>' + save);
-  if (!c.count) return sec('Changes', '', '<div class="list-row dead"><span class="ico" style="color:var(--green)">' + I.check + '</span><span class="ln muted">No changes' + (c.partial ? ' in the first ' + (c.limit || 2500).toLocaleString() + ' layers' : '') + ' since ready for dev · ' + esc(fmtDate(c.at)) + '</span></div>');
+  if (!c.count) return sec('Changes', clear, '<div class="list-row dead"><span class="ico" style="color:var(--green)">' + I.check + '</span><span class="ln muted">No changes' + (c.partial ? ' in the first ' + (c.limit || 2500).toLocaleString() + ' layers' : '') + ' since ready for dev · ' + esc(fmtDate(c.at)) + '</span></div>' + stored);
   const sw = v => { const m = /^#[0-9A-F]{6,8}/.exec(v); return m ? '<i class="chg-sw" style="background:' + m[0] + '"></i>' : ''; };
   const det = x => (x.detail && x.detail.length) ? '<div class="chg-det">' + x.detail.map(d => '<div class="chg-line"><span class="chg-p">' + esc(d.prop) + '</span><span class="chg-b" title="' + esc(d.before) + '">' + sw(d.before) + esc(d.before) + '</span><span class="chg-a">→</span><span class="chg-n" title="' + esc(d.after) + '">' + sw(d.after) + esc(d.after) + '</span></div>').join('') + '</div>' : '';
   const rows = c.changes.map(x => '<div class="chg"><div class="list-row' + (x.id ? '' : ' dead') + '"' + (x.id ? ' data-select="' + esc(x.id) + '"' : '') + '><span class="kb ' + x.kind + '">' + x.kind + '</span><span class="ln">' + esc(x.name) + '</span><span class="faint">' + esc(x.parts.join(', ')) + '</span></div>' + det(x) + '</div>').join('');
-  return '<div id="sec-changes">' + sec('Changes since ready', save, '<div class="faint" style="margin:-2px 0 4px">Compared with the snapshot from ' + esc(fmtDate(c.at)) + (c.count > c.changes.length ? ' · showing ' + c.changes.length + ' of ' + c.count : '') + '</div>' +
+  return '<div id="sec-changes">' + sec('Changes since ready', save + clear, '<div class="faint" style="margin:-2px 0 4px">Compared with the snapshot from ' + esc(fmtDate(c.at)) + (c.count > c.changes.length ? ' · showing ' + c.changes.length + ' of ' + c.count : '') + '</div>' +
     (c.partial ? '<div class="warn" style="margin-bottom:6px">Partial check — only the first ' + (c.limit || 2500).toLocaleString() + ' layers are tracked. Edits deeper in this frame, and added or removed layers, aren’t detected.</div>' : '') +
-    rows + '<div class="faint" style="margin-top:6px">' + (c.values ? 'Before → after for position, size, fill, stroke, radius, effects, layout, font and text. Other edits (e.g. gradient stops) are flagged by category.' : 'This snapshot was saved by an older version, so only the kind of change is shown. Mark as reviewed to record before/after values from now on.') + '</div>', c.count) + '</div>';
+    rows + '<div class="faint" style="margin-top:6px">' + (c.values ? 'Before → after for position, size, fill, stroke, radius, effects, layout, font and text. Other edits (e.g. gradient stops) are flagged by category.' : 'This snapshot was saved by an older version, so only the kind of change is shown. Mark as reviewed to record before/after values from now on.') + '</div>' + stored, c.count) + '</div>';
 }
 function secLayers(sp) {
   const L = sp.layers; if (!L || !L.children.length) return '';
@@ -1467,7 +1471,7 @@ document.addEventListener('click', e => {
   const act = a.getAttribute('data-act');
   if (/-menu$/.test(act)) { if ($('menu').classList.contains('on') && S.menuAnchor === a) { closeMenu(); S.menuAnchor = null; return; } S.menuAnchor = a; menuFor(act, a); return; }
   const sp = S.data && S.data.spec;
-  const live = ['baseline-save', 'measure-native', 'measure-clear', 'ann-add', 'ann-del', 'res-add', 'res-del', 'map-save', 'map-del', 'notes-clear', 'goto-main'];
+  const live = ['baseline-save', 'baseline-clear', 'measure-native', 'measure-clear', 'ann-add', 'ann-del', 'res-add', 'res-del', 'map-save', 'map-del', 'notes-clear', 'goto-main'];
   if (S.demo && live.indexOf(act) > -1) { S.form = null; render(); return toast('Works inside Figma'); }
   if (act === 'sec-toggle') { const k = a.getAttribute('data-key'); S.closed[k] = !S.closed[k]; render(); return; }
   if (act === 'a11y-all') { S.a11yAll = !S.a11yAll; render(); return; }
@@ -1503,6 +1507,7 @@ document.addEventListener('click', e => {
   if (/^form-/.test(act)) { S.form = act === 'form-cancel' ? null : act.slice(5); S.focusForm = true; render(); return; }
   if (act === 'goto-changes') { const el = $('sec-changes'); if (el) el.scrollIntoView({ behavior: 'smooth' }); return; }
   if (act === 'baseline-save') { send({ type: 'baseline-save', id: S.data.changes.containerId }); return; }
+  if (act === 'baseline-clear') { send({ type: 'baseline-clear', id: S.data.changes.containerId }); return; }
   if (act === 'measure-native' || act === 'measure-clear') { send({ type: act }); return; }
   if (act === 'ann-add') {
     const t = $('ann-text').value.trim(), pr = $('ann-prop').value;

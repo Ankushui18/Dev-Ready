@@ -168,6 +168,22 @@ async function changeTracking() {
     } catch (e) { record('changes', label, ['threw: ' + e.message]); }
   }
   {
+    // Clearing must leave nothing behind: chunks, the chunk count and the timestamp.
+    const B = createBuilders(); const { root, st } = build(B, 40); const eng = loadEngine(B);
+    const errs = [];
+    eng.ctx.saveBaseline(root);
+    const before = Object.keys(st.data).filter(k => /\/baseline/.test(k));
+    if (before.length < 2) errs.push('baseline was not chunked: ' + before.length + ' keys');
+    if (!st.data['devready/baselineAt']) errs.push('baselineAt not written');
+    eng.ctx.clearBaseline(root);
+    const after = Object.keys(st.data).filter(k => /\/baseline/.test(k));
+    if (after.length) errs.push('left behind after clear: ' + after.join(', '));
+    eng.run('diffCache')[root.id] = null;
+    const d = eng.ctx.diffBaseline(root);
+    if (d) errs.push('diffBaseline still returns a result after clearing');
+    record('changes', 'clearing a snapshot removes every chunk, the count and the timestamp', errs, before.length + ' keys → ' + after.length);
+  }
+  {
     const B = createBuilders(); const { root } = build(B, 3); const eng = loadEngine(B);
     const card = root.children[0];
     card.fills = [{ type: 'SOLID', visible: true, color: { r: 1, g: 1, b: 1 }, opacity: 1 }];
@@ -277,6 +293,132 @@ async function typescriptTargets() {
   }
 }
 
+/* Parsers and structural checks prove syntax, not that the output *works*.
+   These two groups close part of that gap:
+   - golden files catch any drift in generated output, including "harmless" refactors;
+   - the generated project is bundled with esbuild, so every import it emits must resolve. */
+const GOLDEN = [
+  ['nested-components', 'react-ts'],
+  ['nested-components', 'html-css'],
+  ['hostile-content', 'react-ts'],
+  ['hostile-content', 'html-css']
+];
+const UPDATE_GOLDEN = process.argv.includes('--update-golden');
+const GOLDEN_DIR = path.join(__dirname, 'golden');
+
+async function goldenOutput() {
+  console.log('\ngolden output' + C.d(' — any drift in generated code shows up as a diff'));
+  if (!UPDATE_GOLDEN) fs.mkdirSync(GOLDEN_DIR, { recursive: true });
+  for (const [fixture, lang] of GOLDEN) {
+    const B = createBuilders();
+    const fx = FIXTURES.find(f => f.name === fixture);
+    const root = fx.build(B); root.parent = { type: 'PAGE', name: 'Page 1' };
+    const out = await loadEngine(B).generateCode(root, lang, 'px', 16, 600, {});
+    const files = out.files.map(f => ({ name: f.name, lang: f.lang, code: f.code }));
+    const file = path.join(GOLDEN_DIR, fixture + '.' + lang + '.json');
+    const want = JSON.stringify(files, null, 2) + '\n';
+    const errs = [];
+    if (UPDATE_GOLDEN) { fs.writeFileSync(file, want); }
+    else if (!fs.existsSync(file)) {
+      errs.push('no reference file — run: npm test -- --update-golden');
+    } else {
+      const have = fs.readFileSync(file, 'utf8');
+      if (have !== want) {
+        // Report the first changed line of the first changed file, not a JSON diff.
+        let prev = null;
+        try { prev = JSON.parse(have); } catch (e) { errs.push('reference file is not valid JSON'); }
+        if (prev) {
+          const names = prev.map(f => f.name).join(',');
+          const nextNames = files.map(f => f.name).join(',');
+          if (names !== nextNames) errs.push('files changed: [' + names + '] → [' + nextNames + ']');
+          else {
+            for (let fi = 0; fi < files.length; fi++) {
+              const a = prev[fi].code.split('\n'), b = files[fi].code.split('\n');
+              let i = 0; while (i < a.length && i < b.length && a[i] === b[i]) i++;
+              if (i < a.length || i < b.length) {
+                errs.push(files[fi].name + ':' + (i + 1) + '  - ' + (a[i] === undefined ? '(end)' : a[i].trim()).slice(0, 90) +
+                  '   + ' + (b[i] === undefined ? '(end)' : b[i].trim()).slice(0, 90));
+                break;
+              }
+            }
+          }
+        }
+      }
+    }
+    record('golden', fixture + ' · ' + lang, errs, UPDATE_GOLDEN ? 'written' : files.length + ' files');
+  }
+}
+
+async function generatedProjectBuild() {
+  console.log('\ngenerated project' + C.d(' — the output is bundled as a project, so every emitted import must resolve'));
+  let esbuild = null;
+  try { esbuild = require('esbuild'); } catch (e) { /* optional */ }
+  const os = require('os');
+  for (const lang of ['react-ts', 'react-tailwind-ts', 'react-css']) {
+    const errs = [];
+    if (!esbuild) { errs.push('esbuild is not installed — run npm ci'); record('project', lang, errs); continue; }
+    const B = createBuilders();
+    const fx = FIXTURES.find(f => f.name === 'images-and-icons');
+    const root = fx.build(B); root.parent = { type: 'PAGE', name: 'Page 1' };
+    const out = await loadEngine(B).generateCode(root, lang, 'px', 16, 600, {});
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'devready-build-'));
+    try {
+      out.files.forEach(f => fs.writeFileSync(path.join(dir, f.name), f.code));
+      // Assets are returned as a manifest, not as bytes. Create stand-ins so a missing
+      // import is still a build failure rather than a false pass.
+      const assetsDir = path.join(dir, 'assets');
+      if (out.assets.length) fs.mkdirSync(assetsDir, { recursive: true });
+      out.assets.forEach(a => fs.writeFileSync(path.join(assetsDir, a.file), 'placeholder'));
+      const entry = out.files.find(f => /\.(t|j)sx$/.test(f.name));
+      if (!entry) errs.push('no entry component in output');
+      else {
+        const outdir = path.join(dir, 'out');
+        try {
+          await esbuild.build({
+            entryPoints: [path.join(dir, entry.name)], bundle: true, outdir: outdir, write: true,
+            platform: 'browser', jsx: 'automatic', logLevel: 'silent',
+            loader: { '.svg': 'dataurl', '.png': 'dataurl', '.jpg': 'dataurl', '.jpeg': 'dataurl' },
+            external: ['react', 'react-dom', 'react/jsx-runtime']
+          });
+          const built = fs.readdirSync(outdir);
+          if (!built.some(f => /\.js$/.test(f))) errs.push('no JavaScript emitted');
+          // A generated stylesheet that never reaches the bundle is a broken import.
+          const hasCss = out.files.some(f => /\.css$/.test(f.name));
+          if (hasCss && !built.some(f => /\.css$/.test(f))) errs.push('CSS was imported but not emitted');
+        } catch (e) {
+          errs.push(...String(e.message).split('\n').filter(l => l.trim()).slice(0, 4));
+        }
+      }
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+    record('project', lang, errs, out.files.length + ' files · ' + out.assets.length + ' assets');
+  }
+}
+
+/* The README badge and docs/test-report.md both quote a check count. Nothing used to
+   keep them in step with the suite, which is exactly how a stale "110" survived a
+   release. This check is itself counted, so the suite total is results.length + 1. */
+function docConsistency() {
+  const expected = results.length + 1;
+  const errs = [];
+  const read = p => fs.readFileSync(path.join(__dirname, '..', p), 'utf8');
+  // On a --report run the report is rewritten afterwards, so it is expected to be stale;
+  // the check still counts, so both runs total the same number.
+  if (REPORT) { record('docs', 'README badge and docs/test-report.md agree with the suite', [], 'report being regenerated'); return; }
+  const report = read('docs/test-report.md');
+  const rm = /(\d+)\/(\d+) checks passed/.exec(report);
+  if (!rm) errs.push('docs/test-report.md has no "N/M checks passed" line');
+  else if (+rm[2] !== expected) errs.push('docs/test-report.md says ' + rm[1] + '/' + rm[2] + ', suite runs ' + expected + ' — run: npm test -- --report');
+  const readme = read('README.md');
+  const bm = /tests-(\d+)%20passing/.exec(readme);
+  if (!bm) errs.push('README.md has no tests badge');
+  else if (+bm[1] !== expected) errs.push('README.md badge says ' + bm[1] + ', suite runs ' + expected);
+  const nm = /npm test\s+#\s*(\d+) checks/.exec(readme);
+  if (nm && +nm[1] !== expected) errs.push('README.md test comment says ' + nm[1] + ', suite runs ' + expected);
+  record('docs', 'README badge and docs/test-report.md agree with the suite', errs, expected + ' checks');
+}
+
 function repoLayout() {
   console.log('\nrepository' + C.d(' — files are where GitHub, CI and Figma expect them'));
   const { checkLayout } = require('../scripts/check-layout.js');
@@ -339,7 +481,7 @@ function sandboxCheck() {
   console.log('DevReady test suite');
   sandboxCheck();
   for (const fx of FIXTURES) if (!only || fx.name.includes(only)) await runFixture(fx);
-  if (!only) { await changeTracking(); await privacyAndOffline(); await messageValidation(); await require('./features')(record); await typescriptTargets(); repoLayout(); }
+  if (!only) { await changeTracking(); await privacyAndOffline(); await messageValidation(); await require('./features')(record); await typescriptTargets(); await goldenOutput(); await generatedProjectBuild(); repoLayout(); docConsistency(); }
   const total = results.length;
   console.log('\n' + (failed ? C.r(failed + ' failed') : C.g('all passed')) + ' · ' + (total - failed) + '/' + total + ' checks');
   if (REPORT) {

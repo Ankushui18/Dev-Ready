@@ -147,7 +147,8 @@ What the plugin does now:
   - When a design is marked Ready for dev, the plugin saves a snapshot of its layers: hashes, plus compact values for position, size, fill, stroke, radius, effects, layout, font and text.
   - The header then shows **"N changes"**, and the **Changes** section lists added, changed and removed layers. Changed layers show **before → after** values, e.g. `Fill #7B61FF → #0D99FF`, `Padding 8 12 8 12 → 8 12 8 16`, or old → new text. Click one to select it.
   - <img src="../docs/screenshots/changes.png" width="360" alt="Changes since ready with before → after values">
-  - **Mark as reviewed** saves a new snapshot. For designs that were marked ready before you installed the plugin, use **Start tracking**.
+  - **Mark as reviewed** saves a new snapshot. For designs that were marked ready before you installed the plugin, use **Start tracking**. **Clear** deletes the snapshot (all of its chunks) without changing the design's status.
+  - The panel states that the snapshot lives **in the file**, so collaborators and other plugins can read it — it is shared plugin data, not private state.
   - Dev Mode's Code section header also shows "⚠ N changes since ready".
 - **Annotations & dev resources (read + write)**
   - Add notes for developers, optionally pinned to a property (width, gap, fill, font size…), and remove them. These are real Figma annotations, so they also appear on the canvas in Dev Mode.
@@ -191,6 +192,8 @@ From the repo root: `npm ci && npm run verify` (layout, Figma sandbox check, ESL
 - message validation and mapping injection;
 - change tracking (100 kB limit, before → after values);
 - that the plugin code makes no network requests.
+
+Two further groups test the output itself: **golden files** (`tests/golden/`, four fixture × target pairs) fail with a one-line diff when generated code drifts — accept a deliberate change with `npm test -- --update-golden` — and the **generated React project is bundled with esbuild**, so every import it emits must resolve.
 
 `npm run test:browser` renders the panel in Chromium and attacks the preview sandbox. See [docs/test-report.md](../docs/test-report.md).
 

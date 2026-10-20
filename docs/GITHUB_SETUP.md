@@ -34,7 +34,7 @@ Verify any time:
 ```bash
 npm ci
 npm run check:layout    # must print "layout OK"
-npm run verify          # layout + sandbox + lint + 133 checks
+npm run verify          # layout + sandbox + lint + 142 checks
 ```
 
 > ⚠️ **Never use GitHub's web "Add file → Upload files" for a folder.** Dragging a
