@@ -101,6 +101,45 @@ module.exports = async function featureTests(record) {
     }
     record('a11y', 'identical findings are grouped (count + real ids) instead of one row per layer', errs);
   }
+  {
+    // Dev Mode → Plugins is read-only: Figma throws on anything that changes the document, and
+    // an unguarded write there surfaces to the user as a red toast. Drive the inspect handlers
+    // with every document-writing API trapped, so the read-only contract is tested rather than
+    // asserted in a comment. Plugin data, relaunch data and addMeasurement are the documented
+    // exceptions, so they must keep working.
+    const errs = [];
+    const B = createBuilders();
+    const inner = B.T('Inspect me', {}, { fills: [solid('#FFFFFF')] });
+    const f = frame(B, 393, '#09090B', [inner]);
+    f.parent = { type: 'PAGE', name: 'Page 1' };
+    f.type = 'FRAME';
+    // A canvas note from an earlier Design-mode session: clearing notes must be skipped here,
+    // not attempted and refused.
+    const note = B.N({ type: 'FRAME', name: 'Canvas note' }, []);
+    note.getSharedPluginData = () => '1';
+    const eng = loadEngine(B, {
+      mode: 'inspect', editorType: 'dev', readOnly: true, selection: [inner], pageChildren: [note]
+    });
+    if (eng.run('IS_DEV') !== true) errs.push('engine did not detect Dev Mode');
+    for (const msg of [
+      { type: 'redlines' }, { type: 'measure-native' }, { type: 'clear-redlines' },
+      { type: 'notes-clear' }, { type: 'mark', id: f.id, status: 'READY_FOR_DEV' },
+      { type: 'resize', w: 400, h: 900 }
+    ]) {
+      await eng.send(msg);
+    }
+    if (eng.writes.length) errs.push('Dev Mode reached for the canvas: ' + eng.writes.join(', '));
+    // Redlines are a canvas drawing, so Dev Mode refuses them — with an explanation rather
+    // than a silent no-op. Everything else must stay silent.
+    if (!eng.notifyLog.some(n => /Redlines need Design mode/.test(n.text))) {
+      errs.push('redlines in Dev Mode should explain that they need Design mode');
+    }
+    const errors = eng.notifyLog.filter(n => n.error && !/Redlines need Design mode/.test(n.text));
+    if (errors.length) errs.push('Dev Mode showed an unexpected error toast: ' + errors.map(e => e.text).join(' | '));
+    if (!eng.notifyLog.some(n => /measurement/.test(n.text))) errs.push('native measurements did not run in Dev Mode');
+    if (!eng.notifyLog.some(n => /flagged ready|marked Ready/.test(n.text))) errs.push('marking ready failed in Dev Mode');
+    record('dev mode', 'the read-only panel never writes to the document (canvas APIs trapped)', errs);
+  }
 
   /* ---------------- design tokens ---------------- */
   console.log('\ndesign tokens — CSS, SCSS, JSON (DTCG), Tailwind v4');

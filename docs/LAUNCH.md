@@ -85,7 +85,7 @@ Rows marked ✅ below are what those screenshots actually show — nothing more.
 | 2 | Design Mode, panel | Annotate: native annotation appears (Shift+Y); canvas note on a free plan; group → note fallback | ❌ Not run. The section and its "not seeing annotations?" help render, but no annotation was added. |
 | 3 | Design Mode, panel | Start tracking → edit text/fill/padding/rename → change list shows correct before → after; 1,000+ layer frame doesn't error | ⚠️ A baseline exists ("No changes since ready for dev · 20 Oct, 17:09", **Clear** works). No edit was made, so before → after was not exercised. |
 | 4 | Design Mode, panel | Export PNG/SVG/PDF; ZIP download; project ZIP with fonts | ⚠️ UI verified: 19 assets detected, per-asset SVG download and **Download project** render. The downloaded files were not opened. |
-| 5 | Dev Mode, Inspect → Plugins | Read-only behaviour: flag instead of native status; no canvas writes | ❌ Not run. |
+| 5 | Dev Mode, Inspect → Plugins | Read-only behaviour: flag instead of native status; no canvas writes | ❌ Not run in Figma. *No canvas writes* is covered offline by the read-only contract test (every write API throws, as it does in Figma), and *flag instead of native status* is covered by the Dev Mode branch of `secReady()`. Neither is a substitute for launching it. |
 | 6 | Dev Mode, Inspect → Code | Each DevReady language returns within 3 s on a medium frame; preferences (unit, gate) apply | ❌ Not run. |
 | 7 | Figma for VS Code | Codegen languages appear and produce output | ❌ Not run. |
 | 8 | Panel width | Narrowest and widest Inspect panel: no overflow or clipped buttons | ⚠️ One width (single column, Figma's default Inspect panel): no overflow, no clipped buttons. |
@@ -121,6 +121,13 @@ Rows marked ✅ below are what those screenshots actually show — nothing more.
 
 Rows 2, 5, 6, 7, 12, 13 and the light theme. In particular **Dev Mode is the surface
 most developers will use**, and it has not been run at all yet.
+
+What is already guaranteed by tests, so the real run only has to confirm it: the panel
+never writes to the document in Dev Mode (`dev mode` check), and the codegen handler
+returns a language-tagged result for every one of the 12 targets. What only a real run
+can tell us: whether Figma keeps the annotations and measurements, whether the code
+section renders our labels next to Figma's own, and whether the panel fits the Plugins
+tab.
 
 ## 4. First 30 days after approval
 

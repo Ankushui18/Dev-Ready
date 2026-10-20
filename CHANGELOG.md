@@ -2,6 +2,28 @@
 
 All notable changes to DevReady are listed here. The format follows [Keep a Changelog](https://keepachangelog.com/), and versions follow [SemVer](https://semver.org/).
 
+## [1.5.1] — 2026-10-20
+
+No product change. The Dev Mode surface is the one part of the launch matrix that has
+never been run, so its read-only contract is now a test instead of a promise.
+
+### Added
+- **A test that runs the plugin in Dev Mode → Plugins with every document-writing API
+  trapped** (`figma.createFrame`, `createText`, `createLine`, layer deletion, … all
+  throw, as they do in Figma). It drives the messages that touch the canvas — redlines,
+  native measurements, note clearing, clearing redlines, marking ready, resize — and
+  asserts that the document is never written to and no unexpected error toast appears.
+  - Plugin data, relaunch data and `page.addMeasurement` are Figma's documented
+    exceptions, so "mark ready" and Dev Mode measurements are required to still work.
+  - Redlines are refused in Dev Mode with an explanation instead of a silent no-op; the
+    test pins that message too.
+  - Verified by mutation: removing the `IS_DEV` guard on note clearing fails with
+    `Dev Mode reached for the canvas: remove(Canvas note)`.
+- `tests/harness.js`: `loadEngine()` can now start in **inspect** mode (`mode: 'inspect'`,
+  `editorType: 'dev'`, `readOnly: true`), with the read-only traps above, a page mock, a
+  notification log, a record of any write that slipped through, and `send(msg)` to
+  deliver UI messages.
+
 ## [1.5.0] — 2026-10-20
 
 First run on a real Figma file, and the two things that run exposed.

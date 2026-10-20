@@ -9,7 +9,7 @@ Inspect specs like Dev Mode, generate real code in 12 targets, see what changed 
   <a href=".github/workflows/ci.yml"><img src="https://github.com/Ankushui18/Dev-Ready/actions/workflows/ci.yml/badge.svg" alt="Tests"></a>
   <img src="https://img.shields.io/badge/license-MIT-green" alt="MIT">
   <img src="https://img.shields.io/badge/Figma-Design%20%2B%20Dev%20Mode-0d99ff" alt="Figma Design + Dev Mode">
-  <img src="https://img.shields.io/badge/tests-143%20passing-brightgreen" alt="143 checks passing">
+  <img src="https://img.shields.io/badge/tests-144%20passing-brightgreen" alt="144 checks passing">
 </p>
 
 ---
@@ -162,7 +162,7 @@ Dev-Ready/
 ```bash
 npm ci
 npm run verify        # layout + Figma sandbox check + ESLint + tests (what CI runs)
-npm test              # 143 checks: 9 fixtures × 12 targets, privacy, messages, tracking,
+npm test              # 144 checks: 9 fixtures × 12 targets, privacy, messages, tracking,
                       # tsc, golden output, and a real bundle of the generated React project
 npm test -- --update-golden   # accept a deliberate change to generated output
 npm run lint          # ESLint, including the script inside ui.html

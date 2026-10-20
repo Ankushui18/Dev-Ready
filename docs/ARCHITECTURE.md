@@ -165,6 +165,7 @@ Beyond per-target assertions, three groups protect the output itself:
 | **Golden files** | Generated code does not drift silently. A change prints the first differing line of the first differing file | `tests/golden/*.json`, update with `npm test -- --update-golden` |
 | **Generated project build** | The emitted imports actually resolve: the files are written to a temp dir and bundled with esbuild | `generatedProjectBuild()` in `tests/run.js` |
 | **Doc consistency** | The README badge and `docs/test-report.md` match the number of checks the suite ran | `docConsistency()` in `tests/run.js` |
+| **Dev Mode read-only contract** | The Dev Mode panel never writes to the document. The engine starts in `inspect` mode with every canvas-writing API throwing, then messages that touch the canvas are delivered and the traps must stay untouched | `tests/features.js` (`dev mode`), `loadEngine({ readOnly: true })` in `tests/harness.js` |
 
 When you add or remove a check, regenerate the report (`npm test -- --report`) — the
 consistency check fails the build otherwise. When the output change is deliberate,

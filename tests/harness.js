@@ -113,8 +113,21 @@ function loadEngine(B, options) {
   options = options || {};
   const fetched = [];
   const store = {};
+  const notifyLog = [];
+  const writes = [];              // read-only violations (should stay empty in Dev Mode)
+  const posted = [];
+  const page = options.page || {
+    name: 'Page 1', type: 'PAGE', children: [], selection: options.selection || [],
+    on() {}, findAll: () => [],
+    findChildren: pred => (options.pageChildren || []).filter(n => !pred || pred(n)),
+    // Dev Mode measurement API: metadata, so it is legal in the read-only panel.
+    addMeasurement: (a, b) => ({ id: 'm' + (writes.length + 1) })
+  };
   const figma = {
-    editorType: 'dev', mode: 'codegen', mixed: Symbol('mixed'),
+    editorType: options.editorType || 'dev', mode: options.mode || 'codegen',
+    currentPage: page,
+    viewport: { scrollAndZoomIntoView() {}, center: { x: 0, y: 0 }, zoom: 1 },
+    mixed: Symbol('mixed'),
     codegen: { on() {}, refresh() {} },
     getNodeByIdAsync: async id => B.ALL[id] || null,
     getStyleByIdAsync: async () => null,
@@ -128,8 +141,27 @@ function loadEngine(B, options) {
     },
     getLocalPaintStylesAsync: async () => options.paintStyles || [],
     getLocalTextStylesAsync: async () => options.textStyles || [],
-    notify() {}, on() {}, showUI() {}, ui: { postMessage() {}, on() {} }
+    notify(msg, opts) { notifyLog.push({ text: String(msg), error: !!(opts && opts.error) }); },
+    on() {}, showUI() {}, ui: { postMessage(m) { posted.push(m); }, on() {}, resize() {} }
   };
+  // Document writes throw in Dev Mode (figma.com/plugin-docs/working-in-dev-mode). Model that
+  // so a read-only path that reaches for the canvas fails loudly here instead of in Figma.
+  if (options.readOnly) {
+    ['createFrame', 'createText', 'createEllipse', 'createRectangle', 'createLine', 'createGroup',
+      'createVector', 'createNodeFromSvg', 'createComponent', 'createPage', 'group', 'ungroup']
+      .forEach(k => {
+        figma[k] = () => {
+          writes.push(k);
+          throw new Error('Cannot write to the document in Dev Mode (' + k + ')');
+        };
+      });
+    // Deleting a layer is a document write too.
+    Object.keys(B.ALL || {}).forEach(k => {
+      const n = B.ALL[k];
+      if (n) n.remove = () => { writes.push('remove(' + n.name + ')'); throw new Error('Cannot remove a layer in Dev Mode'); };
+    });
+  }
+  figma.loadFontAsync = async () => {};
   const sandbox = {
     figma, __html__: '', console,
     setTimeout, clearTimeout, Promise, Uint8Array, TextEncoder, TextDecoder,
@@ -141,8 +173,19 @@ function loadEngine(B, options) {
   };
   vm.createContext(sandbox);
   vm.runInContext(CODE, sandbox, { filename: 'code.js' });
+  /** send(msg): deliver a UI message to the engine, as Figma would. */
+  const send = async msg => {
+    if (typeof sandbox.figma.ui.onmessage !== 'function') {
+      throw new Error('no UI message handler (engine started in codegen mode)');
+    }
+    await sandbox.figma.ui.onmessage(msg);
+    await new Promise(r => setTimeout(r, 0));
+  };
   /** run(expr): evaluate inside the engine (reaches top-level const/let too). */
-  return { generateCode: sandbox.generateCode, ctx: sandbox, fetched, figma, run: expr => vm.runInContext(expr, sandbox) };
+  return {
+    generateCode: sandbox.generateCode, ctx: sandbox, fetched, figma, notifyLog, writes, posted, page, send,
+    run: expr => vm.runInContext(expr, sandbox)
+  };
 }
 
 module.exports = { createBuilders, loadEngine, CODE };
