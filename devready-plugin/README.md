@@ -96,7 +96,7 @@ Code is built from the whole layer tree, not just the one layer you selected:
 - **Download .html** saves the single file.
 
 ## Accessibility and design tokens
-- **Accessibility** (Inspect): WCAG 2.2 AA contrast for each text layer, touch-target size, missing labels on icon-only controls, tiny text. Rows show the measured colors and ratio; click one to select the layer. Backgrounds are found from covering layers and ancestors; gradients/images are reported as unmeasured.
+- **Accessibility** (Inspect): WCAG 2.2 AA contrast for each text layer, touch-target size, missing labels on icon-only controls, tiny text. Rows show the measured colors and ratio; click one to select the layer. Backgrounds are found from covering layers and ancestors; gradients/images are reported as unmeasured. **Identical findings are grouped** (`40 layers · #6B7280 on #09090B · 4.12:1 needs 4.5`), so repeated content doesn't bury the rest of the panel; the list is capped at 25 groups with *Show N more*.
 - **Design tokens**: export what the layer uses, or the whole file, as CSS variables, SCSS, JSON (design-tokens format) or a Tailwind v4 `@theme`. All variable modes become `[data-theme=...]` overrides; aliases stay references.
 
 ## Inspect panel layout (matches Figma Dev Mode)

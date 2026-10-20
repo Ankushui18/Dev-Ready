@@ -72,6 +72,35 @@ module.exports = async function featureTests(record) {
     if (r.counts.fail < 1 || r.counts.warn < 2) errs.push('counts wrong: ' + JSON.stringify(r.counts));
     record('a11y', 'touch targets (24px fail, 44px mobile warn) and icon-only labels', errs);
   }
+  {
+    // Designs repeat themselves: a carousel of identical cards used to produce one row
+    // per layer. Identical findings collapse into one group that keeps the real ids.
+    const errs = [];
+    const card = B => B.AL('Card', 'VERTICAL', {}, [B.T('EUROPE · 32 COUNTRIES', {}, { fills: [solid('#6B7280')] })]);
+    const r = audit(B => frame(B, 393, '#09090B', [1, 2, 3, 4, 5, 6].map(() => card(B))));
+    if (!r.groups) errs.push('no groups returned');
+    else {
+      const contrast = r.groups.filter(g => g.kind === 'contrast' && g.status === 'fail');
+      if (contrast.length !== 1) errs.push('6 identical failures should be 1 group, got ' + contrast.length);
+      else {
+        if (contrast[0].count !== 6) errs.push('group count should be 6, got ' + contrast[0].count);
+        if (contrast[0].ids.length !== 6) errs.push('group should keep all 6 ids, got ' + contrast[0].ids.length);
+        if (!/^#[0-9A-F]{6}$/.test(contrast[0].item.fg || '')) errs.push('group lost its colour data: ' + JSON.stringify(contrast[0].item));
+      }
+      // Two different problems must stay separate groups.
+      const other = audit(B => frame(B, 393, '#09090B', [
+        B.T('Low contrast', {}, { fills: [solid('#6B7280')] }),
+        B.T('Fine contrast', {}, { fills: [solid('#FFFFFF')] })
+      ]));
+      if (other.groups.filter(g => g.kind === 'contrast').length !== 2) {
+        errs.push('passing and failing contrast must not merge into one group');
+      }
+      // Every finding must belong to exactly one group, so the counts add up.
+      const summed = r.groups.reduce((n, g) => n + g.count, 0);
+      if (summed !== r.items.length) errs.push('group counts (' + summed + ') do not add up to the ' + r.items.length + ' findings');
+    }
+    record('a11y', 'identical findings are grouped (count + real ids) instead of one row per layer', errs);
+  }
 
   /* ---------------- design tokens ---------------- */
   console.log('\ndesign tokens — CSS, SCSS, JSON (DTCG), Tailwind v4');

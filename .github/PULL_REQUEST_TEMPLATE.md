@@ -8,7 +8,7 @@
 
 ## Checklist
 
-- [ ] `npm run verify` passes (layout + Figma sandbox check + ESLint + 142 checks)
+- [ ] `npm run verify` passes (layout + Figma sandbox check + ESLint + 143 checks)
 - [ ] For a code-generation fix: a fixture in `tests/fixtures.js` reproduces the bug
 - [ ] Deliberate output change? `npm test -- --update-golden` and review the diff
 - [ ] If the number of checks changed: `npm test -- --report` and update the README badge
