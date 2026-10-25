@@ -9,7 +9,7 @@ Inspect specs like Dev Mode, generate real code in 12 targets, see what changed 
   <a href=".github/workflows/ci.yml"><img src="https://github.com/Ankushui18/Dev-Ready/actions/workflows/ci.yml/badge.svg" alt="Tests"></a>
   <img src="https://img.shields.io/badge/license-MIT-green" alt="MIT">
   <img src="https://img.shields.io/badge/Figma-Design%20%2B%20Dev%20Mode-0d99ff" alt="Figma Design + Dev Mode">
-  <img src="https://img.shields.io/badge/tests-150%20passing-brightgreen" alt="150 checks passing">
+  <img src="https://img.shields.io/badge/tests-158%20passing-brightgreen" alt="158 checks passing">
 </p>
 
 ---
@@ -162,7 +162,7 @@ Dev-Ready/
 ```bash
 npm ci
 npm run verify        # layout + Figma sandbox check + ESLint + tests (what CI runs)
-npm test              # 150 checks: 9 fixtures × 12 targets, privacy, messages, tracking,
+npm test              # 158 checks: 9 fixtures × 12 targets, privacy, messages, tracking,
                       # tsc, golden output, and a real bundle of the generated React project
 npm test -- --update-golden   # accept a deliberate change to generated output
 npm run lint          # ESLint, including the script inside ui.html
@@ -194,7 +194,7 @@ Honest list — these are APIs Figma doesn't give plugins, not things we haven't
 - **This is not Dev Mode.** Hover-to-measure on canvas, version comparison, change notifications and VS Code's built-in Figma integration are Figma features; plugins can't reproduce them.
 - **Code** stops after a layer budget: 600 in the panel, 1,500 for project downloads, 150 in Dev Mode's Code section (Figma gives codegen a 3-second budget). The output says when it truncated; pick a smaller frame for the full tree.
 - **Change tracking** shows before → after for position, size, fills, strokes, radius, effects, layout/padding, font and text (first 80 characters). Gradients stops and individual effect parameters are flagged by category only. It covers the first 2,500 layers of a frame.
-- **SwiftUI, Compose, Flutter and React Native output** is checked for structure and safe escaping, but not compiled in CI. JSX and CSS are parsed by esbuild.
+- **SwiftUI, Compose, Flutter and React Native output** is checked for structure and safe escaping, but not compiled in CI. JSX and CSS are parsed by esbuild. Native text with Figma Auto line-height uses the platform font engine's metrics; SVG baseline measurements are applied only to web CSS, where they have a direct meaning.
 - **Native annotations and native *Ready for dev*** depend on your Figma plan and seat; DevReady falls back to canvas notes and its own flag, and the UI says which one is in use.
 - **Partially tested on a real Figma file** (20 Oct 2026, Design mode, dark theme): the panel, the gate and its status source, inspect data, variables, assets, and full-tree HTML + CSS on a 214-layer frame all worked. **Dev Mode (Inspect → Plugins, the Code section) and Figma for VS Code have not been run yet**, and neither has the light theme. [docs/LAUNCH.md](docs/LAUNCH.md#3-environment-test-matrix) has the row-by-row result and the screenshots, including the rows that failed.
 

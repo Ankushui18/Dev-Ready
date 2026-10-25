@@ -11,10 +11,11 @@ Browser checks for the plugin UI (needs Python Playwright:
    except public Google Fonts (none at all in offline mode).
 3. The panel can still measure the preview (same-origin, no scripts).
 """
-import pathlib, sys
+import pathlib, sys, json, subprocess
 from playwright.sync_api import sync_playwright
 
-UI = (pathlib.Path(__file__).resolve().parent.parent / 'devready-plugin' / 'ui.html').as_uri()
+ROOT = pathlib.Path(__file__).resolve().parent.parent
+UI = (ROOT / 'devready-plugin' / 'ui.html').as_uri()
 HOSTILE = """<!DOCTYPE html><html><head><title>t</title>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400&display=swap" rel="stylesheet" />
 </head><body>
@@ -41,6 +42,70 @@ with sync_playwright() as p:
         n = pg.evaluate("document.querySelectorAll('#main .sec').length")
         check('sample data renders (' + scheme + ')', not errs and n > 8, f'{n} sections, errors: {errs[:2]}')
         pg.close()
+
+    print('export and code routing')
+    pg = b.new_page(viewport={'width': 480, 'height': 820})
+    pg.goto(UI); pg.wait_for_function("typeof S !== 'undefined' && S.data && S.data.spec", timeout=8000)
+    sent = pg.evaluate("""() => {
+        const sent = []; window.send = m => sent.push(m); S.demo = false;
+        S.data.assets = [{ id: 'root', kind: 'selection' }, { id: 'icon', kind: 'icon' }];
+        S.assetFmt = 'PNG:2';
+        const button = document.querySelector('[data-act="export-all"]');
+        if (button) button.click();
+        return sent;
+    }""")
+    items = sent[0].get('items', []) if sent else []
+    check('Export all matches the visible Assets list', len(items) == 1 and items[0].get('id') == 'icon', str(sent))
+    routed = pg.evaluate("""() => {
+        const sent = []; window.send = m => sent.push(m); S.demo = false;
+        S.lang = 'html-css'; S.view = 'code'; S.code = {}; pending = {};
+        S.codeFor = 'old'; S.data.spec.id = 'old'; requestCode('html-css');
+        S.codeFor = 'new'; S.data.spec.id = 'new'; pending = {}; requestCode('html-css');
+        const oldRequest = sent[0], newRequest = sent[1];
+        const payload = text => ({ files: [{ name: 'x.css', lang: 'css', code: text }], assets: [], stats: {} });
+        window.onmessage({ data: { pluginMessage: { type: 'code', lang: 'html-css', requestId: oldRequest.requestId, nodeId: 'old', out: payload('old') } } });
+        const staleIgnored = !S.code['html-css'];
+        const currentMessage = { type: 'code', lang: 'html-css', requestId: newRequest.requestId, nodeId: 'new', out: payload('new') };
+        window.onmessage({ data: { pluginMessage: currentMessage } });
+        const currentAccepted = S.code['html-css'] && S.code['html-css'].files[0].code === 'new';
+        S.code = {}; S.codeFor = ''; pending = {};
+        window.onmessage({ data: { pluginMessage: currentMessage } });
+        const clearedIgnored = !S.code['html-css'];
+        S.codeFor = 'new'; S.code = {}; pending = {};
+        window.onmessage({ data: { pluginMessage: currentMessage } });
+        const unrequestedIgnored = !S.code['html-css'];
+        return { staleIgnored, currentAccepted, clearedIgnored, unrequestedIgnored, sent };
+    }""")
+    check('stale out-of-order code is ignored', routed['staleIgnored'], str(routed))
+    check('current code response is accepted', routed['currentAccepted'], str(routed))
+    check('responses for a cleared selection are ignored', routed['clearedIgnored'], str(routed))
+    check('responses without a pending request are ignored', routed['unrequestedIgnored'], str(routed))
+    pg.close()
+
+    print('generated paint order')
+    paint_script = r"""
+const { createBuilders, loadEngine } = require('./tests/harness');
+(async () => {
+  const B = createBuilders();
+  const row = B.R('Overlapping row', 280, 80, { background: '#EEE' }, { ax: 10, ay: 210, layoutPositioning: 'ABSOLUTE' });
+  const nav = B.R('Bottom navbar', 300, 64, { background: '#FFF' }, { ax: 0, ay: 236 });
+  const root = B.AL('Screen', 'VERTICAL', { 'justify-content': 'flex-end', width: '300px', height: '300px' }, [row, nav], { width: 300, height: 300 });
+  root.parent = { type: 'PAGE' };
+  const out = await loadEngine(B).generateCode(root, 'html-single', 'px', 16, 600, {});
+  process.stdout.write(JSON.stringify(out.files[0].code));
+})().catch(e => { console.error(e); process.exit(1); });
+"""
+    generated = json.loads(subprocess.check_output(['node', '-e', paint_script], cwd=ROOT, text=True))
+    pg = b.new_page(viewport={'width': 300, 'height': 300})
+    pg.set_content(generated)
+    hit = pg.evaluate("""() => {
+        const nav = document.querySelector('.screen__bottom-navbar').getBoundingClientRect();
+        const row = document.querySelector('.screen__overlapping-row').getBoundingClientRect();
+        const x = Math.max(nav.left, row.left) + 10, y = Math.max(nav.top, row.top) + 10;
+        return { className: document.elementFromPoint(x, y)?.className || '', x, y, nav: nav.toJSON(), row: row.toJSON() };
+    }""")
+    check('generated navbar paints above the overlapping row', 'bottom-navbar' in hit['className'], str(hit))
+    pg.close()
 
     print('preview isolation')
     for online in [True, False]:

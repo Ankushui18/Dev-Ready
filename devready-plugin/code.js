@@ -52,7 +52,7 @@ const MSG_SCHEMA = {
   'mark': { id: V.id, status: V.opt(V.oneOf(['READY_FOR_DEV', 'COMPLETED'])), note: V.str(2000) },
   'export': EXPORT_ITEM,
   'export-all': { items: v => Array.isArray(v) ? v.slice(0, 300).map(i => checkFields(i || {}, EXPORT_ITEM)).filter(Boolean) : undefined, zipName: V.opt(V.re(/^[\w .\-]{1,100}\.zip$/, 104)) },
-  'gen-code': { lang: V.oneOf(LANG_IDS) }, 'tokens-export': { format: V.oneOf(['css', 'scss', 'json', 'tailwind']), scope: V.oneOf(['selection', 'file']) }, 'export-project': { lang: V.oneOf(LANG_IDS) },
+  'gen-code': { lang: V.oneOf(LANG_IDS), requestId: V.opt(V.int(1, Number.MAX_SAFE_INTEGER)), nodeId: V.opt(V.id) }, 'tokens-export': { format: V.oneOf(['css', 'scss', 'json', 'tailwind']), scope: V.oneOf(['selection', 'file']) }, 'export-project': { lang: V.oneOf(LANG_IDS) },
   'font-upload': { family: V.re(/^[^|]{1,100}$/, 100), key: V.re(/^[01],[1-9]00$/, 5), ext: V.oneOf(['woff2', 'woff', 'ttf', 'otf']), bytes: V.bytes(2.5 * 1024 * 1024), name: V.str(200), last: V.bool },
   'font-remove': { family: V.re(/^[^|]{1,100}$/, 100), key: V.re(/^[01],[1-9]00$/, 5) },
   'annotate-add': { id: V.id, label: V.str(5000), prop: V.opt(V.re(/^[A-Za-z]{1,40}$/, 40)), cat: V.opt(V.re(/^[\w:;\-]{1,200}$/, 200)), color: V.opt(V.oneOf(['yellow', 'orange', 'red', 'pink', 'violet', 'blue', 'teal', 'green'])), pin: V.bool },
@@ -846,7 +846,7 @@ function cleanCss(raw) {
   });
   return o;
 }
-const LAYOUT_KEYS = ['position', 'left', 'top', 'right', 'bottom', 'flex-shrink', 'align-self', 'flex', 'opacity'];
+const LAYOUT_KEYS = ['position', 'left', 'top', 'right', 'bottom', 'flex-shrink', 'align-self', 'flex', 'opacity', 'z-index'];
 
 async function compInfo(node) {
   if (node.type !== 'INSTANCE') return null;
@@ -945,6 +945,16 @@ async function buildRawNode(node, ctx, isRoot, inInst) {
   const rawCss = await safeCSS(node);
   el.css = cleanCss(rawCss);
   if (isRoot) LAYOUT_KEYS.forEach(k => { if (k !== 'opacity') delete el.css[k]; });
+  // Figma children are back-to-front. DOM order alone is insufficient when
+  // absolute siblings are painted in a different CSS stacking phase, and auto
+  // layout can explicitly reverse canvas stacking. Preserve both semantics with
+  // sibling-local z-index values (including on raster/mapped children).
+  const parent = node.parent;
+  const mixedPaintOrder = parent && isAutoLayout(parent) && 'children' in parent && parent.children.some(c => c.layoutPositioning === 'ABSOLUTE');
+  if (!isRoot && parent && 'children' in parent && (mixedPaintOrder || parent.itemReverseZIndex === true)) {
+    const index = parent.children.indexOf(node);
+    if (index > -1) el.css['z-index'] = String(parent.itemReverseZIndex === true ? parent.children.length - index : index + 1);
+  }
   collectVarIds(node, ctx);
   el.comp = await compInfo(node);
 
@@ -996,13 +1006,18 @@ async function buildRawNode(node, ctx, isRoot, inInst) {
   if (node.type === 'TEXT') {
     el.kind = 'text';
     el.text = node.characters;
+    el.textAutoResize = node.textAutoResize;
     el.fontSize = isMixed(node.fontSize) ? 16 : node.fontSize;
-    // Browser `normal` line-height is font- and platform-dependent. For a
-    // single-line auto-sized Figma text layer, its height is the exact line box.
-    if (el.css['line-height'] === 'normal' && node.textAutoResize === 'WIDTH_AND_HEIGHT' && !/[\n\r]/.test(el.text) && node.height > 0) {
-      el.css['line-height'] = round(node.height) + 'px';
-    }
     el.runs = textRuns(node);
+    // Browser `normal` line-height is font- and platform-dependent. Auto-width
+    // text cannot wrap, so explicit lines and a uniform font size have a known
+    // line count and Figma's height gives the exact line box. Fixed-width text
+    // is measured from Figma's own SVG baselines in resolveAutoLineHeights().
+    const mixedSizes = (el.runs || []).some(r => r.css && r.css['font-size']);
+    if (['react-native', 'swiftui', 'compose', 'flutter'].indexOf(ctx.lang) < 0 && el.css['line-height'] === 'normal' && el.text && node.textAutoResize === 'WIDTH_AND_HEIGHT' && node.height > 0 && !mixedSizes && !(node.paragraphSpacing > 0)) {
+      const lines = el.text.split(/\r\n|\r|\n/).length;
+      el.css['line-height'] = round(node.height / lines) + 'px';
+    }
     collectFonts(node, ctx);
     // Inside an instance, read the main component's default text so naming stays
     // consistent across instances ("342" and "Friday" both become __value).
@@ -1457,9 +1472,85 @@ function fontHead(plan) {
   return '  <link rel="preconnect" href="https://fonts.googleapis.com" />\n  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />\n  <link href="' + googleHref(plan.google).replace(/&/g, '&amp;') + '" rel="stylesheet" />\n';
 }
 
+/* ---------- Figma-measured Auto line-height for wrapped text ---------- */
+function svgNumberAttr(attrs, name) {
+  const m = new RegExp('\\b' + name + '="([^"]+)"').exec(attrs);
+  const value = m ? parseFloat(m[1]) : null;
+  return value !== null && isFinite(value) ? value : null;
+}
+/** Figma's non-outlined SVG export contains its own laid-out text baselines. */
+function measureSvgText(svg) {
+  const ys = [];
+  const texts = String(svg).match(/<text\b[^>]*>[\s\S]*?<\/text>/g) || [];
+  for (const block of texts) {
+    const head = /^<text\b([^>]*)>/.exec(block);
+    let y = head ? svgNumberAttr(head[1], 'y') : null;
+    const spans = block.match(/<tspan\b[^>]*>/g) || [];
+    if (!spans.length && y !== null) ys.push(y);
+    for (const span of spans) {
+      const attrs = span.replace(/^<tspan\b|\/?>$/g, '');
+      const absolute = svgNumberAttr(attrs, 'y');
+      const relative = svgNumberAttr(attrs, 'dy');
+      if (absolute !== null) y = absolute;
+      else if (relative !== null) y = (y || 0) + relative;
+      if (y !== null) ys.push(y);
+    }
+  }
+  ys.sort((a, b) => a - b);
+  const unique = [];
+  ys.forEach(y => { if (!unique.length || Math.abs(y - unique[unique.length - 1]) > 0.01) unique.push(y); });
+  if (unique.length < 2) return null;
+  const deltas = [];
+  for (let i = 1; i < unique.length; i++) deltas.push(unique[i] - unique[i - 1]);
+  if (deltas[0] <= 0 || deltas.some(d => Math.abs(d - deltas[0]) > Math.max(0.05, deltas[0] * 0.002))) return null;
+  const lineHeight = round(deltas.reduce((a, b) => a + b, 0) / deltas.length, 2);
+  return { lineHeight: lineHeight };
+}
+function measuredSvgLineHeight(svg) {
+  const metrics = measureSvgText(svg);
+  return metrics ? metrics.lineHeight : null;
+}
+async function resolveAutoLineHeights(root, ctx, lang) {
+  // SVG baselines map directly to CSS line boxes. Native text engines have
+  // different baseline/line-box contracts, so do not invent a native metric.
+  if (['react-native', 'swiftui', 'compose', 'flutter'].indexOf(lang) > -1) return;
+  const candidates = [];
+  walk(root, e => {
+    if (e.kind !== 'text' || e.css['line-height'] !== 'normal' || !e.text || e.textAutoResize === 'WIDTH_AND_HEIGHT') return;
+    if ((e.runs || []).some(r => r.css && r.css['font-size'])) return;
+    candidates.push(e);
+  });
+  for (const e of candidates) {
+    try {
+      const n = await figma.getNodeByIdAsync(e.id);
+      if (!n || n.type !== 'TEXT' || n.paragraphSpacing > 0 || !('exportAsync' in n)) continue;
+      const result = await n.exportAsync({ format: 'SVG_STRING', svgOutlineText: false });
+      const lineHeight = measuredSvgLineHeight(typeof result === 'string' ? result : utf8(result));
+      if (lineHeight) e.css['line-height'] = lineHeight + 'px';
+    } catch (err) { /* retain normal and surface the generated-code warning */ }
+  }
+  walk(root, e => {
+    if (e.kind === 'text' && e.css['line-height'] === 'normal') ctx.autoLineHeight = (ctx.autoLineHeight || 0) + 1;
+  });
+}
+
 /* ---------- image fills: real files for projects, data URIs for single HTML ---------- */
 function hasImagePlaceholder(css) {
   return /url\(<path-to-image>\)/.test(css.background || '') || /url\(<path-to-image>\)/.test(css['background-image'] || '');
+}
+function imagePlaceholderCount(css) {
+  const count = k => (String(css[k] || '').match(/url\(<path-to-image>\)/g) || []).length;
+  return Math.max(count('background'), count('background-image'));
+}
+function imagePaints(n) {
+  return n && 'fills' in n && !isMixed(n.fills) ? n.fills.filter(f => f.type === 'IMAGE' && f.visible !== false && f.imageHash) : [];
+}
+function replaceImagePlaceholders(css, replacements) {
+  ['background', 'background-image'].forEach(k => {
+    if (!css[k]) return;
+    let i = 0;
+    css[k] = css[k].replace(/url\(<path-to-image>\)/g, () => replacements[i++] || 'none');
+  });
 }
 function replaceImagePlaceholder(css, replacement) {
   ['background', 'background-image'].forEach(k => {
@@ -1482,28 +1573,37 @@ function rasterMime(bytes) {
 }
 
 /** Multi-file targets need a real file wherever Figma's CSS uses url(<path-to-image>). */
-async function materializeImageFills(root, ctx) {
+async function materializeImageFills(root, ctx, native) {
   const els = [];
   walk(root, e => { if (hasImagePlaceholder(e.css)) els.push(e); });
   for (const e of els) {
     try {
       const n = await figma.getNodeByIdAsync(e.id);
-      const paint = n && 'fills' in n && !isMixed(n.fills) && n.fills.find(f => f.type === 'IMAGE' && f.visible !== false && f.imageHash);
-      if (!paint) throw new Error('image data unavailable');
-      const key = 'fill:' + paint.imageHash;
-      let file = ctx.assetByKey[key];
-      if (!file) {
-        const baseName = (cleanName(e.name) || 'image') + '-fill';
-        let fname = baseName, i = 1;
-        while (ctx.assetNames[fname]) fname = baseName + '-' + (++i);
-        ctx.assetNames[fname] = 1;
-        file = { id: n.id, file: fname + '.png', format: 'PNG', scale: 1, varName: camel(fname) + 'Img', imageHash: paint.imageHash, cssOnly: true };
-        ctx.assetByKey[key] = file;
-        ctx.assets.push(file);
+      const paints = imagePaints(n);
+      if (!paints.length || imagePlaceholderCount(e.css) !== paints.length) throw new Error('image data unavailable');
+      // Native background APIs accept one full-layer FILL/FIT image. More complex
+      // paint stacks fail explicitly instead of rendering the wrong artwork.
+      if (native && (paints.length !== 1 || ['FILL', 'FIT'].indexOf(paints[0].scaleMode) < 0)) throw new Error('unsupported native image fill');
+      const replacements = [];
+      for (const paint of paints) {
+        const key = 'fill:' + paint.imageHash;
+        let file = ctx.assetByKey[key];
+        if (!file) {
+          const baseName = (cleanName(e.name) || 'image') + '-fill';
+          let fname = baseName, i = 1;
+          while (ctx.assetNames[fname]) fname = baseName + '-' + (++i);
+          ctx.assetNames[fname] = 1;
+          file = { id: n.id, file: fname + '.png', format: 'PNG', scale: 1, varName: camel(fname) + 'Img', imageHash: paint.imageHash, cssOnly: true };
+          ctx.assetByKey[key] = file;
+          ctx.assets.push(file);
+        }
+        replacements.push('url(assets/' + file.file + ')');
+        if (native) e.bgImage = { asset: file, scaleMode: paint.scaleMode };
       }
-      replaceImagePlaceholder(e.css, 'url("assets/' + file.file + '")');
+      // Unquoted URLs are valid CSS and safe inside JSX/Tailwind class attributes.
+      replaceImagePlaceholders(e.css, replacements);
       if (!e.css['background-size'] && (!e.css.background || !/\b(cover|contain)\b/.test(e.css.background))) {
-        e.css['background-size'] = paint.scaleMode === 'FIT' ? 'contain' : 'cover';
+        e.css['background-size'] = paints.map(p => p.scaleMode === 'FIT' ? 'contain' : 'cover').join(', ');
       }
     } catch (err) {
       replaceImagePlaceholder(e.css, 'none');
@@ -1541,19 +1641,30 @@ async function inlineAssets(root, ctx, budget) {
   }
   // 2) image fills on containers (Figma's CSS says url(<path-to-image>))
   const els = [];
+  const fillBytes = {};
   walk(root, e => { if (hasImagePlaceholder(e.css)) els.push(e); });
   for (const e of els) {
     try {
       const n = await figma.getNodeByIdAsync(e.id);
-      const paint = n && 'fills' in n && !isMixed(n.fills) && n.fills.find(f => f.type === 'IMAGE' && f.visible !== false && f.imageHash);
-      const img = paint && figma.getImageByHash(paint.imageHash);
-      if (!img) throw new Error('image data unavailable');
-      const bytes = await img.getBytesAsync();
-      if (used + bytes.length > budget) throw new Error('inline budget exceeded');
-      used += bytes.length;
-      const uri = 'var(' + embedImage(ctx, 'fill', 'url(data:' + rasterMime(bytes) + ';base64,' + figma.base64Encode(bytes) + ')') + ')';
-      replaceImagePlaceholder(e.css, uri);
-      if (!e.css['background-size'] && (!e.css.background || !/\b(cover|contain)\b/.test(e.css.background))) e.css['background-size'] = paint.scaleMode === 'FIT' ? 'contain' : 'cover';
+      const paints = imagePaints(n);
+      if (!paints.length || imagePlaceholderCount(e.css) !== paints.length) throw new Error('image data unavailable');
+      const replacements = [];
+      for (const paint of paints) {
+        if (!fillBytes[paint.imageHash]) {
+          const img = figma.getImageByHash(paint.imageHash);
+          if (!img) throw new Error('image data unavailable');
+          const bytes = await img.getBytesAsync();
+          if (used + bytes.length > budget) throw new Error('inline budget exceeded');
+          used += bytes.length;
+          fillBytes[paint.imageHash] = bytes;
+        }
+        const bytes = fillBytes[paint.imageHash];
+        replacements.push('var(' + embedImage(ctx, 'fill', 'url(data:' + rasterMime(bytes) + ';base64,' + figma.base64Encode(bytes) + ')') + ')');
+      }
+      replaceImagePlaceholders(e.css, replacements);
+      if (!e.css['background-size'] && (!e.css.background || !/\b(cover|contain)\b/.test(e.css.background))) {
+        e.css['background-size'] = paints.map(p => p.scaleMode === 'FIT' ? 'contain' : 'cover').join(', ');
+      }
     } catch (e2) { assetProblem(ctx, 'could not embed image fill on ' + e.id); }
   }
   // 3) raster images become CSS backgrounds (data URI lives once, at the end of the stylesheet)
@@ -1606,10 +1717,11 @@ function singleHtml(node, root, ctx, unit, base, note) {
  */
 async function generateCode(node, lang, unit, base, maxNodes, opts) {
   opts = opts || {};
-  const ctx = { count: 0, max: maxNodes || 600, truncated: false, maxFont: 0, assets: [], assetByKey: {}, assetNames: {}, vars: {}, classes: {}, order: [], weights: {}, usedTitle: false, rootWidth: node.width,
+  const ctx = { lang: lang, count: 0, max: maxNodes || 600, truncated: false, maxFont: 0, assets: [], assetByKey: {}, assetNames: {}, vars: {}, classes: {}, order: [], weights: {}, usedTitle: false, rootWidth: node.width,
     varIds: {}, themes: {}, tokenInfo: {}, imports: {}, fonts: {}, react: /^react-(tailwind|css)$/.test(lang), mappings: /^react-(tailwind|css)$/.test(lang) ? loadMappings() : {} };
   const root = await buildRaw(node, ctx, true);
   if (!root) return { files: [{ name: 'empty.txt', lang: 'text', code: 'Nothing visible to generate.' }], assets: [] };
+  await resolveAutoLineHeights(root, ctx, lang);
   structurePass(root, null, ctx, null);
   walk(root, e => { if (e.css['font-weight']) ctx.weights[e.css['font-weight']] = 1; (e.runs || []).forEach(r => { if (r.css && r.css['font-weight']) ctx.weights[r.css['font-weight']] = 1; }); });
   hoistFont(root);
@@ -1624,8 +1736,9 @@ async function generateCode(node, lang, unit, base, maxNodes, opts) {
   if (lang === 'html-single') {
     try { inlined = await inlineAssets(root, ctx, opts.inlineBudget || 8e6); }
     catch (e) { assetProblem(ctx, 'single-file asset embedding failed'); }
-  } else if (['html-css', 'react-tailwind', 'react-css', 'react-ts', 'react-tailwind-ts', 'vue', 'svelte'].indexOf(lang) > -1) {
-    try { await materializeImageFills(root, ctx); }
+  } else {
+    const native = ['react-native', 'swiftui', 'compose', 'flutter'].indexOf(lang) > -1;
+    try { await materializeImageFills(root, ctx, native); }
     catch (e) { assetProblem(ctx, 'image-fill export failed'); }
   }
   clearUnresolvedImageFills(root, ctx);
@@ -1637,6 +1750,7 @@ async function generateCode(node, lang, unit, base, maxNodes, opts) {
   ctx.rootName = Comp;
   const notes = [];
   if (ctx.truncated) notes.push('Output truncated after ' + ctx.max + ' layers — select a smaller frame for full code.');
+  if (ctx.autoLineHeight) notes.push(ctx.autoLineHeight + ' text layer' + (ctx.autoLineHeight === 1 ? '' : 's') + ' could not be measured; browser font metrics can differ. Set an explicit line-height for pixel-exact output.');
   if (ctx.assetErrors && ctx.assetErrors.length) notes.push(ctx.assetErrors.length + ' asset export issue' + (ctx.assetErrors.length === 1 ? '' : 's') + ' — download the project for details or retry in Figma.');
   const note = notes.join(' ');
   const files = [];
@@ -2101,6 +2215,8 @@ function nprops(el, parent, ctx) {
   P.border = bm ? { w: parseFloat(bm[1]), color: parseColorStr(bm[2], ctx) } : null;
   P.shadow = parseShadow(c['box-shadow'], ctx);
   P.opacity = c.opacity ? parseFloat(c.opacity) : 1;
+  P.z = c['z-index'] !== undefined ? parseInt(c['z-index'], 10) || 0 : null;
+  P.bgImage = el.bgImage || null;
   P.abs = c.position === 'absolute' ? { x: npx(c.left) || 0, y: npx(c.top) || 0 } : null;
   P.size = npx(c['font-size']) || 16;
   P.weight = parseInt(c['font-weight'] || '400', 10);
@@ -2172,6 +2288,7 @@ function swText(el, P, d, ctx, prop) {
   if (P.talign === 'center') mods.push('.multilineTextAlignment(.center)');
   if (P.talign === 'right') mods.push('.multilineTextAlignment(.trailing)');
   mods.push.apply(mods, swFrame(P, P.talign === 'center' ? '.center' : '.leading'));
+  if (P.z !== null) mods.push('.zIndex(' + n2(P.z) + ')');
   if (P.abs) mods.push('.offset(x: ' + n2(P.abs.x) + ', y: ' + n2(P.abs.y) + ')');
   return pad + head + mods.map(m => '\n' + pad + '    ' + m).join('');
 }
@@ -2187,6 +2304,7 @@ function swNode(el, parent, d, ctx, inDef) {
     const mods = ['.resizable()', '.scaledToFit()'].concat(swFrame(P, null));
     if (P.w === null && P.h === null && !P.fillW) mods.push('.frame(width: ' + n2(npx(el.css.width) || 24) + ', height: ' + n2(npx(el.css.height) || 24) + ')');
     if (!el.attrs.alt) mods.push('.accessibilityHidden(true)');
+    if (P.z !== null) mods.push('.zIndex(' + n2(P.z) + ')');
     if (P.abs) mods.push('.offset(x: ' + n2(P.abs.x) + ', y: ' + n2(P.abs.y) + ')');
     return pad + 'Image(' + name + ')' + mods.map(m => '\n' + pad + '    ' + m).join('');
   }
@@ -2206,11 +2324,16 @@ function swNode(el, parent, d, ctx, inDef) {
   const mods = [];
   mods.push.apply(mods, swPadding(P.pad));
   mods.push.apply(mods, swFrame(P, P.dir === 'row' ? '.leading' : '.topLeading'));
+  if (P.bgImage) {
+    mods.push('.background(Image(' + swStr(P.bgImage.asset.file.replace(/\.\w+$/, '')) + ').resizable().' + (P.bgImage.scaleMode === 'FIT' ? 'scaledToFit()' : 'scaledToFill()') + ')');
+    if (!P.radius) mods.push('.clipped()');
+  }
   if (P.bg) mods.push('.background(' + swColor(P.bg, ctx) + ')');
   if (P.radius) mods.push('.clipShape(RoundedRectangle(cornerRadius: ' + n2(P.radius) + '))');
   if (P.border && P.border.color) mods.push('.overlay(RoundedRectangle(cornerRadius: ' + n2(P.radius || 0) + ').stroke(' + swColor(P.border.color, ctx) + ', lineWidth: ' + n2(P.border.w) + '))');
   if (P.shadow && P.shadow.color) mods.push('.shadow(color: ' + swColor(P.shadow.color, ctx) + ', radius: ' + n2(P.shadow.blur / 2) + ', x: ' + n2(P.shadow.x) + ', y: ' + n2(P.shadow.y) + ')');
   if (P.opacity < 1) mods.push('.opacity(' + n2(P.opacity) + ')');
+  if (P.z !== null) mods.push('.zIndex(' + n2(P.z) + ')');
   if (P.abs) mods.push('.offset(x: ' + n2(P.abs.x) + ', y: ' + n2(P.abs.y) + ')');
   if (!el.children.length && el.tag !== 'button') {
     // plain shape (track, divider, dot…): a colour view carries the modifiers
@@ -2273,8 +2396,12 @@ function ktModifier(P, parentDir, ctx, base, skipLayout) {
   if (P.abs) m.push('offset(x = ' + n2(P.abs.x) + '.dp, y = ' + n2(P.abs.y) + '.dp)');
   const shape = P.radius ? 'RoundedCornerShape(' + n2(P.radius) + '.dp)' : null;
   if (P.shadow) m.push('shadow(' + n2(Math.max(1, P.shadow.blur / 2)) + '.dp' + (shape ? ', ' + shape : '') + ')');
-  if (shape && (P.bg || P.border)) m.push('clip(' + shape + ')');
+  if (shape && (P.bg || P.border || P.bgImage)) m.push('clip(' + shape + ')');
   if (P.bg) m.push('background(' + ktColor(P.bg, ctx) + ')');
+  if (P.bgImage) {
+    ctx.ktPaint = true;
+    m.push('paint(painter = painterResource(R.drawable.' + drawableName(P.bgImage.asset.file) + '), contentScale = ContentScale.' + (P.bgImage.scaleMode === 'FIT' ? 'Fit' : 'Crop') + ')');
+  }
   if (P.border && P.border.color) m.push('border(' + n2(P.border.w) + '.dp, ' + ktColor(P.border.color, ctx) + (shape ? ', ' + shape : '') + ')');
   const [t, r, b, l] = P.pad || [0, 0, 0, 0];
   if (t || r || b || l) {
@@ -2283,6 +2410,7 @@ function ktModifier(P, parentDir, ctx, base, skipLayout) {
     else m.push('padding(start = ' + n2(l) + '.dp, top = ' + n2(t) + '.dp, end = ' + n2(r) + '.dp, bottom = ' + n2(b) + '.dp)');
   }
   if (P.opacity < 1) m.push('alpha(' + n2(P.opacity) + 'f)');
+  if (P.z !== null) { ctx.ktZIndex = true; m.push('zIndex(' + n2(P.z) + 'f)'); }
   if (!m.length) return base === 'modifier' ? 'modifier' : null;
   return (base || 'Modifier') + m.map(x => '\n.' + x).join('');
 }
@@ -2365,7 +2493,8 @@ function generateCompose(root, defs, ctx, name) {
     ctx.ktClickable ? 'androidx.compose.foundation.clickable' : null, 'androidx.compose.foundation.layout.*',
     'androidx.compose.foundation.shape.RoundedCornerShape', 'androidx.compose.material3.Text', 'androidx.compose.runtime.Composable',
     'androidx.compose.ui.Alignment', 'androidx.compose.ui.Modifier', 'androidx.compose.ui.draw.alpha', 'androidx.compose.ui.draw.clip',
-    'androidx.compose.ui.draw.shadow', 'androidx.compose.ui.graphics.Color', 'androidx.compose.ui.res.painterResource', ctx.ktClickable ? 'androidx.compose.ui.semantics.Role' : null,
+    ctx.ktPaint ? 'androidx.compose.ui.draw.paint' : null, ctx.ktZIndex ? 'androidx.compose.ui.zIndex' : null,
+    'androidx.compose.ui.draw.shadow', 'androidx.compose.ui.graphics.Color', ctx.ktPaint ? 'androidx.compose.ui.layout.ContentScale' : null, 'androidx.compose.ui.res.painterResource', ctx.ktClickable ? 'androidx.compose.ui.semantics.Role' : null,
     ctx.ktAnnotated ? 'androidx.compose.ui.text.SpanStyle' : null, ctx.ktAnnotated ? 'androidx.compose.ui.text.buildAnnotatedString' : null,
     ctx.ktAnnotated ? 'androidx.compose.ui.text.withStyle' : null, ctx.ktAnnotated ? 'androidx.compose.ui.text.style.TextDecoration' : null,
     'androidx.compose.ui.text.font.FontWeight', 'androidx.compose.ui.text.style.TextAlign', 'androidx.compose.ui.tooling.preview.Preview',
@@ -2432,7 +2561,7 @@ function rnBoxPairs(el, P, parentDir, ctx) {
   if (P.bg) s.push(['backgroundColor', rnColor(P.bg, ctx)]);
   if (P.radius) s.push(['borderRadius', n2(P.radius)]);
   if (P.border && P.border.color) { s.push(['borderWidth', n2(P.border.w)]); s.push(['borderColor', rnColor(P.border.color, ctx)]); }
-  if (el.css.overflow === 'hidden') s.push(['overflow', rnQ('hidden')]);
+  if (el.css.overflow === 'hidden' || (el.bgImage && P.radius)) s.push(['overflow', rnQ('hidden')]);
   if (P.shadow && P.shadow.color) {
     const sc = P.shadow.color;
     s.push(['shadowColor', rnColor(Object.assign({}, sc, { a: 1, token: null }), ctx)]);
@@ -2442,6 +2571,7 @@ function rnBoxPairs(el, P, parentDir, ctx) {
     s.push(['elevation', n2(Math.max(1, Math.round(P.shadow.blur / 2)))]);
   }
   if (P.opacity < 1) s.push(['opacity', n2(P.opacity)]);
+  if (P.z !== null) s.push(['zIndex', String(P.z)]);
   if (P.abs) { s.push(['position', rnQ('absolute')]); s.push(['left', n2(P.abs.x)]); s.push(['top', n2(P.abs.y)]); }
   return s;
 }
@@ -2458,6 +2588,7 @@ function rnTextPairs(el, P, parentDir, ctx) {
   if (P.w !== null) s.push(['width', n2(P.w)]);
   rnLayoutPairs(P, parentDir, s);
   if (P.opacity < 1) s.push(['opacity', n2(P.opacity)]);
+  if (P.z !== null) s.push(['zIndex', String(P.z)]);
   if (P.abs) { s.push(['position', rnQ('absolute')]); s.push(['left', n2(P.abs.x)]); s.push(['top', n2(P.abs.y)]); }
   return s;
 }
@@ -2496,6 +2627,7 @@ function rnNode(el, parent, d, ctx, inDef) {
     const isSvg = el.asset.format === 'SVG';
     const pairs = [];
     rnLayoutPairs(P, pd, pairs);
+    if (P.z !== null) pairs.push(['zIndex', String(P.z)]);
     if (P.abs) { pairs.push(['position', rnQ('absolute')]); pairs.push(['left', n2(P.abs.x)]); pairs.push(['top', n2(P.abs.y)]); }
     const a11y = el.attrs.alt ? ' accessibilityLabel={' + rnStr(el.attrs.alt) + '}' : ' accessible={false}';
     if (isSvg) {
@@ -2510,8 +2642,17 @@ function rnNode(el, parent, d, ctx, inDef) {
   const comp = use(btn ? 'Pressable' : 'View');
   const ref = rnStyleRef(ctx, el, rnBoxPairs(el, P, pd, ctx));
   const attrs = (ref ? ' style={' + ref + '}' : '') + (btn ? ' accessibilityRole="button" onPress={() => {}}' : '');
-  if (!el.children.length) return pad + '<' + comp + attrs + ' />';
-  return pad + '<' + comp + attrs + '>\n' + el.children.map(c => rnNode(c, el, d + 1, ctx, inDef)).join('\n') + '\n' + pad + '</' + comp + '>';
+  let bgCode = '';
+  if (el.bgImage) {
+    use('Image');
+    const bgPairs = [['position', rnQ('absolute')], ['left', '0'], ['top', '0'], ['right', '0'], ['bottom', '0']];
+    if (P.radius) bgPairs.push(['borderRadius', n2(P.radius)]);
+    const bgRef = rnStyleRef(ctx, el, bgPairs);
+    bgCode = pad + '  <Image source={' + el.bgImage.asset.varName + '} style={' + bgRef + '} resizeMode="' + (el.bgImage.scaleMode === 'FIT' ? 'contain' : 'cover') + '" accessible={false} />';
+  }
+  if (!el.children.length && !bgCode) return pad + '<' + comp + attrs + ' />';
+  const content = [bgCode].concat(el.children.map(c => rnNode(c, el, d + 1, ctx, inDef))).filter(Boolean).join('\n');
+  return pad + '<' + comp + attrs + '>\n' + content + '\n' + pad + '</' + comp + '>';
 }
 function generateRN(root, defs, ctx, name) {
   ctx.tokenUse = {}; ctx.rnUse = {}; ctx.rnStyles = null;
@@ -2642,6 +2783,7 @@ function dtNode(el, parent, d, ctx, inDef) {
     if (t || r || b || l) c.push(t === r && r === b && b === l ? 'padding: const EdgeInsets.all(' + n2(t) + ')' : 'padding: const EdgeInsets.fromLTRB(' + [l, t, r, b].map(n2).join(', ') + ')');
     const deco = [];
     if (P.bg) deco.push('color: ' + dtColor(P.bg, ctx));
+    if (P.bgImage) deco.push('image: DecorationImage(image: AssetImage(' + dtStr('assets/' + P.bgImage.asset.file) + '), fit: BoxFit.' + (P.bgImage.scaleMode === 'FIT' ? 'contain' : 'cover') + ')');
     if (P.radius) deco.push('borderRadius: BorderRadius.circular(' + n2(P.radius) + ')');
     if (P.border && P.border.color) deco.push('border: Border.all(color: ' + dtColor(P.border.color, ctx) + ', width: ' + n2(P.border.w) + ')');
     if (P.shadow && P.shadow.color) deco.push('boxShadow: [BoxShadow(color: ' + dtColor(P.shadow.color, ctx) + ', offset: Offset(' + n2(P.shadow.x) + ', ' + n2(P.shadow.y) + '), blurRadius: ' + n2(P.shadow.blur) + ', spreadRadius: ' + n2(P.shadow.spread) + ')]');
@@ -3431,22 +3573,30 @@ if (figma.mode === 'codegen') {
         case 'export-all': {
           const files = [];
           const used = {};
+          const failures = [];
           for (const item of msg.items) {
             try {
               const f = await exportNode(item.id, item.format, item.scale);
               let name = f.name;
               if (used[name]) { used[name]++; name = name.replace(/(\.[a-z]+)$/, '-' + used[name] + '$1'); } else used[name] = 1;
               files.push({ name: name, bytes: f.bytes });
-            } catch (e) { /* skip */ }
+            } catch (e) {
+              failures.push(item.id + ': ' + (e && e.message ? e.message : String(e)));
+            }
+          }
+          if (failures.length) {
+            post({ type: 'error', message: 'Assets not downloaded — export failed: ' + failures.join(', ') });
+            break;
           }
           post({ type: 'download', files: files, zip: true, zipName: msg.zipName || 'assets.zip' });
           break;
         }
         case 'gen-code': {
           const sel = figma.currentPage.selection;
-          if (!sel.length) break;
-          const out = await generateCode(sel[0], msg.lang, settings.unit, settings.remBase, 600);
-          post({ type: 'code', lang: msg.lang, out: out });
+          const node = msg.nodeId ? await figma.getNodeByIdAsync(msg.nodeId) : sel[0];
+          if (!node) break;
+          const out = await generateCode(node, msg.lang, settings.unit, settings.remBase, 600);
+          post({ type: 'code', lang: msg.lang, requestId: msg.requestId || '', nodeId: node.id, out: out });
           break;
         }
         case 'tokens-export': {
@@ -3489,8 +3639,9 @@ if (figma.mode === 'codegen') {
                 bytes = await n.exportAsync(opts);
               }
               if (fileName !== a.file) {
-                const before = 'assets/' + a.file;
-                files.forEach(f => { if (f.text) f.text = f.text.split(before).join('assets/' + fileName); });
+                // Rewrite both path references (web/RN/Flutter) and any native
+                // renderer that embedded the filename directly.
+                files.forEach(f => { if (f.text) f.text = f.text.split(a.file).join(fileName); });
               }
               files.push({ name: 'assets/' + fileName, bytes: bytes });
             } catch (e) { failures.push(a.file + ' (' + String(e && e.message || e) + ')'); }

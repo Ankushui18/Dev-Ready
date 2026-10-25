@@ -54,6 +54,7 @@ Code is built from the whole layer tree, not just the one layer you selected:
   - **System fonts** (SF Pro, New York, SF Mono, Helvetica, Segoe UI…): nothing is loaded.
   - Every `font-family` gets a fallback stack (sans, serif or mono), so text never falls back to Times.
   - Auto-width text gets `white-space: nowrap`, so it doesn't wrap where Figma doesn't.
+  - Wrapped Auto text in web targets uses Figma's measured SVG baseline spacing when the paragraph has uniform line boxes. Mixed metrics and uneven paragraph spacing are left at `normal` with a warning instead of being guessed.
   - Auto layout children get their Fixed / Fill / Hug sizing from the layer itself (`width`, `flex: 1 0 0` or `align-self: stretch`, `flex-shrink: 0`).
   - SwiftUI uses `ZStack` + `.offset` and Compose uses `Box` + `Modifier.offset` for the same layouts.
 - **Mixed text styles** become `<span>`s with their own classes.
@@ -73,7 +74,7 @@ Code is built from the whole layer tree, not just the one layer you selected:
   - Auto layout becomes `VStack`/`HStack`/`ZStack` in SwiftUI and `Column`/`Row`/`Box` in Compose.
   - Gaps and space-between alignment become `spacing:` + `Spacer()` in SwiftUI and `Arrangement.spacedBy`/`SpaceBetween` in Compose.
   - Padding, frame, background, corner radius, border, shadow and opacity become modifiers in the correct order.
-  - Text gets font, weight, color, line height and tracking. Text with mixed styles becomes `Text + Text` in SwiftUI and `buildAnnotatedString` in Compose.
+  - Text gets font, weight, color, explicit line height and tracking. When Figma reports Auto line-height, native targets keep the platform font engine's metrics rather than treating SVG web baselines as a native line box. Text with mixed styles becomes `Text + Text` in SwiftUI and `buildAnnotatedString` in Compose.
   - Repeated components become a `struct StatCard: View` or a `@Composable fun StatCard(...)` with parameters.
   - Variables become `Color.surface` / `AppColors.Surface`. If a Dark mode exists, SwiftUI gets light/dark-aware colors (`Color(light:dark:)`) and Compose gets a separate `AppColorsDark` object.
 - **Code Connect-style mapping.** Select a component instance → **Component → Connect to code** → enter the code component name and import path, e.g. `Button` from `@/components/ui/button`.

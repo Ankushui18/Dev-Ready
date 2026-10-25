@@ -1395,10 +1395,13 @@ function secContent(sp) {
 const FMTS = [['SVG:1', 'SVG'], ['PNG:1', 'PNG 1x'], ['PNG:2', 'PNG 2x'], ['PNG:3', 'PNG 3x'], ['JPG:2', 'JPG 2x'], ['PDF:1', 'PDF']];
 /* ---------- code requests ---------- */
 let pending = {};
+let codeRequestSeq = 0;
 function requestCode(lang) {
-  if (pending[lang]) return; pending[lang] = true;
+  if (pending[lang]) return;
+  const requestId = ++codeRequestSeq;
+  pending[lang] = requestId;
   if (S.demo) { setTimeout(() => { S.code[lang] = DEMO_CODE[lang]; pending[lang] = false; render(); }, 200); return; }
-  send({ type: 'gen-code', lang: lang });
+  send({ type: 'gen-code', lang: lang, requestId: requestId, nodeId: S.data && S.data.spec ? S.data.spec.id : '' });
 }
 
 /* ===================================================================
@@ -1547,7 +1550,7 @@ document.addEventListener('click', e => {
   else if (act === 'export-all') {
     if (S.demo) return toast('Export works inside Figma');
     const f = S.assetFmt.split(':');
-    send({ type: 'export-all', items: (S.data.assets || []).map(x => ({ id: x.id, format: f[0], scale: +f[1] })), zipName: (S.data.spec.name.replace(/[^\w-]+/g, '-') || 'assets') + '-assets.zip' });
+    send({ type: 'export-all', items: (S.data.assets || []).filter(x => x.kind !== 'selection').map(x => ({ id: x.id, format: f[0], scale: +f[1] })), zipName: (S.data.spec.name.replace(/[^\w-]+/g, '-') || 'assets') + '-assets.zip' });
     toast('Preparing ZIP…');
   }
 });
@@ -1565,7 +1568,7 @@ window.onmessage = ev => {
   else if (m.type === 'state') {
     $('bar').classList.remove('on');
     if (!S.data || !S.data.spec || !m.spec || S.data.spec.id !== m.spec.id) S.form = null;
-    S.data = m; S.code = {}; pending = {};
+    S.data = m; S.code = {}; S.codeFor = ''; pending = {};
     if (m.mode !== 'inspect') { Object.keys(S.thumbs).forEach(k => URL.revokeObjectURL(S.thumbs[k])); S.thumbs = {}; }
     closeMenu(); render();
   }
@@ -1577,6 +1580,7 @@ window.onmessage = ev => {
     document.querySelectorAll('[data-thumb="' + CSS.escape(m.id) + '"]').forEach(x => { x.innerHTML = '<img src="' + S.thumbs[m.id] + '" alt="">'; });
   }
   else if (m.type === 'code') {
+    if (!S.codeFor || m.nodeId !== S.codeFor || !m.requestId || pending[m.lang] !== m.requestId) return;
     S.code[m.lang] = m.out; pending[m.lang] = false; render();
     if (m.out.assetErrors && m.out.assetErrors.length) toast(m.out.assetErrors.length + ' asset export issue' + (m.out.assetErrors.length === 1 ? '' : 's') + ' — retry in Figma before downloading');
   }
