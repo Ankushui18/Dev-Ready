@@ -1576,7 +1576,10 @@ window.onmessage = ev => {
     if (el) { const ph = el.querySelector('.ph, img'); const img = document.createElement('img'); img.src = S.thumbs[m.id]; if (ph) ph.replaceWith(img); }
     document.querySelectorAll('[data-thumb="' + CSS.escape(m.id) + '"]').forEach(x => { x.innerHTML = '<img src="' + S.thumbs[m.id] + '" alt="">'; });
   }
-  else if (m.type === 'code') { S.code[m.lang] = m.out; pending[m.lang] = false; render(); }
+  else if (m.type === 'code') {
+    S.code[m.lang] = m.out; pending[m.lang] = false; render();
+    if (m.out.assetErrors && m.out.assetErrors.length) toast(m.out.assetErrors.length + ' asset export issue' + (m.out.assetErrors.length === 1 ? '' : 's') + ' — retry in Figma before downloading');
+  }
   else if (m.type === 'tokens') { S.tok = S.tok || { format: m.format, scope: m.scope }; S.tok.busy = false; S.tok.out = Object.assign({ format: m.format, scope: m.scope }, m.out); render(); }
   else if (m.type === 'fonts-updated') { S.code = {}; pending = {}; render(); }
   else if (m.type === 'ann-result') { if (!m.ok) { S.annHelp = true; render(); } }

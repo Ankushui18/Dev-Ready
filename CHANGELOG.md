@@ -2,6 +2,18 @@
 
 All notable changes to DevReady are listed here. The format follows [Keep a Changelog](https://keepachangelog.com/), and versions follow [SemVer](https://semver.org/).
 
+## [Unreleased]
+
+### Fixed
+- **Design text stays text.** Export settings on a `TEXT` layer no longer turn copy into an image, zero-opacity layers are omitted, and single-line auto-sized text uses its exact line box instead of the browser-dependent `normal` line-height.
+- **Raster artwork is no longer mistaken for a vector icon.** Image-filled rectangles, ellipses and nested avatar stacks stay raster assets, including image content nested in boolean operations.
+- **Container image fills are real assets.** Multi-file web targets emit files and matching CSS URLs; single-file HTML embeds the original bytes. Unresolved Figma `url(<path-to-image>)` placeholders are rejected instead of leaking into output.
+- **Standalone HTML starts at the page edge.** The `html, body` reset is included only for standalone HTML + CSS, not in reusable component stylesheets.
+- **Project downloads are all-or-nothing.** Original image bytes keep their real JPEG/GIF/WebP/PNG extension, and any failed asset export stops the download with a visible error rather than producing an incomplete ZIP.
+
+### Added
+- Six codegen-fidelity regressions covering these cases (**150 checks total**).
+
 ## [1.5.1] — 2026-10-20
 
 No product change. The Dev Mode surface is the one part of the launch matrix that has

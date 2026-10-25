@@ -743,19 +743,32 @@ function cssToTailwind(css, unit, base) {
 /* ------------------------------------------------------------------ */
 const VECTORISH = { VECTOR: 1, BOOLEAN_OPERATION: 1, STAR: 1, LINE: 1, ELLIPSE: 1, POLYGON: 1, RECTANGLE: 1 };
 function allVector(n) {
+  // Image-filled rectangles/ellipses are raster content, even though their node
+  // type is vector-ish. Check every descendant so avatar stacks are not exported
+  // as one opaque SVG icon.
+  if (n.visible === false || hasImageFill(n)) return false;
   if (!('children' in n)) return !!VECTORISH[n.type];
   if (n.type === 'BOOLEAN_OPERATION') return true;
-  for (const c of n.children) { if (!allVector(c)) return false; }
-  return n.children.length > 0;
+  const kids = n.children.filter(c => c.visible !== false);
+  if (!kids.length) return false;
+  for (const c of kids) { if (!allVector(c)) return false; }
+  return true;
 }
 function hasImageFill(n) {
   return 'fills' in n && !isMixed(n.fills) && n.fills.some(f => f.type === 'IMAGE' && f.visible !== false);
 }
+function hasNestedImageFill(n) {
+  if (hasImageFill(n)) return true;
+  return 'children' in n && n.children.some(c => c.visible !== false && hasNestedImageFill(c));
+}
 function isIconLike(n) {
+  // A vector-shaped container is still raster artwork when any visible paint or
+  // descendant contains an image (including inside a boolean operation).
+  if (hasNestedImageFill(n)) return false;
   if (n.type === 'VECTOR' || n.type === 'BOOLEAN_OPERATION' || n.type === 'STAR' || n.type === 'POLYGON') return true;
   if ((n.type === 'FRAME' || n.type === 'GROUP' || n.type === 'INSTANCE' || n.type === 'COMPONENT') &&
       'children' in n && n.children.length && n.width <= 128 && n.height <= 128) {
-    return allVector(n) && !hasImageFill(n);
+    return allVector(n);
   }
   return false;
 }
@@ -925,7 +938,7 @@ async function buildRaw(node, ctx, isRoot, inInst) {
   return applyGeometry(node, await buildRawNode(node, ctx, isRoot, inInst), isRoot);
 }
 async function buildRawNode(node, ctx, isRoot, inInst) {
-  if (node.visible === false) return null;
+  if (node.visible === false || node.opacity === 0) return null;
   if (ctx.count >= ctx.max) { ctx.truncated = true; return null; }
   ctx.count++;
   const el = { id: node.id, type: node.type, name: node.name, generic: nodeIsGeneric(node), kind: 'box', tag: 'div', css: {}, children: [], attrs: {}, inInst: !!inInst, w: node.width, h: node.height };
@@ -949,10 +962,13 @@ async function buildRawNode(node, ctx, isRoot, inInst) {
 
   const hasExport = 'exportSettings' in node && node.exportSettings.length > 0;
   const leafImage = hasImageFill(node) && !('children' in node && node.children.length);
-  if (!isRoot && (isIconLike(node) || hasExport || leafImage)) {
+  // TEXT stays accessible, selectable text even when a designer gave it export
+  // settings. Asset export belongs to the Assets panel; it must not rasterise copy.
+  if (node.type !== 'TEXT' && !isRoot && (isIconLike(node) || hasExport || leafImage)) {
     el.kind = 'img'; el.tag = 'img';
     const icon = isIconLike(node);
-    const fmt = hasExport ? node.exportSettings[0].format : (icon ? 'SVG' : 'PNG');
+    const requested = hasExport ? node.exportSettings[0].format : (icon ? 'SVG' : 'PNG');
+    const fmt = ['PNG', 'JPG', 'SVG'].indexOf(requested) > -1 ? requested : 'PNG';
     const scale = fmt === 'PNG' || fmt === 'JPG' ? 2 : 1;
     const key = el.comp ? el.comp.key : node.id;
     let file = ctx.assetByKey[key];
@@ -981,6 +997,11 @@ async function buildRawNode(node, ctx, isRoot, inInst) {
     el.kind = 'text';
     el.text = node.characters;
     el.fontSize = isMixed(node.fontSize) ? 16 : node.fontSize;
+    // Browser `normal` line-height is font- and platform-dependent. For a
+    // single-line auto-sized Figma text layer, its height is the exact line box.
+    if (el.css['line-height'] === 'normal' && node.textAutoResize === 'WIDTH_AND_HEIGHT' && !/[\n\r]/.test(el.text) && node.height > 0) {
+      el.css['line-height'] = round(node.height) + 'px';
+    }
     el.runs = textRuns(node);
     collectFonts(node, ctx);
     // Inside an instance, read the main component's default text so naming stays
@@ -1254,8 +1275,11 @@ function resetBlock(rootCls) {
     '.' + rootCls + ' :where(a) { color: inherit; text-decoration: none; }\n' +
     '.' + rootCls + ' :where(img) { display: block; }';
 }
-function stylesheet(ctx, rootCls, unit, base, pre) {
+function stylesheet(ctx, rootCls, unit, base, pre, standalone) {
   const parts = [];
+  // Components must not reset their host application. Standalone HTML+CSS is the
+  // exception: without this, browsers add an 8px body margin around the design.
+  if (standalone) parts.push('/* Standalone page reset */\nhtml, body { margin: 0; padding: 0; min-height: 100%; }\nbody { min-height: 100vh; }');
   if (pre) parts.push(pre);
   const v = varsBlock(ctx, unit, base); if (v) parts.push('/* Design tokens */\n' + v);
   parts.push(resetBlock(rootCls));
@@ -1433,6 +1457,69 @@ function fontHead(plan) {
   return '  <link rel="preconnect" href="https://fonts.googleapis.com" />\n  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />\n  <link href="' + googleHref(plan.google).replace(/&/g, '&amp;') + '" rel="stylesheet" />\n';
 }
 
+/* ---------- image fills: real files for projects, data URIs for single HTML ---------- */
+function hasImagePlaceholder(css) {
+  return /url\(<path-to-image>\)/.test(css.background || '') || /url\(<path-to-image>\)/.test(css['background-image'] || '');
+}
+function replaceImagePlaceholder(css, replacement) {
+  ['background', 'background-image'].forEach(k => {
+    if (css[k]) css[k] = css[k].replace(/url\(<path-to-image>\)/g, () => replacement);
+  });
+}
+function assetProblem(ctx, detail) {
+  ctx.assetErrors = ctx.assetErrors || [];
+  if (ctx.assetErrors.indexOf(detail) < 0) ctx.assetErrors.push(detail);
+}
+function rasterExtension(bytes) {
+  if (bytes && bytes.length > 3 && bytes[0] === 0xFF && bytes[1] === 0xD8 && bytes[2] === 0xFF) return 'jpg';
+  if (bytes && bytes.length > 5 && bytes[0] === 0x47 && bytes[1] === 0x49 && bytes[2] === 0x46 && bytes[3] === 0x38) return 'gif';
+  if (bytes && bytes.length > 11 && bytes[0] === 0x52 && bytes[1] === 0x49 && bytes[2] === 0x46 && bytes[3] === 0x46 && bytes[8] === 0x57 && bytes[9] === 0x45 && bytes[10] === 0x42 && bytes[11] === 0x50) return 'webp';
+  return 'png';
+}
+function rasterMime(bytes) {
+  const ext = rasterExtension(bytes);
+  return ext === 'jpg' ? 'image/jpeg' : 'image/' + ext;
+}
+
+/** Multi-file targets need a real file wherever Figma's CSS uses url(<path-to-image>). */
+async function materializeImageFills(root, ctx) {
+  const els = [];
+  walk(root, e => { if (hasImagePlaceholder(e.css)) els.push(e); });
+  for (const e of els) {
+    try {
+      const n = await figma.getNodeByIdAsync(e.id);
+      const paint = n && 'fills' in n && !isMixed(n.fills) && n.fills.find(f => f.type === 'IMAGE' && f.visible !== false && f.imageHash);
+      if (!paint) throw new Error('image data unavailable');
+      const key = 'fill:' + paint.imageHash;
+      let file = ctx.assetByKey[key];
+      if (!file) {
+        const baseName = (cleanName(e.name) || 'image') + '-fill';
+        let fname = baseName, i = 1;
+        while (ctx.assetNames[fname]) fname = baseName + '-' + (++i);
+        ctx.assetNames[fname] = 1;
+        file = { id: n.id, file: fname + '.png', format: 'PNG', scale: 1, varName: camel(fname) + 'Img', imageHash: paint.imageHash, cssOnly: true };
+        ctx.assetByKey[key] = file;
+        ctx.assets.push(file);
+      }
+      replaceImagePlaceholder(e.css, 'url("assets/' + file.file + '")');
+      if (!e.css['background-size'] && (!e.css.background || !/\b(cover|contain)\b/.test(e.css.background))) {
+        e.css['background-size'] = paint.scaleMode === 'FIT' ? 'contain' : 'cover';
+      }
+    } catch (err) {
+      replaceImagePlaceholder(e.css, 'none');
+      assetProblem(ctx, 'image fill on ' + e.id);
+    }
+  }
+}
+/** Never emit Figma's non-standard placeholder, even if an embed budget was hit. */
+function clearUnresolvedImageFills(root, ctx) {
+  walk(root, e => {
+    if (!hasImagePlaceholder(e.css)) return;
+    replaceImagePlaceholder(e.css, 'none');
+    assetProblem(ctx, 'unembedded image fill on ' + e.id);
+  });
+}
+
 /* ---------- single-file HTML: embed assets & image fills as data URIs ---------- */
 const DATA_MIME = { SVG: 'image/svg+xml', PNG: 'image/png', JPG: 'image/jpeg' };
 async function inlineAssets(root, ctx, budget) {
@@ -1441,33 +1528,33 @@ async function inlineAssets(root, ctx, budget) {
   for (const a of ctx.assets) {
     try {
       const n = await figma.getNodeByIdAsync(a.id);
+      if (!n) throw new Error('layer unavailable');
       const fmt = a.format === 'SVG' ? 'SVG' : a.format === 'JPG' ? 'JPG' : 'PNG';
       const o = { format: fmt };
       if (fmt === 'SVG') o.svgOutlineText = true; else o.constraint = { type: 'SCALE', value: a.scale || 2 };
       const bytes = await n.exportAsync(o);
-      if (used + bytes.length > budget) continue;
+      if (used + bytes.length > budget) { assetProblem(ctx, a.file + ' exceeds the inline budget'); continue; }
       used += bytes.length;
       if (fmt === 'SVG') { const m = cleanSvg(utf8(bytes)); if (m) a.svg = m; else a.src = 'data:' + DATA_MIME[fmt] + ';base64,' + figma.base64Encode(bytes); }
       else a.src = 'data:' + DATA_MIME[fmt] + ';base64,' + figma.base64Encode(bytes);
-    } catch (e) { /* leave as file reference */ }
+    } catch (e) { assetProblem(ctx, 'could not embed ' + a.file); }
   }
   // 2) image fills on containers (Figma's CSS says url(<path-to-image>))
   const els = [];
-  walk(root, e => { const b = e.css.background || e.css['background-image'] || ''; if (/url\(<path-to-image>\)/.test(b)) els.push(e); });
+  walk(root, e => { if (hasImagePlaceholder(e.css)) els.push(e); });
   for (const e of els) {
     try {
       const n = await figma.getNodeByIdAsync(e.id);
-      const paint = n.fills.find(f => f.type === 'IMAGE' && f.visible !== false && f.imageHash);
+      const paint = n && 'fills' in n && !isMixed(n.fills) && n.fills.find(f => f.type === 'IMAGE' && f.visible !== false && f.imageHash);
       const img = paint && figma.getImageByHash(paint.imageHash);
-      if (!img) continue;
+      if (!img) throw new Error('image data unavailable');
       const bytes = await img.getBytesAsync();
-      if (used + bytes.length > budget) continue;
+      if (used + bytes.length > budget) throw new Error('inline budget exceeded');
       used += bytes.length;
-      const mime = bytes[0] === 0xFF ? 'image/jpeg' : bytes[0] === 0x47 ? 'image/gif' : 'image/png';
-      const uri = 'var(' + embedImage(ctx, 'fill', 'url(data:' + mime + ';base64,' + figma.base64Encode(bytes) + ')') + ')';
-      ['background', 'background-image'].forEach(k => { if (e.css[k]) e.css[k] = e.css[k].replace(/url\(<path-to-image>\)/g, uri); });
-      if (e.css.background && !/\b(cover|contain)\b/.test(e.css.background)) e.css['background-size'] = paint.scaleMode === 'FIT' ? 'contain' : 'cover';
-    } catch (e2) { /* ignore */ }
+      const uri = 'var(' + embedImage(ctx, 'fill', 'url(data:' + rasterMime(bytes) + ';base64,' + figma.base64Encode(bytes) + ')') + ')';
+      replaceImagePlaceholder(e.css, uri);
+      if (!e.css['background-size'] && (!e.css.background || !/\b(cover|contain)\b/.test(e.css.background))) e.css['background-size'] = paint.scaleMode === 'FIT' ? 'contain' : 'cover';
+    } catch (e2) { assetProblem(ctx, 'could not embed image fill on ' + e.id); }
   }
   // 3) raster images become CSS backgrounds (data URI lives once, at the end of the stylesheet)
   walk(root, e => {
@@ -1534,14 +1621,24 @@ async function generateCode(node, lang, unit, base, maxNodes, opts) {
   ctx.fontPlan = fontPlan;
   ctx.rootFont = root.css['font-family'] || '';
   let inlined = 0;
-  if (lang === 'html-single') { try { inlined = await inlineAssets(root, ctx, opts.inlineBudget || 8e6); } catch (e) { /* ignore */ } }
+  if (lang === 'html-single') {
+    try { inlined = await inlineAssets(root, ctx, opts.inlineBudget || 8e6); }
+    catch (e) { assetProblem(ctx, 'single-file asset embedding failed'); }
+  } else if (['html-css', 'react-tailwind', 'react-css', 'react-ts', 'react-tailwind-ts', 'vue', 'svelte'].indexOf(lang) > -1) {
+    try { await materializeImageFills(root, ctx); }
+    catch (e) { assetProblem(ctx, 'image-fill export failed'); }
+  }
+  clearUnresolvedImageFills(root, ctx);
   const rootName = cleanName(node.name) || 'component';
   if (root.tag === 'div' && node.width >= 900) root.tag = 'main';
   namePass(root, rootName, ctx, true);
 
   const Comp = pascal(rootName);
   ctx.rootName = Comp;
-  const note = ctx.truncated ? 'Output truncated after ' + ctx.max + ' layers — select a smaller frame for full code.' : '';
+  const notes = [];
+  if (ctx.truncated) notes.push('Output truncated after ' + ctx.max + ' layers — select a smaller frame for full code.');
+  if (ctx.assetErrors && ctx.assetErrors.length) notes.push(ctx.assetErrors.length + ' asset export issue' + (ctx.assetErrors.length === 1 ? '' : 's') + ' — download the project for details or retry in Figma.');
+  const note = notes.join(' ');
   const files = [];
 
   if (lang === 'swiftui' || lang === 'compose' || lang === 'flutter') {
@@ -1567,14 +1664,14 @@ async function generateCode(node, lang, unit, base, maxNodes, opts) {
       fontHead(ctx.fontPlan) + '  <link rel="stylesheet" href="styles.css" />\n</head>\n<body>\n' +
       (note ? '  <!' + '-- ' + note + ' --' + '>\n' : '') + renderHTML(root, 1) + '\n</body>\n</html>\n';
     files.push({ name: 'index.html', lang: 'html', code: html });
-    files.push({ name: 'styles.css', lang: 'css', code: stylesheet(ctx, root.cls, unit, base, fontCss(ctx.fontPlan, false)) });
+    files.push({ name: 'styles.css', lang: 'css', code: stylesheet(ctx, root.cls, unit, base, fontCss(ctx.fontPlan, false), true) });
   } else {
     // react-css / react-tailwind emit JSX; react-ts / react-tailwind-ts add types.
     const ts = /-ts$/.test(lang);
     const mode = /^react-tailwind/.test(lang) ? 'tw' : 'css';
     const defs = extractComponents(root, ctx);
     const imports = Object.keys(ctx.imports).map(p => "import { " + Object.keys(ctx.imports[p]).join(', ') + " } from " + jsQuote(p) + ";")
-      .concat(ctx.assets.map(a => "import " + a.varName + " from './assets/" + a.file + "';"));
+      .concat(ctx.assets.filter(a => !a.cssOnly).map(a => "import " + a.varName + " from './assets/" + a.file + "';"));
     if (mode === 'css') imports.push("import './" + Comp + ".css';");
     else if (Object.keys(ctx.vars).length || fontCss(ctx.fontPlan, true)) imports.push("import './tokens.css';");
     const defCode = defs.map(def => {
@@ -1590,6 +1687,8 @@ async function generateCode(node, lang, unit, base, maxNodes, opts) {
     if (ts) {
       const exts = {};
       ctx.assets.forEach(a => { const e = String(a.file).split('.').pop().toLowerCase(); if (e) exts[e] = 1; });
+      // Original image-fill bytes keep their real format in the project ZIP.
+      if (ctx.assets.some(a => a.imageHash)) ['jpg', 'gif', 'webp'].forEach(e => { exts[e] = 1; });
       const decl = ['css'].concat(Object.keys(exts).filter(e => e !== 'css').sort()).map(e =>
         e === 'css' ? "declare module '*.css';" : "declare module '*." + e + "' {\n  const src: string;\n  export default src;\n}");
       files.push({ name: 'assets.d.ts', lang: 'ts', code: '/* Ambient declarations for asset and stylesheet imports. */\n' + decl.join('\n') + '\n' });
@@ -1600,11 +1699,12 @@ async function generateCode(node, lang, unit, base, maxNodes, opts) {
   }
   return {
     files: files,
-    assets: ctx.assets.filter(a => !a.src && !a.svg).map(a => ({ id: a.id, file: a.file, format: a.format, scale: a.scale })),
+    assets: ctx.assets.filter(a => !a.src && !a.svg).map(a => ({ id: a.id, file: a.file, format: a.format, scale: a.scale, imageHash: a.imageHash || '', cssOnly: !!a.cssOnly })),
     fonts: fontPlan.families,
     fontFiles: opts.withFonts ? fontPlan.files : undefined,
     preview: { w: round(node.width), h: round(node.height), inlinedKB: Math.round(inlined / 1024) },
     truncated: ctx.truncated,
+    assetErrors: ctx.assetErrors || [],
     stats: { layers: ctx.count, classes: ctx.order.length, assets: ctx.assets.length, tokens: Object.keys(ctx.vars).length, modes: Object.keys(ctx.themes).length, mapped: Object.keys(ctx.imports).reduce((n, p) => n + Object.keys(ctx.imports[p]).length, 0) }
   };
 }
@@ -3370,14 +3470,35 @@ if (figma.mode === 'codegen') {
           const out = await generateCode(sel[0], msg.lang, settings.unit, settings.remBase, 1500, { withFonts: true });
           const files = out.files.map(f => ({ name: f.name, text: f.code }));
           (out.fontFiles || []).forEach(f => files.push({ name: f.name, bytes: f.bytes }));
+          const failures = (out.assetErrors || []).slice();
           for (const a of out.assets) {
             try {
-              const n = await figma.getNodeByIdAsync(a.id);
-              const opts = { format: a.format };
-              if (a.format === 'PNG' || a.format === 'JPG') opts.constraint = { type: 'SCALE', value: a.scale };
-              if (a.format === 'SVG') opts.svgOutlineText = true;
-              files.push({ name: 'assets/' + a.file, bytes: await n.exportAsync(opts) });
-            } catch (e) { /* skip */ }
+              let bytes, fileName = a.file;
+              if (a.imageHash) {
+                const img = figma.getImageByHash(a.imageHash);
+                if (!img) throw new Error('image data unavailable');
+                bytes = await img.getBytesAsync();
+                const ext = rasterExtension(bytes);
+                if (ext !== 'png') fileName = fileName.replace(/\.png$/i, '.' + ext);
+              } else {
+                const n = await figma.getNodeByIdAsync(a.id);
+                if (!n) throw new Error('layer unavailable');
+                const opts = { format: a.format };
+                if (a.format === 'PNG' || a.format === 'JPG') opts.constraint = { type: 'SCALE', value: a.scale };
+                if (a.format === 'SVG') opts.svgOutlineText = true;
+                bytes = await n.exportAsync(opts);
+              }
+              if (fileName !== a.file) {
+                const before = 'assets/' + a.file;
+                files.forEach(f => { if (f.text) f.text = f.text.split(before).join('assets/' + fileName); });
+              }
+              files.push({ name: 'assets/' + fileName, bytes: bytes });
+            } catch (e) { failures.push(a.file + ' (' + String(e && e.message || e) + ')'); }
+          }
+          if (failures.length) {
+            const detail = failures.slice(0, 3).join(', ') + (failures.length > 3 ? ' and ' + (failures.length - 3) + ' more' : '');
+            post({ type: 'error', message: 'Project not downloaded — asset export failed: ' + detail + '. Retry in Figma.' });
+            break;
           }
           post({ type: 'project', files: files, zipName: slug(sel[0].name) + '-' + msg.lang + '.zip', single: files.length === 1 });
           break;
