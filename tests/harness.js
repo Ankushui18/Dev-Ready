@@ -131,6 +131,10 @@ function loadEngine(B, options) {
     codegen: { on() {}, refresh() {} },
     getNodeByIdAsync: async id => B.ALL[id] || null,
     getStyleByIdAsync: async () => null,
+    getImageByHash: hash => {
+      const bytes = options.images && options.images[hash];
+      return bytes ? { getBytesAsync: async () => bytes } : null;
+    },
     base64Encode: b => Buffer.from(b).toString('base64'),
     root: { getSharedPluginDataKeys: () => [], getSharedPluginData: () => '', setSharedPluginData() {} },
     clientStorage: { async getAsync(k) { return store[k]; }, async setAsync(k, v) { store[k] = v; }, async keysAsync() { return Object.keys(store); }, async deleteAsync(k) { delete store[k]; } },

@@ -88,6 +88,7 @@ const V = {
     for (const ch of noStrings) { if (ch === '{') depth++; else if (ch === '}') { depth--; if (depth < 0) { errs.push('extra }'); break; } } }
     if (depth > 0) errs.push('unclosed {');
     if (/<\/?(script|style)\b/i.test(noComments)) errs.push('markup inside CSS');
+    if (/url\(\s*<path-to-image>\s*\)/i.test(noComments)) errs.push('unresolved Figma image-fill placeholder');
     if (esbuild) {
       try { esbuild.transformSync(code, { loader: 'css', logLevel: 'silent' }); }
       catch (e) { errs.push('CSS parse error: ' + (e.errors && e.errors[0] ? e.errors[0].text : e.message)); }

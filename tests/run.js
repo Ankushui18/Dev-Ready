@@ -217,6 +217,120 @@ async function changeTracking() {
   }
 }
 
+/* Regressions for design-to-code fidelity: text must not become artwork, raster
+   avatar stacks must not become vector icons, and every emitted asset must exist. */
+async function codegenQuality() {
+  console.log('\ncodegen fidelity' + C.d(' — text, raster assets, image fills and project packaging'));
+  {
+    const B = createBuilders();
+    const name = B.T('Sam', { 'font-size': '12px', 'line-height': 'normal' }, {
+      height: 15,
+      exportSettings: [{ format: 'PNG', suffix: '', constraint: { type: 'SCALE', value: 2 } }]
+    });
+    const root = B.AL('Friends', 'VERTICAL', { padding: '12px' }, [name], { width: 160, height: 60 });
+    root.parent = { type: 'PAGE' };
+    const out = await loadEngine(B).generateCode(root, 'html-css', 'px', 16, 600, {});
+    const all = out.files.map(f => f.code).join('\n');
+    const errs = [];
+    if (!/>Sam<\/p>/.test(all)) errs.push('exported TEXT was rasterised instead of rendered as text');
+    if (/assets\/sam\.png/.test(all) || out.assets.length) errs.push('text export settings leaked an image asset');
+    if (!/line-height: 15px/.test(all)) errs.push('auto line-height was left browser-dependent');
+    record('codegen', 'TEXT with export settings stays text and keeps exact auto line-height', errs);
+  }
+  {
+    const B = createBuilders();
+    const avatar = B.N({ type: 'ELLIPSE', name: 'Sam avatar', width: 24, height: 24,
+      fills: [{ type: 'IMAGE', visible: true, imageHash: 'sam-raster', scaleMode: 'FILL' }],
+      _css: { width: '24px', height: '24px', 'border-radius': '50%' } });
+    const booleanAvatar = B.N({ type: 'BOOLEAN_OPERATION', name: 'Avatar boolean', width: 24, height: 24,
+      children: [B.N({ type: 'ELLIPSE', name: 'Pat avatar', width: 24, height: 24,
+        fills: [{ type: 'IMAGE', visible: true, imageHash: 'pat-raster', scaleMode: 'FILL' }], _css: {} })] });
+    const stack = B.AL('Avatars', 'HORIZONTAL', { gap: '0px' }, [avatar, booleanAvatar], { width: 68, height: 24 });
+    const root = B.AL('Group', 'VERTICAL', { padding: '8px' }, [stack], { width: 120, height: 60 });
+    root.parent = { type: 'PAGE' };
+    const out = await loadEngine(B).generateCode(root, 'html-css', 'px', 16, 600, {});
+    const all = out.files.map(f => f.code).join('\n');
+    const errs = [];
+    if (!/assets\/sam-avatar\.png/.test(all) || !/assets\/pat-avatar\.png/.test(all)) errs.push('image-filled ellipses were not emitted as PNGs');
+    if (/assets\/(avatars|avatar-boolean)\.svg/.test(all)) errs.push('raster avatar stack was misclassified as a vector icon');
+    if (out.assets.length !== 2 || out.assets.some(a => a.format !== 'PNG')) errs.push('asset manifest wrong: ' + JSON.stringify(out.assets));
+    record('codegen', 'nested image-filled circles stay raster assets, not a monolithic SVG', errs);
+  }
+  {
+    const B = createBuilders();
+    const root = B.AL('Photo card', 'VERTICAL', {
+      padding: '12px', background: 'url(<path-to-image>) lightgray 50% / cover no-repeat, #F8F8F8'
+    }, [B.T('Goa Trip', {})], {
+      width: 220, height: 100,
+      fills: [{ type: 'IMAGE', visible: true, imageHash: 'hero-image', scaleMode: 'FILL' }]
+    });
+    root.parent = { type: 'PAGE' };
+    const out = await loadEngine(B).generateCode(root, 'html-css', 'px', 16, 600, {});
+    const all = out.files.map(f => f.code).join('\n');
+    const errs = [];
+    if (!/url\("assets\/photo-card-fill\.png"\)/.test(all)) errs.push('container fill was not materialised as a project asset');
+    if (/url\(<path-to-image>\)/.test(all)) errs.push('Figma placeholder leaked into generated CSS');
+    if (out.assets.length !== 1 || out.assets[0].imageHash !== 'hero-image') errs.push('image fill missing from asset manifest');
+    if (!validateFile({ name: 'bad.css', lang: 'css', code: '.x{background:url(<path-to-image>)}' }).some(e => /placeholder/.test(e))) {
+      errs.push('validator does not reject unresolved image placeholders');
+    }
+    record('codegen', 'container image fills become real assets; placeholders are rejected', errs);
+  }
+  {
+    const B = createBuilders();
+    const root = B.AL('Card', 'VERTICAL', { padding: '16px' }, [B.T('Hello', {})], { width: 200, height: 80 });
+    root.parent = { type: 'PAGE' };
+    const eng = loadEngine(B);
+    const html = await eng.generateCode(root, 'html-css', 'px', 16, 600, {});
+    const component = await eng.generateCode(root, 'react-css', 'px', 16, 600, {});
+    const page = html.files.find(f => f.name === 'styles.css').code;
+    const scoped = component.files.find(f => /\.css$/.test(f.name)).code;
+    const errs = [];
+    if (!/html, body \{ margin: 0; padding: 0; min-height: 100%; \}/.test(page)) errs.push('standalone HTML has no global body reset');
+    if (/html, body|Standalone page reset/.test(scoped)) errs.push('component stylesheet resets its host page');
+    record('codegen', 'standalone HTML resets body margin without leaking into components', errs);
+  }
+  {
+    const B = createBuilders();
+    const root = B.AL('Photo card', 'VERTICAL', {
+      padding: '12px', background: 'url(<path-to-image>) center / cover no-repeat'
+    }, [B.T('Goa Trip', {})], {
+      width: 220, height: 100,
+      fills: [{ type: 'IMAGE', visible: true, imageHash: 'hero-jpeg', scaleMode: 'FILL' }]
+    });
+    root.parent = { type: 'PAGE' };
+    const jpeg = new Uint8Array([0xFF, 0xD8, 0xFF, 0xE0, 1, 2, 3, 4]);
+    const eng = loadEngine(B, { mode: 'inspect', selection: [root], images: { 'hero-jpeg': jpeg } });
+    await eng.send({ type: 'export-project', lang: 'html-css' });
+    const project = eng.posted.find(m => m.type === 'project');
+    const errs = [];
+    if (!project) errs.push('no project emitted: ' + JSON.stringify(eng.posted.slice(-1)));
+    else {
+      const asset = project.files.find(f => f.name === 'assets/photo-card-fill.jpg');
+      if (!asset || asset.bytes !== jpeg) errs.push('original JPEG bytes were not packaged');
+      const css = project.files.find(f => f.name === 'styles.css');
+      if (!css || !/assets\/photo-card-fill\.jpg/.test(css.text) || /path-to-image|\.png/.test(css.text)) errs.push('CSS was not rewritten to the real image extension');
+    }
+    record('codegen', 'project ZIP contains original image bytes and matching asset URLs', errs);
+  }
+  {
+    const B = createBuilders();
+    const badge = B.R('Badge', 40, 40, { background: '#F00' }, {
+      exportSettings: [{ format: 'PNG', suffix: '', constraint: { type: 'SCALE', value: 2 } }]
+    });
+    badge.exportAsync = async () => { throw new Error('mock export failure'); };
+    const root = B.AL('Broken assets', 'VERTICAL', { padding: '8px' }, [badge], { width: 100, height: 70 });
+    root.parent = { type: 'PAGE' };
+    const eng = loadEngine(B, { mode: 'inspect', selection: [root] });
+    await eng.send({ type: 'export-project', lang: 'html-css' });
+    const errs = [];
+    const error = eng.posted.find(m => m.type === 'error');
+    if (!error || !/asset export failed/.test(error.message)) errs.push('failure was not explained to the user');
+    if (eng.posted.some(m => m.type === 'project')) errs.push('a partial project ZIP was emitted despite the failure');
+    record('codegen', 'failed asset exports stop partial downloads with a clear error', errs);
+  }
+}
+
 /* The TypeScript targets are more than a rename: typed props, .tsx, and ambient
    declarations so `tsc` accepts asset and CSS imports. Guard those specifics. */
 async function typescriptTargets() {
@@ -481,7 +595,7 @@ function sandboxCheck() {
   console.log('DevReady test suite');
   sandboxCheck();
   for (const fx of FIXTURES) if (!only || fx.name.includes(only)) await runFixture(fx);
-  if (!only) { await changeTracking(); await privacyAndOffline(); await messageValidation(); await require('./features')(record); await typescriptTargets(); await goldenOutput(); await generatedProjectBuild(); repoLayout(); docConsistency(); }
+  if (!only) { await changeTracking(); await privacyAndOffline(); await messageValidation(); await require('./features')(record); await codegenQuality(); await typescriptTargets(); await goldenOutput(); await generatedProjectBuild(); repoLayout(); docConsistency(); }
   const total = results.length;
   console.log('\n' + (failed ? C.r(failed + ' failed') : C.g('all passed')) + ' · ' + (total - failed) + '/' + total + ' checks');
   if (REPORT) {
