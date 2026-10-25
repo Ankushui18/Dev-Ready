@@ -18,6 +18,7 @@
 const fs = require('fs');
 const path = require('path');
 const { createBuilders, loadEngine, CODE } = require('./harness');
+const UI_CODE = fs.readFileSync(path.join(__dirname, '..', 'devready-plugin', 'ui.html'), 'utf8');
 const { validateFile } = require('./validators');
 const FIXTURES = require('./fixtures');
 
@@ -268,7 +269,7 @@ async function codegenQuality() {
     const out = await loadEngine(B).generateCode(root, 'html-css', 'px', 16, 600, {});
     const all = out.files.map(f => f.code).join('\n');
     const errs = [];
-    if (!/url\("assets\/photo-card-fill\.png"\)/.test(all)) errs.push('container fill was not materialised as a project asset');
+    if (!/url\(assets\/photo-card-fill\.png\)/.test(all)) errs.push('container fill was not materialised as a project asset');
     if (/url\(<path-to-image>\)/.test(all)) errs.push('Figma placeholder leaked into generated CSS');
     if (out.assets.length !== 1 || out.assets[0].imageHash !== 'hero-image') errs.push('image fill missing from asset manifest');
     if (!validateFile({ name: 'bad.css', lang: 'css', code: '.x{background:url(<path-to-image>)}' }).some(e => /placeholder/.test(e))) {
@@ -328,6 +329,159 @@ async function codegenQuality() {
     if (!error || !/asset export failed/.test(error.message)) errs.push('failure was not explained to the user');
     if (eng.posted.some(m => m.type === 'project')) errs.push('a partial project ZIP was emitted despite the failure');
     record('codegen', 'failed asset exports stop partial downloads with a clear error', errs);
+  }
+}
+
+/* Follow-up regressions for export atomicity, request routing and layered paint order. */
+async function codegenFollowup() {
+  console.log('\ncodegen follow-up' + C.d(' — JSX fills, native assets, races and stacking'));
+  {
+    const B = createBuilders();
+    const root = B.AL('Photo card', 'VERTICAL', {
+      padding: '12px', background: 'url(<path-to-image>) lightgray 50% / cover no-repeat, #F8F8F8'
+    }, [B.T('Goa Trip', {})], { width: 220, height: 100,
+      fills: [{ type: 'IMAGE', visible: true, imageHash: 'hero-image', scaleMode: 'FILL' }] });
+    root.parent = { type: 'PAGE' };
+    const out = await loadEngine(B).generateCode(root, 'react-tailwind', 'px', 16, 600, {});
+    const jsx = out.files.find(f => /\.jsx$/.test(f.name));
+    const all = out.files.map(f => f.code).join('\n');
+    const errs = [];
+    if (!/url\(assets\/photo-card-fill\.png\)/.test(all) || /url\(["']assets\//.test(all)) errs.push('asset URL is not JSX/Tailwind-safe');
+    if (!jsx || validateFile(jsx).length) errs.push('generated Tailwind JSX is invalid: ' + (jsx ? validateFile(jsx).join(', ') : 'missing file'));
+    record('followup', 'React Tailwind container image fills emit valid JSX', errs);
+  }
+  {
+    const B = createBuilders();
+    const root = B.AL('Photo stack', 'VERTICAL', {
+      'background-image': 'url(<path-to-image>), url(<path-to-image>)', 'background-size': 'cover, contain'
+    }, [B.T('Two images', {})], { width: 220, height: 100, fills: [
+      { type: 'IMAGE', visible: true, imageHash: 'front', scaleMode: 'FILL' },
+      { type: 'IMAGE', visible: true, imageHash: 'back', scaleMode: 'FIT' }
+    ] });
+    root.parent = { type: 'PAGE' };
+    const png = new Uint8Array([0x89, 0x50, 0x4E, 0x47, 1]);
+    const jpeg = new Uint8Array([0xFF, 0xD8, 0xFF, 0xE0, 2]);
+    const eng = loadEngine(B, { images: { front: png, back: jpeg } });
+    const out = await eng.generateCode(root, 'html-css', 'px', 16, 600, {});
+    const single = await eng.generateCode(root, 'html-single', 'px', 16, 600, {});
+    const all = out.files.map(f => f.code).join('\n');
+    const singleCode = single.files[0].code;
+    const errs = [];
+    if (out.assets.length !== 2 || out.assets.map(a => a.imageHash).join(',') !== 'front,back') errs.push('multiple fills collapsed in the asset manifest');
+    if (!/url\(assets\/photo-stack-fill\.png\), url\(assets\/photo-stack-fill-2\.png\)/.test(all)) errs.push('CSS placeholders were not replaced one-to-one');
+    if ((singleCode.match(/url\(data:image\//g) || []).length !== 2 || !/image\/png/.test(singleCode) || !/image\/jpeg/.test(singleCode)) errs.push('single HTML did not embed both distinct images');
+    if (/path-to-image/.test(all + singleCode)) errs.push('an image placeholder leaked');
+    record('followup', 'multiple image fills retain their own assets and data URIs', errs);
+  }
+  {
+    const expected = {
+      'react-native': [/<Image source=\{photoCardFillImg\}/, /resizeMode="cover"/],
+      swiftui: [/Image\("photo-card-fill"\)/, /scaledToFill\(\)/],
+      compose: [/R\.drawable\.photo_card_fill/, /\.paint\(/, /ContentScale\.Crop/],
+      flutter: [/DecorationImage\(/, /assets\/photo-card-fill\.jpg/]
+    };
+    const errs = [];
+    for (const lang of Object.keys(expected)) {
+      const B = createBuilders();
+      const root = B.AL('Photo card', 'VERTICAL', {
+        padding: '12px', background: 'url(<path-to-image>) center / cover no-repeat', 'border-radius': '12px'
+      }, [B.T('Goa Trip', {})], { width: 220, height: 100,
+        fills: [{ type: 'IMAGE', visible: true, imageHash: 'hero-image', scaleMode: 'FILL' }] });
+      root.parent = { type: 'PAGE' };
+      const bytes = new Uint8Array([0xFF, 0xD8, 0xFF, 0xE0, 1, 2]);
+      const eng = loadEngine(B, { mode: 'inspect', selection: [root], images: { 'hero-image': bytes } });
+      await eng.send({ type: 'export-project', lang: lang });
+      const project = eng.posted.find(m => m.type === 'project');
+      if (!project) { errs.push(lang + ': no project: ' + JSON.stringify(eng.posted.slice(-1))); continue; }
+      const code = project.files.map(f => f.text || '').join('\n');
+      expected[lang].forEach(re => { if (!re.test(code)) errs.push(lang + ': missing ' + re); });
+      if (!project.files.some(f => f.name === 'assets/photo-card-fill.jpg')) errs.push(lang + ': original asset not packaged');
+      if (/assets\/photo-card-fill\.png/.test(code)) errs.push(lang + ': stale .png reference after JPEG packaging');
+    }
+    record('followup', 'native projects render and package single container image fills', errs);
+  }
+  {
+    const B = createBuilders();
+    const good = B.R('Good', 20, 20, {}, { exportSettings: [{ format: 'PNG', suffix: '', constraint: { type: 'SCALE', value: 1 } }] });
+    const bad = B.R('Bad', 20, 20, {}, { exportSettings: [{ format: 'PNG', suffix: '', constraint: { type: 'SCALE', value: 1 } }] });
+    bad.exportAsync = async () => { throw new Error('mock export-all failure'); };
+    const eng = loadEngine(B, { mode: 'inspect', selection: [] });
+    await eng.send({ type: 'export-all', items: [good.id, bad.id].map(id => ({ id, format: 'PNG', scale: 1 })), zipName: 'assets.zip' });
+    const errs = [];
+    if (!eng.posted.some(m => m.type === 'error' && /Assets not downloaded/.test(m.message))) errs.push('batch failure was not surfaced');
+    if (eng.posted.some(m => m.type === 'download')) errs.push('partial ZIP was emitted');
+    await eng.send({ type: 'export-all', items: [{ id: good.id, format: 'PNG', scale: 1 }], zipName: 'assets.zip' });
+    if (!eng.posted.some(m => m.type === 'download' && m.files.length === 1)) errs.push('successful batch no longer downloads');
+    record('followup', 'Export all is atomic and never emits a partial ZIP', errs);
+  }
+  {
+    const B = createBuilders();
+    const oldRoot = B.AL('Old selection', 'VERTICAL', {}, [B.T('Old text', {})], { width: 160, height: 60 });
+    const newRoot = B.AL('New selection', 'VERTICAL', {}, [B.T('New text', {})], { width: 160, height: 60 });
+    oldRoot.parent = newRoot.parent = { type: 'PAGE' };
+    const getCSS = oldRoot.getCSSAsync;
+    oldRoot.getCSSAsync = async function () { await new Promise(r => setTimeout(r, 30)); return getCSS.call(this); };
+    const eng = loadEngine(B, { mode: 'inspect', selection: [oldRoot] });
+    const first = eng.send({ type: 'gen-code', lang: 'html-css', requestId: 1, nodeId: oldRoot.id });
+    await new Promise(r => setTimeout(r, 2));
+    eng.page.selection = [newRoot];
+    const second = eng.send({ type: 'gen-code', lang: 'html-css', requestId: 2, nodeId: newRoot.id });
+    await Promise.all([first, second]);
+    const messages = eng.posted.filter(m => m.type === 'code');
+    const errs = [];
+    if (messages.length !== 2) errs.push('responses were dropped instead of routed: ' + messages.length);
+    else {
+      if (messages[0].requestId !== 2 || messages[1].requestId !== 1) errs.push('test did not produce out-of-order responses');
+      if (!messages.every(m => m.nodeId === (m.requestId === 1 ? oldRoot.id : newRoot.id))) errs.push('response selection identity is wrong');
+      const oldCode = messages.find(m => m.requestId === 1), newCode = messages.find(m => m.requestId === 2);
+      if (!oldCode || !/Old text/.test(oldCode.out.files[0].code) || !newCode || !/New text/.test(newCode.out.files[0].code)) errs.push('response payload does not match its request');
+    }
+    record('followup', 'out-of-order code responses carry request and selection identity', errs);
+  }
+  {
+    const B = createBuilders();
+    const text = B.T('A long wrapped sentence with three measured lines', { 'font-size': '16px', 'line-height': 'normal', width: '120px', height: '72px' }, {
+      width: 120, height: 72, textAutoResize: 'HEIGHT', _svgBaselines: [15, 39, 63]
+    });
+    const root = B.AL('Article', 'VERTICAL', {}, [text], { width: 160, height: 100 });
+    root.parent = { type: 'PAGE' };
+    const eng = loadEngine(B);
+    const web = await eng.generateCode(root, 'html-css', 'px', 16, 600, {});
+    const all = web.files.map(f => f.code).join('\n');
+    const errs = [];
+    if (!/line-height: 24px/.test(all) || /line-height: normal/.test(all)) errs.push('wrapped Auto text did not use Figma baseline spacing');
+    let nativeSvgExports = 0;
+    const exportText = text.exportAsync;
+    text.exportAsync = async opts => { nativeSvgExports++; return exportText.call(text, opts); };
+    await eng.generateCode(root, 'react-native', 'px', 16, 600, {});
+    if (nativeSvgExports) errs.push('native generation used web SVG text metrics');
+    const uneven = eng.ctx.measuredSvgLineHeight('<svg><text><tspan y="15"></tspan><tspan y="39"></tspan><tspan y="70"></tspan></text></svg>');
+    if (uneven !== null) errs.push('non-uniform paragraph measurements were guessed as one line-height');
+    record('followup', 'web wrapped Auto text uses measured Figma baselines, never guessed box averages', errs);
+  }
+  {
+    const errs = [];
+    if (!/items: \(S\.data\.assets \|\| \[\]\)\.filter\(x => x\.kind !== 'selection'\)\.map/.test(UI_CODE)) errs.push('Export all no longer follows the Assets list filter');
+    record('followup', 'Export all excludes the selected root hidden from Assets', errs);
+  }
+  {
+    const B = createBuilders();
+    const nav = B.R('Bottom navbar', 300, 64, { background: '#FFF' }, { ax: 0, ay: 236 });
+    const row = B.R('Overlapping row', 280, 80, { background: '#EEE' }, { ax: 10, ay: 210, layoutPositioning: 'ABSOLUTE' });
+    const root = B.AL('Screen', 'VERTICAL', { 'justify-content': 'flex-end', width: '300px', height: '300px' }, [nav, row], { width: 300, height: 300, itemReverseZIndex: true });
+    root.parent = { type: 'PAGE' };
+    const eng = loadEngine(B);
+    const out = await eng.generateCode(root, 'html-css', 'px', 16, 600, {});
+    const rn = await eng.generateCode(root, 'react-native', 'px', 16, 600, {});
+    const css = out.files.find(f => f.name === 'styles.css').code;
+    const errs = [];
+    if (!/\.screen__bottom-navbar \{[^}]*z-index: 2;/.test(css) || !/\.screen__overlapping-row \{[^}]*z-index: 1;/.test(css)) errs.push('reverse canvas stacking was not preserved: ' + css);
+    if (!/zIndex: 2/.test(rn.files[0].code) || !/zIndex: 1/.test(rn.files[0].code)) errs.push('native sibling stacking was not preserved');
+    root.itemReverseZIndex = false; root.children = [row, nav];
+    const mixed = await eng.generateCode(root, 'html-css', 'px', 16, 600, {});
+    const mixedCss = mixed.files.find(f => f.name === 'styles.css').code;
+    if (!/\.screen__bottom-navbar \{[^}]*z-index: 2;/.test(mixedCss) || !/\.screen__overlapping-row \{[^}]*z-index: 1;/.test(mixedCss)) errs.push('normal-flow bar was left below an earlier absolute row');
+    record('followup', 'auto-layout paint order keeps bottom bars above absolute rows', errs);
   }
 }
 
@@ -551,7 +705,7 @@ async function messageValidation() {
     ['export: format must be PNG/JPG/SVG/PDF', v({ type: 'export', id: '1:2', format: 'EXE', scale: 2 }).type === '__invalid'],
     ['export: scale clamped to 0.5–4', v({ type: 'export', id: '1:2', format: 'PNG', scale: 400 }).scale === 4],
     ['node id must look like a Figma id', v({ type: 'select', id: '1:2"><img>' }).type === '__invalid' && v({ type: 'select', id: 'I1:2;3:4' }).id === 'I1:2;3:4'],
-    ['gen-code: language must be a known target', v({ type: 'gen-code', lang: 'php' }).type === '__invalid'],
+    ['gen-code: language and request identity are validated', v({ type: 'gen-code', lang: 'php' }).type === '__invalid' && (() => { const r = v({ type: 'gen-code', lang: 'html-css', requestId: 7, nodeId: '1:2' }); return r.requestId === 7 && r.nodeId === '1:2'; })()],
     ['map-save: path cannot break out of the import string', v({ type: 'map-save', key: 'k1', name: 'Button', path: "x';alert(1);//" }).type === '__invalid'],
     ['map-save: valid path accepted', v({ type: 'map-save', key: 'k1', name: 'Button', path: '@/components/ui/button' }).path === '@/components/ui/button'],
     ['devres-add: only http(s) URLs', v({ type: 'devres-add', id: '1:2', url: 'javascript:alert(1)' }).type === '__invalid'],
@@ -595,7 +749,7 @@ function sandboxCheck() {
   console.log('DevReady test suite');
   sandboxCheck();
   for (const fx of FIXTURES) if (!only || fx.name.includes(only)) await runFixture(fx);
-  if (!only) { await changeTracking(); await privacyAndOffline(); await messageValidation(); await require('./features')(record); await codegenQuality(); await typescriptTargets(); await goldenOutput(); await generatedProjectBuild(); repoLayout(); docConsistency(); }
+  if (!only) { await changeTracking(); await privacyAndOffline(); await messageValidation(); await require('./features')(record); await codegenQuality(); await codegenFollowup(); await typescriptTargets(); await goldenOutput(); await generatedProjectBuild(); repoLayout(); docConsistency(); }
   const total = results.length;
   console.log('\n' + (failed ? C.r(failed + ' failed') : C.g('all passed')) + ' · ' + (total - failed) + '/' + total + ' checks');
   if (REPORT) {

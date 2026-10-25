@@ -25,7 +25,14 @@ function createBuilders() {
       getSharedPluginData: () => '', setSharedPluginData() {}, getPluginData: () => '', setPluginData() {},
       getStyledTextSegments() { return this._segs || null; },
       async getCSSAsync() { return Object.assign({}, this._css || {}); },
-      async exportAsync() { return new Uint8Array(Buffer.from('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10"><path d="M0 0h10v10z"/></svg>')); },
+      async exportAsync(opts) {
+        if (opts && opts.format === 'SVG_STRING') {
+          if (this._svgString) return this._svgString;
+          const spans = (this._svgBaselines || []).map(y => '<tspan x="0" y="' + y + '"></tspan>').join('');
+          return '<svg xmlns="http://www.w3.org/2000/svg"><text x="0" y="0">' + spans + '</text></svg>';
+        }
+        return new Uint8Array(Buffer.from('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10"><path d="M0 0h10v10z"/></svg>'));
+      },
       async getMainComponentAsync() { return this._main || null; }
     }, props);
     if (n.ax === undefined) n.ax = 0;

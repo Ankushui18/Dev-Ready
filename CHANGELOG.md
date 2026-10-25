@@ -7,12 +7,15 @@ All notable changes to DevReady are listed here. The format follows [Keep a Chan
 ### Fixed
 - **Design text stays text.** Export settings on a `TEXT` layer no longer turn copy into an image, zero-opacity layers are omitted, and single-line auto-sized text uses its exact line box instead of the browser-dependent `normal` line-height.
 - **Raster artwork is no longer mistaken for a vector icon.** Image-filled rectangles, ellipses and nested avatar stacks stay raster assets, including image content nested in boolean operations.
-- **Container image fills are real assets.** Multi-file web targets emit files and matching CSS URLs; single-file HTML embeds the original bytes. Unresolved Figma `url(<path-to-image>)` placeholders are rejected instead of leaking into output.
+- **Container image fills are real assets.** Multi-file web targets emit files and matching CSS URLs; single-file HTML embeds the original bytes. React Tailwind URLs are valid JSX, multiple image fills retain their own assets, and native targets render a supported single image fill instead of ignoring it. Unresolved Figma `url(<path-to-image>)` placeholders are rejected instead of leaking into output.
 - **Standalone HTML starts at the page edge.** The `html, body` reset is included only for standalone HTML + CSS, not in reusable component stylesheets.
-- **Project downloads are all-or-nothing.** Original image bytes keep their real JPEG/GIF/WebP/PNG extension, and any failed asset export stops the download with a visible error rather than producing an incomplete ZIP.
+- **Project downloads are all-or-nothing.** Original image bytes keep their real JPEG/GIF/WebP/PNG extension, and any failed asset export stops the download with a visible error rather than producing an incomplete ZIP. Export all follows the visible Assets list and excludes the selected root.
+- **Code responses cannot overwrite a newer selection.** Requests carry selection identity, and the UI accepts only the exact pending response.
+- **Mixed absolute and auto-layout siblings keep Figma's paint order.** Bottom bars remain above earlier overlapping rows, including reversed auto-layout stacking.
+- **Wrapped Auto text has deterministic web line-height.** Compatible uniform text uses Figma's SVG baseline spacing; native targets keep their platform font metrics rather than receiving an inferred cross-platform line box.
 
 ### Added
-- Six codegen-fidelity regressions covering these cases (**150 checks total**).
+- Fourteen codegen-fidelity and follow-up regressions covering these cases (**158 checks total**).
 
 ## [1.5.1] — 2026-10-20
 
