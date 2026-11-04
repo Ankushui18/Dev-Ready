@@ -39,7 +39,8 @@ Community, npm and trademarks before committing.
   already appears in ten codegen labels (`DevReady · React + Tailwind`), the manifest,
   screenshots, and the ZIP.
 - Only fix the repository's **About** description and topics so search works
-  ([GITHUB_SETUP.md](GITHUB_SETUP.md#2-about-box)).
+  ([GITHUB_SETUP.md](GITHUB_SETUP.md#2-about-box)). [SEO.md](SEO.md) has the full
+  keyword list, the landing page and the indexing checklist.
 
 ### B. Rename the plugin, keep the repo — **clear win, medium cost**
 

@@ -4,6 +4,16 @@ All notable changes to DevReady are listed here. The format follows [Keep a Chan
 
 ## [Unreleased]
 
+### Changed
+- **Licence changed from MIT to PolyForm Noncommercial 1.0.0.** Free for personal, research, educational, charitable and other non-commercial use; commercial use is no longer permitted. `LICENSE` now holds the canonical PolyForm text, `NOTICE` carries the required copyright notice, and `package.json` / `package-lock.json` use the SPDX id `PolyForm-Noncommercial-1.0.0`. Release ZIPs now include `LICENSE` and `NOTICE`. README, FAQ, launch copy and setup docs no longer call the project "open source"; [docs/LICENSING.md](docs/LICENSING.md) explains the change, the MIT history and what it means for commercial users.
+- **SEO:** the repository had no description, topics, homepage or indexable HTML, which is why a Google search for the project name plus "Figma Dev Mode"/"git" returned nothing. README heading, opening paragraph, image alt text and badges now use the phrases people search for.
+
+### Added
+- **A crawlable project website** at `docs/index.html` (title, meta description, canonical URL, Open Graph / Twitter cards, `SoftwareApplication` + `FAQPage` JSON-LD, a Dev Mode comparison table, install steps and FAQ), plus `docs/sitemap.xml`, `docs/robots.txt` and `docs/.nojekyll` for GitHub Pages.
+- [docs/SEO.md](docs/SEO.md): diagnosis, target search phrases, what was changed, and a setup checklist (social preview upload, Search Console, sitemap, backlinks, indexing time).
+- `scripts/setup-github-meta.sh`: one command to apply the GitHub-side SEO settings (About description, 20 topics, website, Pages source) with a token that has repository-admin rights; the CI/App token is intentionally not able to change repo settings.
+- [docs/LICENSING.md](docs/LICENSING.md): plain-English allowed/prohibited use, generated-code note, relicensing caveats and maintainer notes on separate commercial licensing.
+
 ### Fixed
 - **Design text stays text.** Export settings on a `TEXT` layer no longer turn copy into an image, zero-opacity layers are omitted, and single-line auto-sized text uses its exact line box instead of the browser-dependent `normal` line-height.
 - **Raster artwork is no longer mistaken for a vector icon.** Image-filled rectangles, ellipses and nested avatar stacks stay raster assets, including image content nested in boolean operations.

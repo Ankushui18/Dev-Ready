@@ -1,0 +1,323 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>DevReady Inspect — Free Figma Dev Mode Alternative</title>
+<meta name="description" content="DevReady Inspect is a free Figma Dev Mode alternative for design handoff: inspect specs, export design tokens, check accessibility and generate React, Vue, Svelte, SwiftUI, Compose and Flutter code.">
+<meta name="keywords" content="free Figma Dev Mode, Figma Dev Mode alternative, Figma inspect plugin, Figma design handoff, Figma to code, design-to-code, Figma design tokens, Ready for dev plugin, Figma codegen">
+<meta name="robots" content="index, follow, max-image-preview:large">
+<meta name="author" content="Ankushui18">
+<meta name="theme-color" content="#0d99ff">
+<link rel="canonical" href="https://ankushui18.github.io/Dev-Ready/">
+<link rel="icon" type="image/png" href="brand/icon-128.png">
+
+<!-- Open Graph / social cards -->
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="DevReady Inspect">
+<meta property="og:title" content="DevReady Inspect — Free Figma Dev Mode Alternative">
+<meta property="og:description" content="A free Figma Dev Mode-style Inspect panel, design handoff gate, change tracking, accessibility checks and design-to-code in 12 targets. Free for non-commercial use.">
+<meta property="og:url" content="https://ankushui18.github.io/Dev-Ready/">
+<meta property="og:image" content="https://ankushui18.github.io/Dev-Ready/brand/social-1280x640.png">
+<meta property="og:image:width" content="1280">
+<meta property="og:image:height" content="640">
+<meta property="og:image:alt" content="DevReady Inspect — free Figma Dev Mode alternative for design handoff">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="DevReady Inspect — Free Figma Dev Mode Alternative">
+<meta name="twitter:description" content="Free Figma Dev Mode-style inspect, design tokens, accessibility and code generation in 12 targets.">
+<meta name="twitter:image" content="https://ankushui18.github.io/Dev-Ready/brand/social-1280x640.png">
+
+<!-- Structured data for Google rich results -->
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "SoftwareApplication",
+  "name": "DevReady Inspect",
+  "alternateName": ["DevReady", "Dev-Ready", "DevReady Figma plugin"],
+  "url": "https://ankushui18.github.io/Dev-Ready/",
+  "codeRepository": "https://github.com/Ankushui18/Dev-Ready",
+  "downloadUrl": "https://github.com/Ankushui18/Dev-Ready/releases",
+  "applicationCategory": "DeveloperApplication",
+  "applicationSubCategory": "Figma plugin",
+  "operatingSystem": "Figma desktop app (macOS, Windows); runs in Figma Design mode, Dev Mode and Figma for VS Code",
+  "softwareVersion": "1.5.1",
+  "description": "A free Figma Dev Mode alternative for design handoff. Inspect panel, design tokens, WCAG 2.2 checks, change tracking and design-to-code in 12 targets, gated on Ready for dev.",
+  "license": "https://polyformproject.org/licenses/noncommercial/1.0.0",
+  "isAccessibleForFree": true,
+  "offers": {
+    "@type": "Offer",
+    "price": "0",
+    "priceCurrency": "USD",
+    "description": "Free for non-commercial use under PolyForm Noncommercial 1.0.0. Commercial use is not permitted."
+  },
+  "author": {
+    "@type": "Person",
+    "name": "Ankushui18",
+    "url": "https://github.com/Ankushui18"
+  },
+  "keywords": "Figma Dev Mode alternative, free Figma Dev Mode plugin, Figma inspect, design handoff, design-to-code, Figma to React, design tokens, Ready for dev",
+  "featureList": [
+    "Dev Mode-style Inspect panel",
+    "Design-to-code in 12 targets",
+    "Ready for dev handoff gate",
+    "Design token export",
+    "WCAG 2.2 accessibility checks",
+    "Change tracking with before and after values",
+    "Asset export and project ZIP"
+  ],
+  "screenshot": [
+    "https://ankushui18.github.io/Dev-Ready/screenshots/inspect.png",
+    "https://ankushui18.github.io/Dev-Ready/screenshots/code-react.png",
+    "https://ankushui18.github.io/Dev-Ready/screenshots/layer-properties.png"
+  ]
+}
+</script>
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "FAQPage",
+  "mainEntity": [
+    {
+      "@type": "Question",
+      "name": "Is DevReady a free Figma Dev Mode alternative?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Yes. DevReady Inspect is a free Figma plugin with a Dev Mode-style Inspect panel for sizes, spacing, typography, fills, variables, component properties and assets. It also adds a Ready for dev gate, change tracking, WCAG 2.2 accessibility checks, design token export and code generation in 12 targets. It cannot replace Dev Mode features that Figma does not expose to plugins, such as hover-to-measure on canvas, version comparison and notifications."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Do I need a paid Figma Dev Mode seat to use it?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "No. DevReady runs on a free or Starter Figma plan, in Design mode and in Dev Mode. Where Figma's native Ready for dev status or annotations are unavailable, the plugin uses its own flag and canvas notes and labels which one it used."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "What code can DevReady generate from a Figma design?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Twelve targets: React + TypeScript, React + TypeScript + Tailwind, React + Tailwind, React + CSS, HTML + CSS, single-file HTML, Vue, Svelte, React Native, SwiftUI, Jetpack Compose and Flutter. Output includes semantic tags, design tokens, typed props and a downloadable project ZIP with assets and fonts."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Is DevReady free for commercial use?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "No. Since 4 November 2026 DevReady is licensed under PolyForm Noncommercial 1.0.0. It is free for personal, research, educational, charitable and other non-commercial use; use by or for a for-profit business, client work, or selling a product built on the plugin is not permitted. Releases up to v1.5.1 were MIT, and that grant is irrevocable for those copies."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "How do I install the DevReady Figma plugin?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Clone or download the GitHub repository, then in the Figma desktop app use Plugins, Development, Import plugin from manifest and pick devready-plugin/manifest.json. Run it from Plugins, Development, DevReady Inspect, or in Dev Mode from Inspect, Plugins. Everything runs inside Figma: no account, no server, no tracking."
+      }
+    }
+  ]
+}
+</script>
+
+<style>
+  :root { --bg:#0e1116; --card:#171c24; --line:#28313d; --text:#e8edf4; --muted:#9aa7b8; --accent:#0d99ff; --accent2:#7b61ff; --green:#3ecf8e; }
+  * { box-sizing:border-box; }
+  html { scroll-behavior:smooth; }
+  body { margin:0; background:var(--bg); color:var(--text); font:16px/1.65 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif; }
+  a { color:var(--accent); text-decoration:none; }
+  a:hover { text-decoration:underline; }
+  .wrap { max-width:1080px; margin:0 auto; padding:0 24px; }
+  header { border-bottom:1px solid var(--line); position:sticky; top:0; background:rgba(14,17,22,.92); backdrop-filter:blur(8px); z-index:5; }
+  header .wrap { display:flex; align-items:center; gap:18px; min-height:64px; flex-wrap:wrap; }
+  .brand { display:flex; align-items:center; gap:10px; font-weight:700; color:var(--text); font-size:18px; }
+  .brand img { width:30px; height:30px; border-radius:7px; }
+  nav { display:flex; gap:20px; margin-left:auto; flex-wrap:wrap; font-size:14px; }
+  nav a { color:var(--muted); }
+  nav a:hover { color:var(--text); }
+  .hero { padding:72px 0 40px; text-align:center; }
+  h1 { font-size:clamp(2rem,5vw,3.25rem); line-height:1.15; margin:0 0 18px; letter-spacing:-.02em; }
+  h1 span { color:var(--accent); }
+  .lead { font-size:1.15rem; color:var(--muted); max-width:760px; margin:0 auto 26px; }
+  .pills { display:flex; gap:10px; justify-content:center; flex-wrap:wrap; margin-bottom:30px; }
+  .pill { border:1px solid var(--line); background:var(--card); border-radius:999px; padding:6px 14px; font-size:13px; color:var(--muted); }
+  .pill b { color:var(--text); }
+  .cta { display:flex; gap:12px; justify-content:center; flex-wrap:wrap; }
+  .btn { display:inline-block; padding:12px 22px; border-radius:10px; font-weight:600; font-size:15px; }
+  .btn.primary { background:var(--accent); color:#04121e; }
+  .btn.secondary { border:1px solid var(--line); color:var(--text); background:var(--card); }
+  .btn:hover { text-decoration:none; opacity:.9; }
+  .shot { margin:52px auto 0; max-width:940px; }
+  .shot img { width:100%; border:1px solid var(--line); border-radius:14px; box-shadow:0 20px 60px rgba(0,0,0,.45); display:block; }
+  .shot figcaption { color:var(--muted); font-size:13px; margin-top:10px; }
+  section { padding:64px 0; border-top:1px solid var(--line); }
+  h2 { font-size:clamp(1.5rem,3vw,2rem); margin:0 0 12px; letter-spacing:-.01em; }
+  .sub { color:var(--muted); max-width:720px; margin:0 0 32px; }
+  .grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(280px,1fr)); gap:16px; }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:14px; padding:22px; }
+  .card h3 { margin:0 0 8px; font-size:1.05rem; }
+  .card p { margin:0; color:var(--muted); font-size:14.5px; }
+  .card .tag { color:var(--accent); font-size:12px; font-weight:700; letter-spacing:.08em; text-transform:uppercase; }
+  table { width:100%; border-collapse:collapse; font-size:14.5px; }
+  th, td { text-align:left; padding:12px 14px; border-bottom:1px solid var(--line); }
+  th { color:var(--muted); font-weight:600; }
+  .tablewrap { overflow-x:auto; border:1px solid var(--line); border-radius:14px; background:var(--card); }
+  ol.steps { padding-left:22px; max-width:760px; }
+  ol.steps li { margin-bottom:14px; }
+  code { background:#0a0d12; border:1px solid var(--line); border-radius:5px; padding:2px 6px; font-size:13.5px; color:#c8e1ff; }
+  .faq details { border-bottom:1px solid var(--line); padding:16px 0; }
+  .faq summary { cursor:pointer; font-weight:600; font-size:1.02rem; }
+  .faq details p { color:var(--muted); margin:12px 0 0; max-width:820px; }
+  .notice { background:linear-gradient(120deg,rgba(13,153,255,.12),rgba(123,97,255,.10)); border:1px solid #2c4a68; border-radius:14px; padding:22px 24px; }
+  .notice h2 { font-size:1.25rem; }
+  .notice p { color:var(--muted); margin:8px 0 0; }
+  footer { border-top:1px solid var(--line); padding:32px 0 48px; color:var(--muted); font-size:14px; }
+  footer .wrap { display:flex; gap:18px; flex-wrap:wrap; align-items:center; }
+  @media (max-width:640px) { .hero { padding-top:48px; } nav { gap:12px; } }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="wrap">
+    <a class="brand" href="#top"><img src="brand/icon-128.png" alt="DevReady Inspect icon"> DevReady Inspect</a>
+    <nav aria-label="Main navigation">
+      <a href="#features">Features</a>
+      <a href="#compare">Dev Mode vs DevReady</a>
+      <a href="#install">Install</a>
+      <a href="#faq">FAQ</a>
+      <a href="https://github.com/Ankushui18/Dev-Ready">GitHub ↗</a>
+    </nav>
+  </div>
+</header>
+
+<main id="top">
+  <div class="hero wrap">
+    <h1>Free Figma Dev Mode alternative for <span>design handoff</span></h1>
+    <p class="lead">DevReady Inspect is a free, source-available Figma plugin that gives developers a Dev Mode-style Inspect panel — measurements, typography, colours, variables and assets — plus design-to-code in 12 targets, design token export, WCAG 2.2 checks, change tracking and a <em>Ready for dev</em> gate. No paid Figma seat, no account, no server.</p>
+    <div class="pills">
+      <span class="pill"><b>Free</b> for non-commercial use</span>
+      <span class="pill"><b>12</b> code targets</span>
+      <span class="pill">Figma Design + <b>Dev Mode</b></span>
+      <span class="pill"><b>No network requests</b> in the plugin</span>
+      <span class="pill"><b>158</b> automated checks</span>
+    </div>
+    <div class="cta">
+      <a class="btn primary" href="https://github.com/Ankushui18/Dev-Ready">Get it on GitHub</a>
+      <a class="btn secondary" href="#install">Install in 2 minutes</a>
+      <a class="btn secondary" href="https://github.com/Ankushui18/Dev-Ready#readme">Read the docs</a>
+    </div>
+    <figure class="shot">
+      <img src="screenshots/inspect.png" alt="DevReady Inspect panel showing Figma layer measurements, status, overrides, dev resources and changes" width="1200" height="750">
+      <figcaption>The Inspect panel: box model, tokens, variables, overrides and changes since handoff.</figcaption>
+    </figure>
+  </div>
+
+  <section id="features">
+    <div class="wrap">
+      <h2>What the plugin does</h2>
+      <p class="sub">A Dev Mode-style inspector plus the handoff workflow Figma does not ship. Every feature runs inside Figma — the plugin code makes no network requests at all.</p>
+      <div class="grid">
+        <div class="card"><div class="tag">Inspect</div><h3>Dev Mode-style specs</h3><p>Box model, Auto Layout, typography, fills, strokes, effects, variables in every mode, component properties and overrides, dev resources and interactions.</p></div>
+        <div class="card"><div class="tag">Design to code</div><h3>12 code targets</h3><p>React + TypeScript, React + Tailwind, React + CSS, HTML + CSS, single-file HTML, Vue, Svelte, React Native, SwiftUI, Jetpack Compose and Flutter — with typed props, design tokens and a project ZIP.</p></div>
+        <div class="card"><div class="tag">Handoff</div><h3>Ready for dev gate</h3><p>Designers mark a frame ready; only then do specs, code and assets unlock. Turn the gate off and DevReady is simply a free Figma inspector and code generator.</p></div>
+        <div class="card"><div class="tag">Tokens</div><h3>Design token export</h3><p>Export one layer or a whole file as CSS variables, SCSS, design-tokens JSON or a Tailwind v4 <code>@theme</code> block, including every variable mode.</p></div>
+        <div class="card"><div class="tag">Accessibility</div><h3>WCAG 2.2 checks</h3><p>Contrast for every text layer, touch-target sizes, unlabelled icon buttons and text under 12px. Click a finding to select the layer.</p></div>
+        <div class="card"><div class="tag">Change tracking</div><h3>Before → after</h3><p>See which layers changed since handoff — size, position, style, text, added and removed — with the old and new values side by side.</p></div>
+      </div>
+    </div>
+  </section>
+
+  <section id="compare">
+    <div class="wrap">
+      <h2>DevReady Inspect vs Figma Dev Mode</h2>
+      <p class="sub">Figma Dev Mode is a paid, seat-based feature. DevReady is a free Figma plugin for non-commercial use. It reproduces the Inspect panel, but not the parts Figma keeps to itself.</p>
+      <div class="tablewrap">
+        <table>
+          <thead><tr><th>Capability</th><th>Figma Dev Mode</th><th>DevReady Inspect</th></tr></thead>
+          <tbody>
+            <tr><td>Inspect sizes, spacing, type, fills, assets</td><td>✅</td><td>✅</td></tr>
+            <tr><td>Code generation</td><td>✅ snippets</td><td>✅ 12 targets incl. React + TypeScript, Vue, Svelte, SwiftUI, Compose, Flutter</td></tr>
+            <tr><td>Ready for dev handoff gate</td><td>—</td><td>✅</td></tr>
+            <tr><td>Change tracking with before → after</td><td>—</td><td>✅</td></tr>
+            <tr><td>WCAG 2.2 contrast &amp; touch-target checks</td><td>—</td><td>✅</td></tr>
+            <tr><td>Design tokens: CSS, SCSS, JSON, Tailwind v4</td><td>—</td><td>✅</td></tr>
+            <tr><td>Hover-to-measure, version compare, notifications</td><td>✅</td><td>— Figma does not expose these to plugins</td></tr>
+            <tr><td>Price</td><td>Paid Dev Mode seat</td><td>Free for non-commercial use</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <section id="install">
+    <div class="wrap">
+      <h2>Install the Figma plugin in 2 minutes</h2>
+      <p class="sub">DevReady is a local development plugin — it is not on Figma Community yet. You need the Figma desktop app.</p>
+      <ol class="steps">
+        <li>Clone or download the repository: <code>git clone https://github.com/Ankushui18/Dev-Ready.git</code></li>
+        <li>In Figma: <strong>Plugins → Development → Import plugin from manifest…</strong> and choose <code>devready-plugin/manifest.json</code>.</li>
+        <li>Open any file and run <strong>Plugins → Development → DevReady Inspect</strong>. In Dev Mode (<kbd>Shift</kbd>+<kbd>D</kbd>) it lives under <strong>Inspect → Plugins</strong>, and its codegen languages appear in <strong>Inspect → Code</strong>.</li>
+        <li>No Figma file handy? Open <code>devready-plugin/ui.html</code> in a browser — the panel runs on sample data.</li>
+      </ol>
+      <p class="sub">The first run shows a lock: that is the ready-for-dev gate. Select a frame and choose <strong>Mark as ready for dev</strong>, or <strong>Inspect anyway</strong> to look around.</p>
+    </div>
+  </section>
+
+  <section id="faq" class="faq">
+    <div class="wrap">
+      <h2>Frequently asked questions</h2>
+      <p class="sub">Short answers for people searching for a free Figma Dev Mode plugin, a Figma inspect panel or a Figma-to-code tool.</p>
+
+      <details open>
+        <summary>Is DevReady a free Figma Dev Mode alternative?</summary>
+        <p>Yes. DevReady Inspect is a free Figma plugin with a Dev Mode-style Inspect panel for sizes, spacing, typography, fills, variables, component properties and assets. It also adds a Ready for dev gate, change tracking, WCAG 2.2 accessibility checks, design token export and code generation in 12 targets. It cannot replace Dev Mode features that Figma does not expose to plugins, such as hover-to-measure on canvas, version comparison and notifications.</p>
+      </details>
+      <details>
+        <summary>Do I need a paid Figma Dev Mode seat to use it?</summary>
+        <p>No. DevReady runs on a free or Starter Figma plan, in Design mode and in Dev Mode. Where Figma's native Ready for dev status or annotations are unavailable, the plugin uses its own flag and canvas notes and labels which one it used.</p>
+      </details>
+      <details>
+        <summary>What code can DevReady generate from a Figma design?</summary>
+        <p>Twelve targets: React + TypeScript, React + TypeScript + Tailwind, React + Tailwind, React + CSS, HTML + CSS, single-file HTML, Vue, Svelte, React Native, SwiftUI, Jetpack Compose and Flutter. Output includes semantic tags, design tokens, typed props and a downloadable project ZIP with assets and fonts.</p>
+      </details>
+      <details>
+        <summary>Is DevReady free for commercial use?</summary>
+        <p>No. Since 4 November 2026 DevReady is licensed under PolyForm Noncommercial 1.0.0. It is free for personal, research, educational, charitable and other non-commercial use; use by or for a for-profit business, client work, or selling a product built on the plugin is not permitted. Releases up to v1.5.1 were MIT, and that grant is irrevocable for those copies. See the <a href="https://github.com/Ankushui18/Dev-Ready/blob/main/docs/LICENSING.md">licensing notes</a>.</p>
+      </details>
+      <details>
+        <summary>How do I install the DevReady Figma plugin?</summary>
+        <p>Clone or download the GitHub repository, then in the Figma desktop app use Plugins → Development → Import plugin from manifest and pick <code>devready-plugin/manifest.json</code>. Run it from Plugins → Development → DevReady Inspect, or in Dev Mode from Inspect → Plugins. Everything runs inside Figma: no account, no server, no tracking.</p>
+      </details>
+      <details>
+        <summary>Does the plugin send my designs anywhere?</summary>
+        <p>No. The plugin code makes no network requests; fonts are matched against a bundled catalog of 1,950 public Google Fonts. The only optional traffic is the HTML preview loading public Google Fonts, which you can switch off. See <a href="https://github.com/Ankushui18/Dev-Ready/blob/main/PRIVACY.md">PRIVACY.md</a>.</p>
+      </details>
+    </div>
+  </section>
+
+  <section>
+    <div class="wrap">
+      <div class="notice">
+        <h2>Licence: free for non-commercial use</h2>
+        <p>DevReady Inspect uses <a href="https://polyformproject.org/licenses/noncommercial/1.0.0">PolyForm Noncommercial 1.0.0</a> (SPDX <code>PolyForm-Noncommercial-1.0.0</code>), replacing MIT on 4 November 2026. Personal projects, study, research, hobby work, charities, schools and public institutions are free to use, modify and share it. Commercial use — including running it at a for-profit company, client work or selling it — is not permitted. The source is available, but it is not OSI open source. Copies released up to v1.5.1 remain under the irrevocable MIT grant.</p>
+      </div>
+    </div>
+  </section>
+</main>
+
+<footer>
+  <div class="wrap">
+    <span>© 2026 Ankushui18 · DevReady Inspect</span>
+    <a href="https://github.com/Ankushui18/Dev-Ready">GitHub repository</a>
+    <a href="https://github.com/Ankushui18/Dev-Ready/blob/main/LICENSE">LICENSE</a>
+    <a href="https://github.com/Ankushui18/Dev-Ready/blob/main/docs/LICENSING.md">Licensing FAQ</a>
+    <a href="https://github.com/Ankushui18/Dev-Ready/blob/main/PRIVACY.md">Privacy</a>
+    <a href="https://github.com/Ankushui18/Dev-Ready/blob/main/docs/SEO.md">SEO notes</a>
+    <span>· No analytics, no trackers on this page.</span>
+  </div>
+</footer>
+
+</body>
+</html>

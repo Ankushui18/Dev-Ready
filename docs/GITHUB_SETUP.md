@@ -60,34 +60,58 @@ means success) instead of `cp`. In GitHub Desktop: **Repository → Show in
 Finder/Explorer**, delete everything except `.git`, then copy the *contents* in; press
 <kbd>⌘</kbd><kbd>⇧</kbd><kbd>.</kbd> (macOS) or enable hidden items (Windows) first.
 
-**Check it worked:** the repo page shows the README with the cover image and an **MIT
-license** badge, the **Actions** tab has a green run with *Test* and *Browser* jobs, and
-`devready-plugin/` contains only five files.
+**Check it worked:** the repo page shows the README with the cover image and a
+**PolyForm Noncommercial 1.0.0** license badge, the **Actions** tab has a green run
+with *Test* and *Browser* jobs, and `devready-plugin/` contains only five files.
 
 ## 2. "About" box
 
-Click ⚙️ next to **About** on the repository page.
+**Fast path:** run `./scripts/setup-github-meta.sh` from your own machine (with
+`gh auth login`). It applies everything in sections 2 and 3 — description, topics,
+website and GitHub Pages — through the GitHub API. It needs a token with
+**Administration** and **Pages** write permissions; CI/App tokens usually get a 403.
+The values below are the same ones, for doing it by hand.
 
-**Description:**
-> Free Figma plugin: Dev Mode-style inspect, design tokens, accessibility checks and
-> design-to-code in 12 targets (React + TypeScript, React, Vue, Svelte, React Native, HTML, SwiftUI,
-> Compose, Flutter), gated on Ready for dev.
+**By hand:** click ⚙️ next to **About** on the repository page.
 
-**Website:** leave empty until the Community listing exists, then paste its URL.
+**Description** (this is what Google shows under the GitHub result — keep the exact
+phrase *Figma Dev Mode* in it):
+> Free Figma Dev Mode alternative plugin: Dev Mode-style inspect, design handoff, design tokens, WCAG accessibility checks and design-to-code in 12 targets (React, Vue, Svelte, SwiftUI, Compose, Flutter). Ready for dev gate. Non-commercial use.
 
-**Topics:**
+**Website:** `https://ankushui18.github.io/Dev-Ready/` (the GitHub Pages landing page).
+Replace it with the Figma Community URL once the listing is live, or keep both by
+linking the Community page from the landing page.
+
+**Topics** (GitHub search, topic pages and related-repo suggestions all use these):
 ```
-figma  figma-plugin  dev-mode  design-handoff  design-to-code  design-tokens
-figma-variables  react  tailwindcss  vue  svelte  swiftui  jetpack-compose  flutter
-codegen  accessibility  open-source
+figma  figma-plugin  figma-dev-mode  dev-mode  figma-inspect  design-handoff
+design-to-code  figma-to-code  design-tokens  figma-variables  codegen  react
+tailwindcss  vue  svelte  swiftui  jetpack-compose  flutter  accessibility
+non-commercial
 ```
+Re-apply them here (or re-run the script) if you ever reset the repo settings.
+See [SEO.md](SEO.md) for why each field matters.
 
 Tick **Releases**; untick **Packages** and **Deployments**.
 
-## 3. Social preview
+## 3. Social preview & website (GitHub Pages)
 
 **Settings → General → Social preview → Edit → Upload** `docs/brand/social-1280x640.png`.
-That's the card shown when the link is shared on X, LinkedIn or Slack.
+That's the card shown when the link is shared on X, LinkedIn or Slack. GitHub has no API
+for this upload, so it is a one-time manual step.
+
+**Settings → Pages → Build and deployment → Deploy from a branch**, choose the branch
+that holds `docs/index.html` and the `/docs` folder. The landing page, `sitemap.xml`,
+`robots.txt` and `.nojekyll` all live in `docs/`; no build step is needed. The site is
+served at `https://ankushui18.github.io/Dev-Ready/`.
+
+> If the site is published from a feature branch for a preview, switch the source to
+> `main` after merging, or the site disappears when that branch is deleted.
+
+After the site is live, submit `https://ankushui18.github.io/Dev-Ready/sitemap.xml` in
+Google Search Console. A project Pages site cannot own the host-level `/robots.txt`, so
+submitting the sitemap is what actually gets the page crawled. Full checklist:
+[SEO.md](SEO.md).
 
 ## 4. Issues
 
