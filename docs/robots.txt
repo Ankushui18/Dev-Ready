@@ -1,0 +1,7 @@
+# This is a GitHub Pages *project* site, so this file lives at /Dev-Ready/robots.txt.
+# Crawlers only honour a robots.txt at the host root (which belongs to the user site),
+# so submit the sitemap in Google Search Console instead — see docs/SEO.md.
+User-agent: *
+Allow: /
+
+Sitemap: https://ankushui18.github.io/Dev-Ready/sitemap.xml

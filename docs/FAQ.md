@@ -6,12 +6,21 @@ Short answers to the questions people actually ask after opening this repo.
 
 No. It is a **plugin that gives you a Dev Mode-style Inspect panel** plus code
 generation, and it runs in Design mode, Dev Mode and Figma for VS Code. Figma's own
-Dev Mode is a paid seat; this is free and open source.
+Dev Mode is a paid seat; DevReady is free for **non-commercial** use and source-available
+(PolyForm Noncommercial 1.0.0) — not OSI open source. See [LICENSING.md](LICENSING.md).
 
 What plugins genuinely cannot do, and Dev Mode can: hover-to-measure on the canvas,
 version history comparison, notifications when a design changes, and VS Code's
 built-in integration. DevReady uses native measurements and native annotations where
 Figma allows, and its own fallbacks where it doesn't.
+
+### Can I use DevReady at work or on a commercial project?
+
+No, not under this licence. PolyForm Noncommercial 1.0.0 permits personal, research,
+hobby, educational, charitable and public-sector use, but **not** use by or for a
+for-profit business, client/freelance work, or selling a product built on the plugin.
+"Use" includes simply running it. See [LICENSING.md](LICENSING.md) for examples and the
+MIT history of older releases.
 
 ### Do I need a paid Figma plan?
 
@@ -135,6 +144,13 @@ two source files, the sandbox checker and its README. Everything else (tests, do
 CI, package.json) lives at the root. `npm run check:layout` fails the build if that
 slips — this repository was once broken by uploading the root files *inside* the plugin
 folder, which hid the README and disabled CI. See [GITHUB_SETUP.md](GITHUB_SETUP.md).
+
+### Why couldn't I find this repository on Google?
+
+The repo had no description, no topics, no website and no indexable HTML outside the
+README, and its name (`Dev-Ready`) reads like a phrase rather than a product. That is
+fixed in [SEO.md](SEO.md), which also lists the search phrases to try and the indexing
+checklist. A brand-new domain can still take a few days to appear.
 
 ### How do I regenerate the font catalog?
 

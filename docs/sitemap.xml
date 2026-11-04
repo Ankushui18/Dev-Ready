@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"
+        xmlns:image="http://www.google.com/schemas/sitemap-image/1.1">
+  <url>
+    <loc>https://ankushui18.github.io/Dev-Ready/</loc>
+    <lastmod>2026-11-04</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>1.0</priority>
+    <image:image>
+      <image:loc>https://ankushui18.github.io/Dev-Ready/brand/social-1280x640.png</image:loc>
+      <image:title>DevReady Inspect — free Figma Dev Mode alternative</image:title>
+    </image:image>
+    <image:image>
+      <image:loc>https://ankushui18.github.io/Dev-Ready/screenshots/inspect.png</image:loc>
+      <image:title>DevReady Inspect panel with layer specs and changes</image:title>
+    </image:image>
+    <image:image>
+      <image:loc>https://ankushui18.github.io/Dev-Ready/screenshots/code-react.png</image:loc>
+      <image:title>Generated React + Tailwind component in DevReady</image:title>
+    </image:image>
+  </url>
+</urlset>

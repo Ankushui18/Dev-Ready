@@ -1,16 +1,18 @@
-<p align="center"><img src="docs/brand/cover-1920x1080.png" alt="DevReady: a free Figma plugin for design handoff, gated on Ready for dev" width="100%"></p>
+<p align="center"><img src="docs/brand/cover-1920x1080.png" alt="DevReady Inspect — free Figma Dev Mode alternative plugin for design handoff, inspect, design-to-code and Ready for dev" width="100%"></p>
 
-<h1 align="center">DevReady</h1>
+<h1 align="center">DevReady Inspect</h1>
 
-<p align="center"><b>A free, open-source Figma plugin for design handoff.</b><br>
-Inspect specs like Dev Mode, generate real code in 12 targets, see what changed — for designs your team has marked <i>Ready for dev</i>.</p>
+<p align="center"><b>A free Figma Dev Mode alternative for design handoff.</b><br>
+A source-available Figma plugin that inspects design specs like Dev Mode, generates real code in 12 targets, exports design tokens, checks accessibility and shows what changed — for designs your team has marked <i>Ready for dev</i>. Free for non-commercial use.</p>
 
 <p align="center">
   <a href=".github/workflows/ci.yml"><img src="https://github.com/Ankushui18/Dev-Ready/actions/workflows/ci.yml/badge.svg" alt="Tests"></a>
-  <img src="https://img.shields.io/badge/license-MIT-green" alt="MIT">
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-PolyForm%20Noncommercial%201.0.0-blue" alt="PolyForm Noncommercial 1.0.0"></a>
   <img src="https://img.shields.io/badge/Figma-Design%20%2B%20Dev%20Mode-0d99ff" alt="Figma Design + Dev Mode">
   <img src="https://img.shields.io/badge/tests-158%20passing-brightgreen" alt="158 checks passing">
 </p>
+
+<p align="center"><a href="https://ankushui18.github.io/Dev-Ready/">Project website</a> · <a href="docs/SEO.md">SEO & discoverability</a> · <a href="docs/LICENSING.md">Licensing, in plain English</a></p>
 
 ---
 
@@ -26,18 +28,45 @@ DevReady is a **Figma plugin**, not a website. Pick the path that matches you:
 | **Understand or change the code** | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) — map of `code.js` and `ui.html` |
 | **Run the tests / contribute** | [CONTRIBUTING.md](CONTRIBUTING.md) · [Quality](#quality) |
 | **See what's missing** (honest list) | [Known limits](#known-limits) |
+| **Check whether you may use it at work** | [License](#license) · [docs/LICENSING.md](docs/LICENSING.md) |
 | **Publish it to Figma Community** | [docs/LAUNCH.md](docs/LAUNCH.md) |
 | **Fix the repo if files were uploaded to the wrong place** | [docs/GITHUB_SETUP.md](docs/GITHUB_SETUP.md) |
+| **Help people find this repo on Google** | [docs/SEO.md](docs/SEO.md) |
 
-> **Status: v1.2.0, local development plugin.** It is not on Figma Community yet, so you install it from this repo (below). Everything runs inside Figma — no account, no server, no tracking.
+> **Status: v1.5.1, local development plugin.** It is not on Figma Community yet, so you install it from this repo (below). Everything runs inside Figma — no account, no server, no tracking.
 
 ---
 
 ## What is this, in one paragraph
 
-Figma's **Dev Mode** shows developers the specs of a design: sizes, spacing, colours, type, assets, and code. It is a paid, seat-based feature. DevReady gives you a **Dev Mode-style Inspect panel for free**, and adds the part Dev Mode does not have: a **gate**. Designers mark a frame *Ready for dev*; only then do specs, code and assets unlock for developers. If your team does not want the gate, switch it off in one click and it is simply a free inspector and code generator.
+Figma's **Dev Mode** shows developers the specs of a design: sizes, spacing, colours, type, assets and code. It is a paid, seat-based feature. **DevReady Inspect is a free Figma Dev Mode alternative** — a plugin with a Dev Mode-style Inspect panel — and it adds the part Dev Mode does not have: a **gate**. Designers mark a frame *Ready for dev*; only then do specs, code and assets unlock for developers. Turn the gate off in one click and it becomes a plain Figma inspector and Figma-to-code generator.
 
-**Who it is for:** designers handing work to engineers, engineers who need measurements and code without a paid Figma seat, and teams who want a clear "this design is ready" signal instead of a Slack message.
+**Who it is for:** designers handing work to engineers, engineers who need measurements and code without a paid Figma seat, and teams who want a clear "this design is ready" signal instead of a Slack message. It is **free for non-commercial use** — see [License](#license).
+
+---
+
+## Is this a free Figma Dev Mode alternative?
+
+Yes, with honest boundaries. DevReady Inspect is a **Figma plugin** that gives you a
+Dev Mode-style Inspect panel at no cost, plus design handoff, design-to-code and design
+token exports. It runs in Figma Design mode, in Dev Mode (<kbd>Shift</kbd>+<kbd>D</kbd>)
+and in Figma for VS Code.
+
+| | Figma Dev Mode (paid seat) | DevReady Inspect (free, non-commercial) |
+|---|---|---|
+| Inspect sizes, spacing, type, fills, assets | ✅ | ✅ |
+| Code generation | ✅ | ✅ — 12 targets incl. React + TypeScript, Vue, Svelte, SwiftUI, Compose, Flutter |
+| "Ready for dev" handoff gate | ❌ | ✅ |
+| Change tracking with before → after | ❌ | ✅ |
+| WCAG 2.2 contrast & touch-target checks | ❌ | ✅ |
+| Design tokens (CSS / SCSS / JSON / Tailwind v4) | ❌ | ✅ |
+| Hover-to-measure, version compare, notifications | ✅ | ❌ — Figma doesn't expose those to plugins ([Known limits](#known-limits)) |
+
+If you searched for a **free Figma Dev Mode plugin**, **Figma Dev Mode alternative**,
+**Figma inspect plugin**, **Figma design handoff tool**, **Figma to code / design-to-code
+plugin**, **Figma design tokens export** or **Ready for dev plugin**, you are in the right
+place. [docs/SEO.md](docs/SEO.md) lists the phrases this project is optimised for and
+what to do if a search still doesn't show it.
 
 ---
 
@@ -142,15 +171,19 @@ Dev-Ready/
 │   ├── LAUNCH.md              Figma Community checklist + manual test matrix
 │   ├── GITHUB_SETUP.md        repo settings, upload mistakes, releases
 │   ├── NAMING.md              name options and what to rename if you pick one
+│   ├── SEO.md                 why the repo was hard to find + discoverability checklist
+│   ├── LICENSING.md           PolyForm Noncommercial, in plain English
+│   ├── index.html             GitHub Pages landing page (with sitemap.xml, robots.txt)
 │   ├── test-report.md         latest test results
 │   ├── screenshots/           images used above
 │   └── brand/                 icon, cover, social preview
 ├── tests/                     fixtures × 12 targets, privacy, change tracking, browser sandbox
-├── scripts/                   layout check, lint, ZIP builder
+├── scripts/                   layout check, lint, ZIP builder, GitHub SEO settings
 ├── .github/workflows/ci.yml   what runs on every push and tag
 ├── CHANGELOG.md               what changed in each version
 ├── CONTRIBUTING.md            how to build, test and add a fixture
-├── PRIVACY.md · SECURITY.md · LICENSE (MIT)
+├── PRIVACY.md · SECURITY.md · LICENSE · NOTICE (PolyForm Noncommercial 1.0.0)
+├── docs/index.html            GitHub Pages landing page (SEO)
 ```
 
 **Rule of thumb:** `devready-plugin/` holds only the four files Figma loads plus its own README. Everything else lives at the root. `npm run check:layout` enforces this, because a mis-placed upload is the most common way this repo breaks.
@@ -208,4 +241,13 @@ Honest list — these are APIs Figma doesn't give plugins, not things we haven't
 
 ## License
 
-[MIT](LICENSE) — free for personal and commercial use. Issues and ideas: [CONTRIBUTING.md](CONTRIBUTING.md).
+[PolyForm Noncommercial 1.0.0](LICENSE) — **free for non-commercial use**: personal
+projects, study, research, hobby work, charities, schools and public institutions.
+**Commercial use is not permitted** — no use inside a for-profit business, client work,
+or bundling the plugin into a commercial product. The plugin is *source-available*, not
+OSI open source. [docs/LICENSING.md](docs/LICENSING.md) has plain-English examples, and
+[NOTICE](NOTICE) carries the required copyright notice.
+
+This replaces MIT on 4 November 2026. Copies released before then (up to v1.5.1) were
+MIT, and that grant cannot be revoked for those copies. Issues and ideas:
+[CONTRIBUTING.md](CONTRIBUTING.md).

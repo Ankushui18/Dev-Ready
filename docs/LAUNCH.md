@@ -8,6 +8,7 @@ DevReady isn't published yet. This is the path from local plugin to Community li
 - [ ] **Get a real plugin ID.** `devready-plugin/manifest.json` has `"id": "devready-inspect-local"`, which is a local placeholder. In the Figma desktop app, go to **Plugins → Development → New plugin…**, create any plugin, copy the `id` from the manifest it generates into ours, then delete the generated folder. Re-import `devready-plugin/manifest.json`.
 - [ ] **Run the environment test matrix** (below) on 3–5 real files. Fix anything red.
 - [ ] Run `npm test` and `npm run check`. Both must pass.
+- [ ] **Check the licence against Figma's Community terms.** DevReady is PolyForm Noncommercial 1.0.0 (free for non-commercial use only), not MIT. Publishing grants Figma distribution rights, so read the current plugin terms and [LICENSING.md](LICENSING.md) before submitting; make sure the listing states the restriction.
 - [ ] **Make a playground file:** a small public Figma file with
   - one frame marked Ready for dev,
   - one component set with variants,
@@ -21,7 +22,7 @@ DevReady isn't published yet. This is the path from local plugin to Community li
 **Name:** DevReady: Inspect & Code
 
 **Tagline** (keep it short):
-> Dev Mode-style inspect, change tracking and clean code, unlocked when a design is ready for dev.
+> Free Figma Dev Mode alternative: inspect, change tracking and clean code, unlocked when a design is ready for dev.
 
 **Category:** Software development (secondary: Design tools)
 
@@ -43,7 +44,8 @@ DevReady isn't published yet. This is the path from local plugin to Community li
 >
 > **Private by design.** DevReady only contacts Google Fonts, sending font family names and nothing else. No accounts, no analytics.
 >
-> Free and open source (MIT): github.com/Ankushui18/Dev-Ready
+> Free for non-commercial use (PolyForm Noncommercial 1.0.0): github.com/Ankushui18/Dev-Ready
+> Website: https://ankushui18.github.io/Dev-Ready/
 
 **Images:**
 
