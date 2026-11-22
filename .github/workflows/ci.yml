@@ -12,18 +12,22 @@ permissions:
 
 jobs:
   test:
-    name: Test (layout, sandbox, lint, fixtures)
+    name: Test (Node ${{ matrix.node }})
     runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        node: ['20.19.0', '22.13.0', '24.0.0']
     steps:
       - uses: actions/checkout@v5
 
       - uses: actions/setup-node@v5
         with:
-          node-version: '22'
+          node-version: ${{ matrix.node }}
           cache: npm
 
-      - name: Install
-        run: npm ci
+      - name: Install with engine checks
+        run: npm ci --engine-strict
 
       # Fails fast if files were uploaded into the wrong folder, or a hidden
       # folder (.github, .gitignore) is missing — the most common upload mistake.
@@ -46,6 +50,14 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '22.13.0'
+          cache: npm
+
+      - name: Install browser test dependencies
+        run: npm ci --engine-strict
+
       - uses: actions/setup-python@v6
         with:
           python-version: '3.12'
@@ -53,7 +65,7 @@ jobs:
       - name: Install Playwright
         run: |
           python -m pip install --upgrade pip
-          pip install playwright
+          python -m pip install -r tests/requirements-browser.txt
           python -m playwright install --with-deps chromium
 
       - name: Panel render and preview isolation

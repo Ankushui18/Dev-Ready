@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>DevReady Inspect</title>
 <style>
-  /* ---------- Figma UI3 tokens (fallbacks used outside Figma) ---------- */
+  /* ---------- Figma UI3 surfaces, with readable text in both themes ---------- */
   :root {
     --bg: var(--figma-color-bg, #ffffff);
     --bg2: var(--figma-color-bg-secondary, #f5f5f5);
@@ -13,47 +13,62 @@
     --hover: var(--figma-color-bg-hover, #f5f5f5);
     --pressed: var(--figma-color-bg-pressed, #e6e6e6);
     --fg: var(--figma-color-text, rgba(0,0,0,.9));
-    --fg2: var(--figma-color-text-secondary, rgba(0,0,0,.5));
-    --fg3: var(--figma-color-text-tertiary, rgba(0,0,0,.3));
-    --icon: var(--figma-color-icon-secondary, rgba(0,0,0,.5));
+    /* Figma's secondary/tertiary tokens can be too faint for 11px text. */
+    --fg2: color-mix(in srgb, var(--fg) 80%, var(--bg));
+    --fg3: color-mix(in srgb, var(--fg) 72%, var(--bg));
+    --icon: var(--fg2);
     --border: var(--figma-color-border, #e6e6e6);
     --brand: var(--figma-color-bg-brand, #0d99ff);
-    --brand-fg: var(--figma-color-text-brand, #007be5);
-    --onbrand: var(--figma-color-text-onbrand, #ffffff);
+    --brand-fg: color-mix(in srgb, var(--figma-color-text-brand, #007be5) 70%, var(--fg));
     --green: var(--figma-color-bg-success, #14ae5c);
-    --warn-fg: var(--figma-color-text-warning, #b86200);
-    --warn-tint: var(--figma-color-bg-warning-tertiary, #fff1e3);
-    --danger: var(--figma-color-text-danger, #dc3412);
-    --danger-tint: var(--figma-color-bg-danger-tertiary, #ffe2e0);
-    --green-fg: var(--figma-color-text-success, #009951);
+    --green-fg: color-mix(in srgb, var(--figma-color-text-success, #009951) 65%, var(--fg));
     --green-tint: var(--figma-color-bg-success-tertiary, #cff7d3);
-    --purple: var(--figma-color-text-component, #9747ff);
+    --warn-fg: color-mix(in srgb, var(--figma-color-text-warning, #b86200) 65%, var(--fg));
+    --warn-tint: var(--figma-color-bg-warning-tertiary, #fff1e3);
+    --danger: color-mix(in srgb, var(--figma-color-text-danger, #dc3412) 65%, var(--fg));
+    --danger-tint: var(--figma-color-bg-danger-tertiary, #ffe2e0);
+    --purple: color-mix(in srgb, var(--figma-color-text-component, #9747ff) 70%, var(--fg));
     --purple-tint: var(--figma-color-bg-component-tertiary, #f1e5ff);
+    /* Solid action pairs stay readable even when Figma supplies a bright brand fill. */
+    --action-blue: #0064b5; --action-green: #08743a; --action-red: #aa3019; --action-text: #fff;
     --menu: var(--figma-color-bg-menu, #1e1e1e);
     --menu-fg: var(--figma-color-text-menu, #ffffff);
-    --menu-fg2: var(--figma-color-text-menu-secondary, rgba(255,255,255,.6));
-    --menu-hover: var(--figma-color-bg-menu-selected, #0d99ff);
-    --code-prop: #9747ff; --code-val: #0c8ce9; --code-str: #009951; --code-tag: #e03e1a; --code-cmt: rgba(0,0,0,.35);
+    --menu-fg2: color-mix(in srgb, var(--menu-fg) 80%, var(--menu));
+    --menu-hover: #005eab;
+    --code-prop: var(--fg); --code-val: #a51978; --code-kw: #894400; --code-str: #1d59ad; --code-tag: #712bc3; --code-cmt: var(--fg3); --pad-tint: #e5f4ff;
     --mono: "Roboto Mono", "SF Mono", ui-monospace, Menlo, Consolas, monospace;
   }
+  /* Figma's explicit theme wins over the operating system's preference. */
   @media (prefers-color-scheme: dark) {
-    :root {
+    :root:not(.figma-light) {
       --bg: var(--figma-color-bg, #2c2c2c); --bg2: var(--figma-color-bg-secondary, #383838); --bg3: var(--figma-color-bg-tertiary, #444);
       --hover: var(--figma-color-bg-hover, #383838); --pressed: var(--figma-color-bg-pressed, #444);
-      --fg: var(--figma-color-text, #fff); --fg2: var(--figma-color-text-secondary, rgba(255,255,255,.7)); --fg3: var(--figma-color-text-tertiary, rgba(255,255,255,.4));
-      --icon: var(--figma-color-icon-secondary, rgba(255,255,255,.7)); --border: var(--figma-color-border, #444);
-      --green-fg: var(--figma-color-text-success, #79d297); --green-tint: var(--figma-color-bg-success-tertiary, #1a4a2e);
-      --purple: var(--figma-color-text-component, #d6b6fb); --purple-tint: var(--figma-color-bg-component-tertiary, #3c2a5a);
-      --brand-fg: var(--figma-color-text-brand, #7cc4f8);
+      --fg: var(--figma-color-text, #fff); --border: var(--figma-color-border, #444);
+      --brand-fg: color-mix(in srgb, var(--figma-color-text-brand, #7cc4f8) 70%, var(--fg));
+      --green-fg: color-mix(in srgb, var(--figma-color-text-success, #79d297) 65%, var(--fg)); --green-tint: var(--figma-color-bg-success-tertiary, #1a4a2e);
+      --warn-fg: color-mix(in srgb, var(--figma-color-text-warning, #f5a455) 65%, var(--fg)); --warn-tint: var(--figma-color-bg-warning-tertiary, #4b3824);
+      --danger: color-mix(in srgb, var(--figma-color-text-danger, #ffaaa0) 65%, var(--fg)); --danger-tint: var(--figma-color-bg-danger-tertiary, #52281f);
+      --purple: color-mix(in srgb, var(--figma-color-text-component, #d6b6fb) 70%, var(--fg)); --purple-tint: var(--figma-color-bg-component-tertiary, #3c2a5a);
+      --code-val: #ff7ac6; --code-kw: #ffa657; --code-str: #79b8ff; --code-tag: #c5a3ff; --pad-tint: rgba(13,153,255,.18);
     }
   }
-  .figma-dark { --code-prop: #d6b6fb; --code-val: #7cc4f8; --code-str: #79d297; --code-tag: #ffa98e; --code-cmt: rgba(255,255,255,.4); }
-  @media (prefers-color-scheme: dark) { :root:not(.figma-light) { --code-prop: #d6b6fb; --code-val: #7cc4f8; --code-str: #79d297; --code-tag: #ffa98e; --code-cmt: rgba(255,255,255,.4); } }
+  :root.figma-dark {
+    --bg: var(--figma-color-bg, #2c2c2c); --bg2: var(--figma-color-bg-secondary, #383838); --bg3: var(--figma-color-bg-tertiary, #444);
+    --hover: var(--figma-color-bg-hover, #383838); --pressed: var(--figma-color-bg-pressed, #444);
+    --fg: var(--figma-color-text, #fff); --border: var(--figma-color-border, #444);
+    --brand-fg: color-mix(in srgb, var(--figma-color-text-brand, #7cc4f8) 70%, var(--fg));
+    --green-fg: color-mix(in srgb, var(--figma-color-text-success, #79d297) 65%, var(--fg)); --green-tint: var(--figma-color-bg-success-tertiary, #1a4a2e);
+    --warn-fg: color-mix(in srgb, var(--figma-color-text-warning, #f5a455) 65%, var(--fg)); --warn-tint: var(--figma-color-bg-warning-tertiary, #4b3824);
+    --danger: color-mix(in srgb, var(--figma-color-text-danger, #ffaaa0) 65%, var(--fg)); --danger-tint: var(--figma-color-bg-danger-tertiary, #52281f);
+    --purple: color-mix(in srgb, var(--figma-color-text-component, #d6b6fb) 70%, var(--fg)); --purple-tint: var(--figma-color-bg-component-tertiary, #3c2a5a);
+    --code-val: #ff7ac6; --code-kw: #ffa657; --code-str: #79b8ff; --code-tag: #c5a3ff; --pad-tint: rgba(13,153,255,.18);
+  }
 
   * { box-sizing: border-box; }
   html, body { margin: 0; background: var(--bg); color: var(--fg); font: 11px/16px Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; letter-spacing: .005em; -webkit-font-smoothing: antialiased; }
   body { display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
   button { font: inherit; color: inherit; background: none; border: 0; padding: 0; cursor: default; }
+  :focus-visible { outline: 2px solid var(--brand-fg); outline-offset: 2px; }
   a { color: var(--brand-fg); text-decoration: none; }
   svg { display: block; flex-shrink: 0; }
   main { flex: 1; overflow-y: auto; overflow-x: hidden; }
@@ -86,10 +101,10 @@
   .kb.added { color: var(--green-fg); background: var(--green-tint); }
   .kb.changed { color: var(--warn-fg); background: var(--warn-tint); }
   .kb.removed { color: var(--danger); background: var(--danger-tint); }
-  .list-row.dead { cursor: default; opacity: .7; }
+  .list-row.dead { cursor: default; }
   .list-row.dead:hover { background: none; }
   .list-row .x { opacity: 0; color: var(--fg2); }
-  .list-row:hover .x, .note:hover .x { opacity: 1; }
+  .list-row:hover .x, .note:hover .x, .list-row .x:focus-visible, .note .x:focus-visible { opacity: 1; }
   .note .x { margin-left: auto; opacity: 0; color: var(--fg2); align-self: flex-start; }
   /* accessibility + tokens */
   .a-sum { display: flex; gap: 6px; flex-wrap: wrap; margin: 0 0 6px; }
@@ -117,10 +132,16 @@
   .form { display: grid; gap: 6px; padding: 8px; margin: 4px 0 2px; border-radius: 6px; background: var(--bg2); }
   .form .row { display: flex; gap: 6px; justify-content: flex-end; }
   .form label { color: var(--fg2); font-size: 11px; }
+  .preflight { margin: 8px 0; padding: 8px; border: 1px solid var(--border); border-radius: 6px; background: var(--bg2); }
+  .preflight-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+  .preflight-results { display: grid; gap: 4px; margin-top: 7px; }
+  .preflight .faint { color: var(--fg); }
+  .preflight [aria-disabled="true"] { cursor: progress; }
   input.in, select.in { width: 100%; height: 28px; font: inherit; color: var(--fg); background: var(--bg); border: 1px solid var(--border); border-radius: 5px; padding: 0 8px; outline: none; }
-  input.in:focus, select.in:focus { border-color: var(--brand); box-shadow: 0 0 0 1px var(--brand); }
+  input::placeholder, textarea::placeholder { color: var(--fg3); opacity: 1; }
+  input.in:focus, select.in:focus { border-color: var(--brand-fg); box-shadow: 0 0 0 1px var(--brand-fg); }
   .form textarea { min-height: 44px; }
-  .mini { color: var(--brand); cursor: pointer; font-weight: 500; }
+  .mini { color: var(--brand-fg); cursor: pointer; font-weight: 500; }
   .mini:hover { text-decoration: underline; }
   .cc-head { display: flex; align-items: center; gap: 6px; margin: 10px 0 4px; color: var(--fg2); }
   .cc-head b { color: var(--fg); font-weight: 600; }
@@ -217,13 +238,13 @@
   .fvars { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 6px; }
   .fvar { display: inline-flex; align-items: center; gap: 4px; height: 22px; padding: 0 7px; border-radius: 11px; background: var(--bg2); color: var(--fg2); font-size: 11px; }
   .fvar.ok { color: var(--green-fg); background: var(--green-tint); }
-  .fvar .x { cursor: pointer; opacity: .7; margin-left: 2px; }
-  .fvar .x:hover { opacity: 1; }
+  .fvar .x { cursor: pointer; margin-left: 2px; }
+  .fvar .x:hover { color: var(--fg); }
   .code-foot { display: flex; align-items: center; gap: 8px; margin-top: 8px; flex-wrap: wrap; }
   .code-foot .stats { color: var(--fg2); flex: 1; min-width: 160px; }
   .warn { padding: 6px 10px; border-radius: 5px; background: color-mix(in srgb, #ffcd29 25%, transparent); margin-bottom: 8px; }
   .code .copy-float { position: absolute; top: 4px; right: 4px; opacity: 0; background: var(--bg); box-shadow: 0 0 0 1px var(--border); }
-  .code:hover .copy-float { opacity: 1; }
+  .code:hover .copy-float, .code .copy-float:focus-visible { opacity: 1; }
   .code + .code { margin-top: 8px; }
   .code-label { color: var(--fg2); margin: 10px 0 4px; }
   .c-p { color: var(--code-prop); } .c-v { color: var(--code-val); } .c-s { color: var(--code-str); } .c-t { color: var(--code-tag); } .c-c { color: var(--code-cmt); }
@@ -248,7 +269,7 @@
   .spacing { display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; }
   .sp { background: var(--bg2); border-radius: 5px; padding: 6px 8px; cursor: pointer; }
   .sp:hover { background: var(--pressed); }
-  .sp b { display: block; font-size: 12px; font-weight: 600; color: #f24822; font-variant-numeric: tabular-nums; }
+  .sp b { display: block; font-size: 12px; font-weight: 600; color: var(--danger); font-variant-numeric: tabular-nums; }
   .sp span { color: var(--fg2); font-size: 10px; }
   .spacing.two { grid-template-columns: 1fr 1fr; }
 
@@ -271,9 +292,10 @@
   /* buttons */
   .btn { height: 24px; padding: 0 8px; border-radius: 5px; display: inline-flex; align-items: center; justify-content: center; gap: 4px; font-weight: 500; box-shadow: inset 0 0 0 1px var(--border); white-space: nowrap; }
   .btn:hover { background: var(--hover); }
-  .btn.green { background: var(--green); color: #fff; box-shadow: none; }
+  .btn.green { background: var(--action-green); color: var(--action-text); box-shadow: none; }
   .btn.green:hover { filter: brightness(1.06); }
-  .btn.blue { background: var(--brand); color: var(--onbrand); box-shadow: none; }
+  .btn.blue { background: var(--action-blue); color: var(--action-text); box-shadow: none; }
+  .btn.blue:hover { filter: brightness(1.06); }
   .btn.full { width: 100%; height: 32px; }
   .row-btns { display: flex; gap: 8px; margin-top: 8px; flex-wrap: wrap; }
 
@@ -283,7 +305,7 @@
   .empty h3 { font-size: 13px; line-height: 20px; margin: 0 0 4px; font-weight: 600; }
   .empty p { margin: 0 auto; color: var(--fg2); max-width: 240px; }
   textarea { width: 100%; font: inherit; color: var(--fg); background: var(--bg); border: 1px solid var(--border); border-radius: 5px; padding: 6px 8px; resize: vertical; min-height: 52px; outline: none; }
-  textarea:focus { border-color: var(--brand); box-shadow: 0 0 0 1px var(--brand); }
+  textarea:focus { border-color: var(--brand-fg); box-shadow: 0 0 0 1px var(--brand-fg); }
   .list-row { display: flex; align-items: center; gap: 8px; height: 32px; padding: 0 8px; margin: 0 -8px; border-radius: 5px; cursor: pointer; }
   .list-row:hover { background: var(--hover); }
   .list-row .ico { color: var(--icon); }
@@ -291,12 +313,13 @@
   .st-ico.ready { color: var(--green); } .st-ico.done { color: var(--green); }
 
   /* menu (Figma dark menu) */
-  .menu { position: fixed; z-index: 50; min-width: 180px; background: var(--menu); color: var(--menu-fg); border-radius: 13px; padding: 8px; box-shadow: 0 2px 5px rgba(0,0,0,.15), 0 10px 16px rgba(0,0,0,.12), 0 0 .5px rgba(0,0,0,.15); display: none; }
+  .menu { position: fixed; z-index: 50; min-width: 180px; max-width: calc(100vw - 8px); max-height: calc(100vh - 8px); overflow: auto; background: var(--menu); color: var(--menu-fg); border-radius: 13px; padding: 8px; box-shadow: 0 2px 5px rgba(0,0,0,.15), 0 10px 16px rgba(0,0,0,.12), 0 0 .5px rgba(0,0,0,.15); display: none; }
   .menu.on { display: block; }
-  .mi { display: flex; align-items: center; gap: 8px; height: 24px; padding: 0 8px 0 6px; border-radius: 5px; white-space: nowrap; }
-  .mi:hover { background: var(--menu-hover); }
+  .mi { display: flex; align-items: center; gap: 8px; width: 100%; height: 24px; padding: 0 8px 0 6px; border-radius: 5px; text-align: left; white-space: nowrap; }
+  .mi:hover, .mi:focus-visible { background: var(--menu-hover); color: #fff; }
+  .mi:focus-visible { outline-color: var(--menu-fg); outline-offset: -2px; }
   .mi .ck { width: 16px; display: grid; place-items: center; }
-  .mi.dis { opacity: .4; pointer-events: none; }
+  .mi.dis { color: var(--menu-fg2); pointer-events: none; }
   .mh { color: var(--menu-fg2); padding: 4px 8px 2px 28px; font-size: 11px; }
   .ms { height: 1px; background: rgba(255,255,255,.12); margin: 8px -8px; }
 
@@ -308,9 +331,6 @@
   @keyframes ld { to { background-position: -200% 0; } }
   .resize { position: fixed; right: 0; bottom: 0; width: 12px; height: 12px; cursor: nwse-resize; color: var(--fg3); }
   /* ================= Dev Mode look (v3) ================= */
-  :root { --code-prop: var(--fg); --code-val: #c4258f; --code-kw: #b35c00; --code-str: #2f6fdb; --code-tag: #8638e5; --code-cmt: rgba(0,0,0,.4); --pad-tint: #e5f4ff; }
-  @media (prefers-color-scheme: dark) { :root:not(.figma-light) { --code-prop: var(--fg); --code-val: #ff7ac6; --code-kw: #ffa657; --code-str: #79b8ff; --code-tag: #c5a3ff; --code-cmt: rgba(255,255,255,.4); --pad-tint: rgba(13,153,255,.18); --warn-fg: var(--figma-color-text-warning, #f5a455); --warn-tint: var(--figma-color-bg-warning-tertiary, rgba(247,133,0,.16)); } }
-  .figma-dark { --code-prop: var(--fg); --code-val: #ff7ac6; --code-kw: #ffa657; --code-str: #79b8ff; --code-tag: #c5a3ff; --code-cmt: rgba(255,255,255,.4); --pad-tint: rgba(13,153,255,.18); --warn-fg: var(--figma-color-text-warning, #f5a455); --warn-tint: var(--figma-color-bg-warning-tertiary, rgba(247,133,0,.16)); }
   .c-k { color: var(--code-kw); } .c-n { color: var(--code-val); }
   u.vu { text-decoration: none; border-bottom: 1px dashed #3fbf73; }
 
@@ -359,7 +379,7 @@
   .res-row:hover { background: var(--hover); }
   .res-row .ln { flex: 1; min-width: 0; color: var(--fg); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .res-row .ri { color: var(--fg); }
-  .res-row .x { opacity: 0; } .res-row:hover .x { opacity: 1; }
+  .res-row .x { opacity: 0; } .res-row:hover .x, .res-row .x:focus-visible { opacity: 1; }
   .cc-box { display: flex; align-items: center; gap: 8px; min-height: 40px; padding: 0 12px; border-radius: 6px; background: var(--bg2); color: var(--fg2); }
   .cc-box b { font-weight: 500; color: var(--fg); }
   .sec-h > .dd.box { margin-right: 8px; }
@@ -387,7 +407,7 @@
   .ann-b code { font-family: var(--mono); font-size: 10.5px; background: var(--bg); padding: 0 3px; border-radius: 3px; }
   .ann-props { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 6px; }
   .ann .x { opacity: 0; color: var(--fg2); align-self: flex-start; margin: -4px -4px 0 0; }
-  .ann:hover .x { opacity: 1; }
+  .ann:hover .x, .ann .x:focus-visible { opacity: 1; }
   .ann-help { margin-top: 8px; color: var(--fg2); }
   .ann-help summary { cursor: pointer; color: var(--fg2); list-style: none; display: inline-flex; align-items: center; gap: 4px; }
   .ann-help summary::-webkit-details-marker { display: none; }
@@ -407,8 +427,8 @@
   .mline.abs { background: #f24822; }
   .mline.t { left: 50%; top: 0; width: 1px; height: 34px; } .mline.b { left: 50%; bottom: 0; width: 1px; height: 34px; }
   .mline.l { top: 50%; left: 0; height: 1px; width: 44px; } .mline.r { top: 50%; right: 0; height: 1px; width: 44px; }
-  .mtag { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); background: var(--brand); color: #fff; font-weight: 500; font-size: 10px; line-height: 16px; padding: 0 4px; border-radius: 2px; min-width: 20px; text-align: center; cursor: pointer; white-space: nowrap; }
-  .mline.abs .mtag { background: #f24822; }
+  .mtag { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); background: var(--action-blue); color: var(--action-text); font-weight: 500; font-size: 10px; line-height: 16px; padding: 0 4px; border-radius: 2px; min-width: 20px; text-align: center; cursor: pointer; white-space: nowrap; }
+  .mline.abs .mtag { background: var(--action-red); }
   .bb { position: relative; background: var(--bg); border-radius: 10px; padding: 30px 34px; }
   .bb .cn { position: absolute; width: 12px; height: 12px; border: 0 solid var(--fg3); }
   .bb .cn.on { border-color: var(--fg); }
@@ -471,24 +491,24 @@
   .ix .pv { min-height: 30px; }
 
   /* assets list (I) */
-  .arow { display: flex; align-items: center; gap: 14px; padding: 6px 8px; margin: 0 -8px; border-radius: 6px; cursor: pointer; position: relative; }
+  .arow { display: flex; align-items: center; gap: 8px; padding: 6px 8px; margin: 0 -8px; border-radius: 6px; position: relative; }
   .arow:hover { background: var(--hover); }
+  .asset-main { display: flex; align-items: center; gap: 14px; flex: 1; min-width: 0; cursor: pointer; }
   .arow .th { width: 60px; height: 60px; border-radius: 4px; background: var(--bg2); box-shadow: inset 0 0 0 1px var(--border); display: grid; place-items: center; overflow: hidden; flex-shrink: 0; }
   .arow .th img { max-width: 80%; max-height: 80%; object-fit: contain; }
   .arow .ai { flex: 1; min-width: 0; display: grid; gap: 4px; }
   .arow .an { color: var(--fg); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 12px; }
   .arow .ak { display: inline-flex; align-items: center; gap: 6px; color: var(--fg2); font-size: 12px; white-space: nowrap; }
   .arow .ak.cmp { color: var(--purple); } .arow .ak.cmp svg { color: var(--purple); }
-  .arow .ak[data-select]:hover { text-decoration: underline; }
   .arow .dl { width: 24px; height: 24px; border-radius: 5px; display: grid; place-items: center; color: var(--icon); opacity: 0; }
-  .arow:hover .dl { opacity: 1; }
+  .arow:hover .dl, .asset-main:focus-visible .dl { opacity: 1; }
 
   /* export (J) */
   .exp-row { display: flex; align-items: center; gap: 8px; }
   .exp-sc { display: flex; align-items: center; height: 28px; border-radius: 5px; background: var(--bg2); width: 116px; }
   .exp-sc span { flex: 1; text-align: left; padding-left: 10px; }
   .exp-sc i { width: 26px; height: 28px; display: grid; place-items: center; box-shadow: inset 1px 0 0 var(--bg); color: var(--icon); }
-  .exp-sc.dis { opacity: .5; pointer-events: none; }
+  .exp-sc.dis { color: var(--fg2); pointer-events: none; }
   .exp-fmt { display: inline-flex; align-items: center; justify-content: space-between; height: 28px; border-radius: 5px; box-shadow: inset 0 0 0 1px var(--border); flex: 1; padding: 0 6px 0 10px; }
   .exp-fmt svg { color: var(--icon); }
   .pv-t { display: flex; align-items: center; gap: 2px; height: 32px; margin: 6px 0 2px -14px; color: var(--fg2); font-weight: 600; }
@@ -498,7 +518,7 @@
   .exp-prev img { max-width: 100%; max-height: 220px; object-fit: contain; }
   .exp-prev .ph { color: var(--fg3); }
   .src-b { margin-left: 6px; padding: 0 5px; border-radius: 4px; font-size: 10px; line-height: 16px; color: var(--fg2); background: var(--bg2); white-space: nowrap; cursor: help; }
-  .src-b.flag { color: var(--accent, #0d99ff); background: color-mix(in srgb, #0d99ff 12%, transparent); }
+  .src-b.flag { color: var(--brand-fg); background: color-mix(in srgb, #0d99ff 12%, transparent); }
 .chg-det{margin:-2px 0 6px 28px;padding:4px 0 4px 10px;border-left:1px solid var(--border);display:grid;gap:2px}
 .chg-line{display:grid;grid-template-columns:70px minmax(0,1fr) 12px minmax(0,1fr);gap:6px;align-items:center;font-size:11px;line-height:16px}
 .chg-p{color:var(--fg2)}
@@ -513,8 +533,8 @@
   <div id="hdr" class="hdr"></div>
   <div id="bar" class="bar"></div>
   <main id="main"></main>
-  <div id="menu" class="menu"></div>
-  <div id="toast" class="toast"></div>
+  <div id="menu" class="menu" role="menu" aria-label="Options"></div>
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
   <input type="file" id="font-file" multiple accept=".woff2,.woff,.ttf,.otf" style="display:none" />
   <svg id="resize" class="resize" viewBox="0 0 12 12"><path d="M11 4L4 11M11 8l-3 3" stroke="currentColor"/></svg>
 
@@ -523,6 +543,7 @@
  * DevReady Inspect — UI (Figma Dev Mode style)
  * =================================================================== */
 const S = { view: 'code', cmp: 'preview', opacity: 50, diff: false, shot: null, data: null, lang: 'css', file: '', code: {}, codeFor: null, assetFmt: 'SVG:1', thumbs: {}, demo: false, got: false };
+let preflightRequestSeq = 0;
 const $ = id => document.getElementById(id);
 const esc = s => String(s === undefined || s === null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 const r2 = n => typeof n === 'number' ? Math.round(n * 100) / 100 : n;
@@ -607,8 +628,10 @@ const gsw = st => '<span class="sw"><i style="background:linear-gradient(90deg,'
 /* ---------- utilities ---------- */
 function toast(t) { const el = $('toast'); el.textContent = t; el.classList.add('on'); clearTimeout(toast.t); toast.t = setTimeout(() => el.classList.remove('on'), 1400); }
 function copy(text, label) {
+  const focused = document.activeElement;
   const ta = document.createElement('textarea'); ta.value = text; ta.style.cssText = 'position:fixed;opacity:0';
   document.body.appendChild(ta); ta.select(); let ok = false; try { ok = document.execCommand('copy'); } catch (e) {} ta.remove();
+  if (focused && focused.isConnected && focused !== document.body) focused.focus({ preventScroll: true });
   if (!ok && navigator.clipboard) navigator.clipboard.writeText(text).catch(() => {});
   toast(label || 'Copied to clipboard');
 }
@@ -701,7 +724,7 @@ function sec(title, actions, body, cnt, opts) {
   opts = opts || {};
   const key = opts.key || title;
   const closed = !!S.closed[key];
-  return '<section class="sec' + (closed ? ' closed' : '') + '"' + (opts.id ? ' id="' + opts.id + '"' : '') + '><div class="sec-h"><button class="sec-t" data-act="sec-toggle" data-key="' + esc(key) + '"><span class="chv">' + I.chevS + '</span>' + esc(title) +
+  return '<section class="sec' + (closed ? ' closed' : '') + '"' + (opts.id ? ' id="' + opts.id + '"' : '') + '><div class="sec-h"><button class="sec-t" data-act="sec-toggle" data-key="' + esc(key) + '" aria-expanded="' + !closed + '"><span class="chv">' + I.chevS + '</span>' + esc(title) +
     (cnt !== undefined ? '<span class="cnt">' + cnt + '</span>' : '') + '</button>' + (closed ? '' : (actions || '')) + '</div>' + (closed ? '' : '<div class="sec-b">' + body + '</div>') + '</section>';
 }
 const TYPE_NAMES = { FRAME: 'Frame', GROUP: 'Group', SECTION: 'Section', TEXT: 'Text', RECTANGLE: 'Rectangle', ELLIPSE: 'Ellipse', VECTOR: 'Vector', LINE: 'Line', POLYGON: 'Polygon', STAR: 'Star', BOOLEAN_OPERATION: 'Boolean group', COMPONENT: 'Main component', COMPONENT_SET: 'Component set', INSTANCE: 'Component instance' };
@@ -995,10 +1018,11 @@ function secAssets(d) {
   const fmtLabel = FMTS.find(f => f[0] === S.assetFmt)[1];
   const rows = list.map(a => {
     const th = S.thumbs[a.id] ? '<img src="' + S.thumbs[a.id] + '" alt="">' : '<span class="ph">' + (a.kind === 'icon' ? I.VECTOR : a.kind === 'image' ? I.RECT : I.FRAME) + '</span>';
-    const kind = a.type === 'INSTANCE' ? '<span class="ak cmp" data-select="' + esc(a.id) + '" title="Select in canvas">' + I.diamond + 'Component instance</span>'
+    const kind = a.type === 'INSTANCE' ? '<span class="ak cmp">' + I.diamond + 'Component instance</span>'
       : a.type === 'COMPONENT' ? '<span class="ak cmp">' + I.COMPONENT + 'Component</span>'
       : '<span class="ak">' + (a.kind === 'image' ? 'Image' : a.kind === 'export' ? 'Export · ' + esc((a.formats || []).join(', ')) : 'Icon') + ' · ' + r2(a.w) + '×' + r2(a.h) + '</span>';
-    return '<div class="arow" data-export="' + esc(a.id) + '" title="Download ' + esc(a.name) + ' as ' + fmtLabel + '"><div class="th">' + th + '</div><div class="ai"><div class="an">' + esc(a.name) + '</div>' + kind + '</div><span class="dl">' + I.dl + '</span></div>';
+    const select = a.type === 'INSTANCE' ? '<button class="ibtn" data-select="' + esc(a.id) + '" title="Select ' + esc(a.name) + ' in canvas">' + I.COMPONENT + '</button>' : '';
+    return '<div class="arow"><div class="asset-main" data-export="' + esc(a.id) + '" title="Download ' + esc(a.name) + ' as ' + fmtLabel + '"><div class="th">' + th + '</div><div class="ai"><div class="an">' + esc(a.name) + '</div>' + kind + '</div><span class="dl">' + I.dl + '</span></div>' + select + '</div>';
   }).join('');
   return sec('Assets', ddBtn(fmtLabel, 'fmt-menu') + ib(I.dl, 'export-all', 'Download all as ZIP'), rows, list.length);
 }
@@ -1010,10 +1034,10 @@ function secExport(d) {
   const sp = d.spec, e = S.exp || (S.exp = { scale: 2, fmt: 'PNG' });
   const vec = e.fmt === 'SVG' || e.fmt === 'PDF';
   const prevClosed = !!S.closed['Export preview'];
-  let b = '<div class="exp-row"><button class="exp-sc' + (vec ? ' dis' : '') + '" data-act="expscale-menu"><span>' + (vec ? '1x' : e.scale + 'x') + '</span><i>' + I.chevS + '</i></button>' +
+  let b = '<div class="exp-row"><button class="exp-sc' + (vec ? ' dis' : '') + '" data-act="expscale-menu"' + (vec ? ' disabled' : '') + '><span>' + (vec ? '1x' : e.scale + 'x') + '</span><i>' + I.chevS + '</i></button>' +
     '<button class="exp-fmt" data-act="expfmt-menu">' + e.fmt + I.chevS + '</button></div>' +
     '<button class="btn wide" data-act="export-sel">Export ' + esc(sp.name) + '</button>' +
-    '<button class="pv-t' + (prevClosed ? ' closed' : '') + '" data-act="sec-toggle" data-key="Export preview"><span>' + I.chevS + '</span>Preview</button>';
+    '<button class="pv-t' + (prevClosed ? ' closed' : '') + '" data-act="sec-toggle" data-key="Export preview" aria-expanded="' + !prevClosed + '"><span>' + I.chevS + '</span>Preview</button>';
   if (!prevClosed) b += '<div class="exp-prev" data-thumb="' + esc(sp.id) + '">' + (S.thumbs[sp.id] ? '<img src="' + S.thumbs[sp.id] + '" alt="">' : '<span class="ph">Preview loads in Figma</span>') + '</div>';
   return sec('Export', '', b);
 }
@@ -1021,13 +1045,81 @@ function secExport(d) {
 /* ===================================================================
  * Render
  * =================================================================== */
+// Some compact rows and chips are visually interactive but are not native buttons.
+// Give those controls keyboard semantics without nesting buttons inside asset rows.
+function prepareKeyboardControls() {
+  document.querySelectorAll('#hdr [data-select], #main [data-select], #hdr [data-copy], #main [data-copy], #main [data-export], #hdr [data-act], #main [data-act]').forEach(el => {
+    if (el.matches('button, a[href], input, select, textarea, summary')) return;
+    if (el.hasAttribute('data-copy') && !el.getAttribute('data-copy')) return;
+    el.setAttribute('role', 'button');
+    el.tabIndex = 0;
+    const label = (el.getAttribute('title') || el.textContent || '').trim().replace(/\s+/g, ' ').slice(0, 100);
+    if (el.hasAttribute('data-select')) el.setAttribute('aria-label', /^(select|go to)\b/i.test(label) ? label : 'Select ' + (label || 'layer'));
+    else if (el.hasAttribute('data-copy')) el.setAttribute('aria-label', 'Copy ' + (label || 'value'));
+    else if (label) el.setAttribute('aria-label', label);
+  });
+  document.querySelectorAll('[data-act$="-menu"]').forEach(el => {
+    el.setAttribute('aria-haspopup', 'menu');
+    el.setAttribute('aria-expanded', 'false');
+    el.setAttribute('aria-controls', 'menu');
+  });
+}
+const FOCUS_ATTRS = ['id', 'data-act', 'data-key', 'data-select', 'data-copy', 'data-export', 'data-file', 'data-fam', 'data-idx', 'data-url', 'data-status'];
+let renderedContext = null;
+function focusCandidates(desc) {
+  return Array.from(document.querySelectorAll('#hdr *, #main *')).filter(el => el.tagName === desc.tag && desc.attrs.every(([k, v]) => el.getAttribute(k) === v));
+}
+function rememberFocus() {
+  const el = document.activeElement;
+  if (!el || !el.closest('#hdr, #main')) return null;
+  const attrs = FOCUS_ATTRS.filter(k => el.hasAttribute(k)).map(k => [k, el.getAttribute(k)]);
+  if (!attrs.length) return null;
+  const section = el.closest('.sec'), toggle = section && section.querySelector('[data-act="sec-toggle"]');
+  const desc = { tag: el.tagName, attrs: attrs, index: 0, section: toggle && toggle.getAttribute('data-key') };
+  if (typeof el.selectionStart === 'number') desc.selection = [el.selectionStart, el.selectionEnd, el.selectionDirection];
+  desc.index = focusCandidates(desc).indexOf(el);
+  return desc;
+}
+function restoreFocus(desc) {
+  if (!desc || (document.activeElement && document.activeElement !== document.body)) return;
+  const matches = focusCandidates(desc);
+  let el = matches[desc.index] || matches[0];
+  if (!el || el.disabled) {
+    el = desc.section && Array.from(document.querySelectorAll('[data-act="sec-toggle"]')).find(x => x.getAttribute('data-key') === desc.section);
+    if (!el) { el = $('hdr').querySelector('.name'); if (el) el.tabIndex = -1; }
+  }
+  if (el) {
+    el.focus({ preventScroll: true });
+    if (desc.selection && typeof el.setSelectionRange === 'function') el.setSelectionRange.apply(el, desc.selection);
+  }
+}
+function rememberDrafts() {
+  return Array.from(document.querySelectorAll('#main .form input[id], #main .form textarea[id], #main .form select[id], #main #note')).map(el => ({ id: el.id, value: el.value, checked: el.checked }));
+}
+function restoreDrafts(drafts) {
+  drafts.forEach(d => {
+    const el = $(d.id);
+    if (!el) return;
+    if (el.tagName !== 'SELECT' || Array.from(el.options).some(o => o.value === d.value)) el.value = d.value;
+    if (el.type === 'checkbox' || el.type === 'radio') el.checked = d.checked;
+  });
+}
 function render() {
-  $('demo').style.display = S.demo ? 'block' : 'none';
+  // Async Figma updates can arrive while a menu is open. Close it before
+  // replacing its trigger so focus and aria-expanded do not point at a detached node.
+  if ($('menu').classList.contains('on')) closeMenu(true);
+  const focus = rememberFocus(), drafts = rememberDrafts();
   const d = S.data;
-  if (!d) { $('hdr').innerHTML = '<div class="hdr-row"><div class="name">DevReady</div></div>'; $('main').innerHTML = ''; return; }
-  if (d.mode === 'empty') return renderEmpty(d);
-  if (d.mode === 'locked') return renderLocked(d);
-  return renderInspect(d);
+  const context = d ? d.mode + ':' + (d.mode === 'inspect' && d.spec ? d.spec.id : d.mode === 'locked' && d.target ? d.target.id : '') : '';
+  $('demo').style.display = S.demo ? 'block' : 'none';
+  if (!d) { $('hdr').innerHTML = '<div class="hdr-row"><div class="name">DevReady</div></div>'; $('main').innerHTML = ''; }
+  else if (d.mode === 'empty') renderEmpty(d);
+  else if (d.mode === 'locked') renderLocked(d);
+  else renderInspect(d);
+  prepareKeyboardControls();
+  if (renderedContext === context) restoreDrafts(drafts);
+  renderedContext = context;
+  restoreFocus(focus);
 }
 
 function statusChip(st, gateOff, clickable) {
@@ -1058,13 +1150,37 @@ function srcBadge(st) {
     ? '<span class="src-b flag" title="Set with DevReady (stored as shared plugin data on the frame). Anyone running DevReady sees it; Figma’s own Ready for dev list does not.">DevReady flag</span>'
     : '<span class="src-b" title="Figma’s native Ready for dev status — the same one shown in Dev Mode.">Figma status</span>';
 }
+function preflightBlock(target) {
+  const p = S.preflight && S.preflight.id === target.id ? S.preflight : null;
+  const busy = !!(p && p.busy);
+  let body = '<div class="faint">Optional, read-only check of this handoff frame. It does not change its status.</div>';
+  if (p && p.error) body += '<div class="warn">' + esc(p.error) + '</div>';
+  if (p && p.out) {
+    const o = p.out, a = o.accessibility, c = a.counts, l = o.layers, u = a.unmeasured || {};
+    const budget = l.scanned > 1500 ? 1500 : l.scanned > 600 ? 600 : l.scanned > 150 ? 150 : 0;
+    const unknown = [];
+    if (u.background) unknown.push(u.background + ' background' + (u.background === 1 ? '' : 's'));
+    if (u.textFill) unknown.push(u.textFill + ' text fill' + (u.textFill === 1 ? '' : 's'));
+    if (u.textStyle) unknown.push(u.textStyle + ' mixed text style' + (u.textStyle === 1 ? '' : 's'));
+    body += '<div class="preflight-results">' +
+      (p.stale ? '<div class="warn">The design may have changed since this check. Run it again before handoff.</div>' : '') +
+      '<div><b>Accessibility:</b> ' + esc(c.fail) + ' failing · ' + esc(c.warn) + ' to review · ' + esc(c.unknown) + ' unmeasured</div>' +
+      (unknown.length ? '<div class="faint">Unmeasured contrast: ' + esc(unknown.join(', ')) + ' — check manually.</div>' : '') +
+      '<div class="faint">Checked ' + esc(a.scanned) + ' layers' + (a.limited ? ' (incomplete; stopped at 400)' : '') + (a.assumed ? ' · ' + esc(a.assumed) + ' contrast check' + (a.assumed === 1 ? '' : 's') + ' assumed a white background' : '') + '. Heuristic checks are not a full WCAG audit.</div>' +
+      '<div><b>Fonts:</b> ' + esc(o.missingFonts) + ' text layer' + (o.missingFonts === 1 ? '' : 's') + ' with fonts unavailable in Figma' + (o.uncheckedFonts ? ' · ' + esc(o.uncheckedFonts) + ' could not be checked' : '') + '.' + (l.limited ? ' Font scan is incomplete; stopped at ' + esc((l.limit || 1501).toLocaleString()) + ' layers.' : '') + '</div>' +
+      '<div><b>Layers:</b> ' + esc(l.scanned) + (l.limited ? '+' : '') + ' visible layers scanned.' + (budget ? ' This may exceed the ' + budget.toLocaleString() + '-layer ' + (budget === 150 ? 'Dev Mode' : budget === 600 ? 'panel' : 'project') + ' code budget; output may truncate.' : '') + '</div>' +
+      '<div class="faint">Layer counts are an upper bound: exported assets and mapped components can reduce generated layers. Run again after edits.</div></div>';
+  }
+  return '<div class="preflight"><div class="preflight-head"><b>Handoff preflight</b><button class="btn" data-act="preflight" aria-disabled="' + busy + '">' + (busy ? 'Checking…' : (p && (p.out || p.error) ? 'Run again' : 'Run preflight')) + '</button></div><div role="status" aria-live="polite">' + body + '</div></div>';
+}
 function renderLocked(d) {
   $('hdr').innerHTML = '<div class="hdr-row"><span class="ico' + (isCmp(d.node.type) ? ' cmp' : '') + '">' + typeIcon(d.node.type) + '</span><div class="name">' + esc(d.node.name) + '</div>' + statusChip(null) + ib(I.more, 'more-menu', 'Settings') + '</div>';
   let hand = '';
   if (d.target) {
     hand = sec('Mark as ready for dev', '',
       '<div class="list-row" data-select="' + esc(d.target.id) + '" style="margin-bottom:6px"><span class="ico">' + typeIcon(d.target.type) + '</span><span class="ln">' + esc(d.target.name) + '</span></div>' +
-      '<textarea id="note" placeholder="Add a note for developers (optional)"></textarea>' +
+      preflightBlock(d.target) +
+      '<textarea id="note" aria-label="Note for developers, optional" placeholder="Add a note for developers (optional)">' + esc(S.handoffNote || '') + '</textarea>' +
       '<div class="row-btns"><button class="btn green full" data-act="mark" data-status="READY_FOR_DEV">' + I.ready + (d.isDev ? 'Flag as ready for dev' : 'Mark as ready for dev') + '</button></div>' +
       '<div class="faint" style="margin-top:6px">' + (d.isDev ? 'Dev Mode is read-only, so this saves a DevReady flag (shared plugin data).' : 'Uses Figma’s native status when your plan allows it, otherwise a DevReady flag.') + '</div>');
   }
@@ -1098,7 +1214,7 @@ function secChanges(d) {
 }
 function secLayers(sp) {
   const L = sp.layers; if (!L || !L.children.length) return '';
-  const rows = L.children.map(k => '<div class="list-row" data-select="' + esc(k.id) + '"' + (k.visible ? '' : ' style="opacity:.5"') + '><span class="ico">' + typeIcon(k.type) + '</span><span class="ln">' + esc(k.name) + '</span>' + (k.kids ? '<span class="faint">' + k.kids + '</span>' : '') + '</div>').join('');
+  const rows = L.children.map(k => '<div class="list-row" data-select="' + esc(k.id) + '"><span class="ico">' + typeIcon(k.type) + '</span><span class="ln">' + esc(k.name) + '</span>' + (k.visible ? '' : '<span class="faint">Hidden</span>') + (k.kids ? '<span class="faint">' + k.kids + '</span>' : '') + '</div>').join('');
   return sec('Layers', '', rows + (L.more ? '<div class="faint" style="padding:4px 0">+ ' + L.more + ' more</div>' : ''), L.children.length + (L.more || 0));
 }
 const ANN_PROPS = [['', 'No pinned property'], ['width', 'Width'], ['height', 'Height'], ['fills', 'Fill'], ['strokes', 'Stroke'], ['cornerRadius', 'Corner radius'], ['itemSpacing', 'Gap'], ['padding', 'Padding'], ['layoutMode', 'Layout direction'], ['alignItems', 'Alignment'], ['effects', 'Effects'], ['opacity', 'Opacity'], ['fontSize', 'Font size'], ['fontWeight', 'Font weight'], ['fontFamily', 'Font family'], ['lineHeight', 'Line height'], ['textAlignHorizontal', 'Text align']];
@@ -1411,17 +1527,30 @@ let menuHandlers = [];
 function openMenu(anchor, items) {
   const m = $('menu'); menuHandlers = [];
   m.innerHTML = items.map(it => {
-    if (it === '-') return '<div class="ms"></div>';
-    if (it.header) return '<div class="mh">' + esc(it.header) + '</div>';
+    if (it === '-') return '<div class="ms" role="separator"></div>';
+    if (it.header) return '<div class="mh" role="presentation">' + esc(it.header) + '</div>';
     menuHandlers.push(it.run);
-    return '<div class="mi' + (it.disabled ? ' dis' : '') + '" data-mi="' + (menuHandlers.length - 1) + '"><span class="ck">' + (it.checked ? I.check : '') + '</span>' + esc(it.label) + '</div>';
+    const checkable = Object.prototype.hasOwnProperty.call(it, 'checked');
+    const role = checkable ? (anchor.getAttribute('data-act') === 'more-menu' ? 'menuitemcheckbox' : 'menuitemradio') : 'menuitem';
+    return '<button type="button" role="' + role + '"' + (checkable ? ' aria-checked="' + !!it.checked + '"' : '') + ' class="mi' + (it.disabled ? ' dis' : '') + '" data-mi="' + (menuHandlers.length - 1) + '"' + (it.disabled ? ' disabled' : '') + '><span class="ck" aria-hidden="true">' + (it.checked ? I.check : '') + '</span>' + esc(it.label) + '</button>';
   }).join('');
   m.classList.add('on');
+  anchor.setAttribute('aria-expanded', 'true');
   const r = anchor.getBoundingClientRect(), mw = m.offsetWidth, mh = m.offsetHeight;
   m.style.left = Math.max(4, Math.min(innerWidth - mw - 4, r.right - mw)) + 'px';
   m.style.top = (r.bottom + mh + 4 > innerHeight ? Math.max(4, r.top - mh - 4) : r.bottom + 4) + 'px';
+  const first = m.querySelector('button:not(:disabled)');
+  if (first) first.focus();
 }
-function closeMenu() { $('menu').classList.remove('on'); }
+function closeMenu(restore) {
+  $('menu').classList.remove('on');
+  const anchor = S.menuAnchor;
+  if (anchor && anchor.isConnected) {
+    anchor.setAttribute('aria-expanded', 'false');
+    if (restore) anchor.focus({ preventScroll: true });
+  }
+  S.menuAnchor = null;
+}
 function setSetting(patch) {
   S.data.settings = Object.assign({}, S.data.settings, patch); S.code = {}; pending = {};
   send({ type: 'settings', settings: patch }); render();
@@ -1465,10 +1594,36 @@ function mark(id, status, note) { if (S.demo) return toast('Works inside Figma')
 /* ===================================================================
  * Events
  * =================================================================== */
+document.addEventListener('keydown', e => {
+  const menu = $('menu');
+  if (menu.classList.contains('on')) {
+    if (e.key === 'Escape') { e.preventDefault(); closeMenu(true); return; }
+    if (e.key === 'Tab') { closeMenu(true); return; }
+    if (['ArrowDown', 'ArrowUp', 'Home', 'End'].indexOf(e.key) > -1) {
+      const items = Array.from(menu.querySelectorAll('button:not(:disabled)'));
+      if (!items.length) return;
+      const index = items.indexOf(document.activeElement);
+      const next = e.key === 'Home' ? 0 : e.key === 'End' ? items.length - 1 : e.key === 'ArrowDown' ? (index + 1) % items.length : (index <= 0 ? items.length - 1 : index - 1);
+      e.preventDefault(); items[next].focus(); return;
+    }
+  } else if ((e.key === 'ArrowDown' || e.key === 'ArrowUp') && e.target.matches('[data-act$="-menu"]') && !e.target.disabled) {
+    e.preventDefault(); e.target.click();
+    if (e.key === 'ArrowUp' && menu.classList.contains('on')) {
+      const items = menu.querySelectorAll('button:not(:disabled)');
+      if (items.length) items[items.length - 1].focus();
+    }
+    return;
+  }
+  const el = e.target;
+  if ((e.key === 'Enter' || e.key === ' ') && el.matches('[role="button"]') && !el.matches('button, a[href], input, select, textarea, summary')) {
+    e.preventDefault();
+    if (!e.repeat) el.click();
+  }
+});
 document.addEventListener('click', e => {
   const t = e.target;
   const mi = t.closest('[data-mi]');
-  if (mi) { closeMenu(); const fn = menuHandlers[+mi.getAttribute('data-mi')]; if (fn) fn(); return; }
+  if (mi) { const fn = menuHandlers[+mi.getAttribute('data-mi')]; closeMenu(true); if (fn && !mi.disabled) fn(); return; }
   if (!t.closest('#menu') && !t.closest('[data-act$="-menu"]')) closeMenu();
 
   const c = t.closest('[data-copy]'); if (c) { const v = c.getAttribute('data-copy'); if (v) copy(v); return; }
@@ -1483,10 +1638,17 @@ document.addEventListener('click', e => {
   }
   const a = t.closest('[data-act]'); if (!a) return;
   const act = a.getAttribute('data-act');
-  if (/-menu$/.test(act)) { if ($('menu').classList.contains('on') && S.menuAnchor === a) { closeMenu(); S.menuAnchor = null; return; } S.menuAnchor = a; menuFor(act, a); return; }
+  if (/-menu$/.test(act)) { if ($('menu').classList.contains('on') && S.menuAnchor === a) { closeMenu(true); return; } closeMenu(); S.menuAnchor = a; menuFor(act, a); return; }
   const sp = S.data && S.data.spec;
-  const live = ['baseline-save', 'baseline-clear', 'measure-native', 'measure-clear', 'ann-add', 'ann-del', 'res-add', 'res-del', 'map-save', 'map-del', 'notes-clear', 'goto-main'];
+  const live = ['baseline-save', 'baseline-clear', 'measure-native', 'measure-clear', 'ann-add', 'ann-del', 'res-add', 'res-del', 'map-save', 'map-del', 'notes-clear', 'goto-main', 'preflight'];
   if (S.demo && live.indexOf(act) > -1) { S.form = null; render(); return toast('Works inside Figma'); }
+  if (act === 'preflight') {
+    if (!S.data || S.data.mode !== 'locked' || !S.data.target || (S.preflight && S.preflight.busy)) return;
+    S.preflight = { id: S.data.target.id, requestId: ++preflightRequestSeq, busy: true, stale: false };
+    render();
+    send({ type: 'preflight', id: S.preflight.id, requestId: S.preflight.requestId });
+    return;
+  }
   if (act === 'sec-toggle') { const k = a.getAttribute('data-key'); S.closed[k] = !S.closed[k]; render(); return; }
   if (act === 'a11y-all') { S.a11yAll = !S.a11yAll; S.a11yMore = false; render(); return; }
   if (act === 'a11y-more') { S.a11yMore = !S.a11yMore; render(); return; }
@@ -1554,23 +1716,28 @@ document.addEventListener('click', e => {
     toast('Preparing ZIP…');
   }
 });
-window.addEventListener('blur', closeMenu);
+window.addEventListener('blur', () => closeMenu());
 document.addEventListener('input', e => {
+  if (e.target.id === 'note') S.handoffNote = e.target.value;
   if (e.target.id === 'pv-op') { S.opacity = +e.target.value; const v = $('pv-opv'); if (v) v.textContent = S.opacity + '%'; updateOverlay(); }
   if (e.target.id === 'pv-diff') { S.diff = e.target.checked; if (S.diff && S.opacity < 100) { S.opacity = 100; const r = $('pv-op'); if (r) r.value = 100; const v = $('pv-opv'); if (v) v.textContent = '100%'; } updateOverlay(); }
 });
 
 window.onmessage = ev => {
   const m = ev.data && ev.data.pluginMessage; if (!m) return;
-  if (['loading', 'state', 'code', 'download', 'error', 'thumb', 'project', 'design-shot', 'fonts-updated', 'ann-result', 'tokens'].indexOf(m.type) === -1) return;
+  if (['loading', 'state', 'code', 'download', 'error', 'thumb', 'project', 'design-shot', 'fonts-updated', 'ann-result', 'tokens', 'preflight'].indexOf(m.type) === -1) return;
   S.got = true; S.demo = false;
   if (m.type === 'loading') $('bar').classList.add('on');
   else if (m.type === 'state') {
     $('bar').classList.remove('on');
     if (!S.data || !S.data.spec || !m.spec || S.data.spec.id !== m.spec.id) S.form = null;
+    const oldTarget = S.data && S.data.mode === 'locked' && S.data.target && S.data.target.id;
+    const newTarget = m.mode === 'locked' && m.target && m.target.id;
+    if (!oldTarget || oldTarget !== newTarget) { S.preflight = null; S.handoffNote = ''; }
+    else if (S.preflight) S.preflight.stale = true;
     S.data = m; S.code = {}; S.codeFor = ''; pending = {};
     if (m.mode !== 'inspect') { Object.keys(S.thumbs).forEach(k => URL.revokeObjectURL(S.thumbs[k])); S.thumbs = {}; }
-    closeMenu(); render();
+    render();
   }
   else if (m.type === 'thumb') {
     if (S.thumbs[m.id]) URL.revokeObjectURL(S.thumbs[m.id]);
@@ -1583,6 +1750,12 @@ window.onmessage = ev => {
     if (!S.codeFor || m.nodeId !== S.codeFor || !m.requestId || pending[m.lang] !== m.requestId) return;
     S.code[m.lang] = m.out; pending[m.lang] = false; render();
     if (m.out.assetErrors && m.out.assetErrors.length) toast(m.out.assetErrors.length + ' asset export issue' + (m.out.assetErrors.length === 1 ? '' : 's') + ' — retry in Figma before downloading');
+  }
+  else if (m.type === 'preflight') {
+    const p = S.preflight, target = S.data && S.data.mode === 'locked' && S.data.target;
+    if (!p || !p.busy || !target || target.id !== m.id || p.id !== m.id || p.requestId !== m.requestId) return;
+    p.busy = false; p.out = m.out || null; p.error = m.error || '';
+    render();
   }
   else if (m.type === 'tokens') { S.tok = S.tok || { format: m.format, scope: m.scope }; S.tok.busy = false; S.tok.out = Object.assign({ format: m.format, scope: m.scope }, m.out); render(); }
   else if (m.type === 'fonts-updated') { S.code = {}; pending = {}; render(); }

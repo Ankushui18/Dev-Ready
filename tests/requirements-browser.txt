@@ -1,0 +1,2 @@
+# Keep CI and local browser checks on the same Playwright release.
+playwright==1.65.2

@@ -5,16 +5,22 @@ All notable changes to DevReady are listed here. The format follows [Keep a Chan
 ## [Unreleased]
 
 ### Changed
+- **Repository tooling now requires Node 20.19+ on 20.x, 22.13+ on 22.x, or 24+**, matching ESLint 10; CI verifies each minimum with strict engine checks. Node is not required to install the plugin in Figma.
 - **Licence changed from MIT to PolyForm Noncommercial 1.0.0.** Free for personal, research, educational, charitable and other non-commercial use; commercial use is no longer permitted. `LICENSE` now holds the canonical PolyForm text, `NOTICE` carries the required copyright notice, and `package.json` / `package-lock.json` use the SPDX id `PolyForm-Noncommercial-1.0.0`. Release ZIPs now include `LICENSE` and `NOTICE`. README, FAQ, launch copy and setup docs no longer call the project "open source"; [docs/LICENSING.md](docs/LICENSING.md) explains the change, the MIT history and what it means for commercial users.
 - **SEO:** the repository had no description, topics, homepage or indexable HTML, which is why a Google search for the project name plus "Figma Dev Mode"/"git" returned nothing. README heading, opening paragraph, image alt text and badges now use the phrases people search for.
 
 ### Added
+- **Optional handoff preflight** on the locked screen: a read-only summary of accessibility findings, unmeasured or assumed contrast, missing fonts and scan/code-budget limits. It does not block marking ready and is not a full WCAG audit.
+- **Keyboard access** to menus, layer rows and compact controls, with accessible checked/expanded states, focus restoration and preserved form drafts on same-selection refreshes.
 - **A crawlable project website** at `docs/index.html` (title, meta description, canonical URL, Open Graph / Twitter cards, `SoftwareApplication` + `FAQPage` JSON-LD, a Dev Mode comparison table, install steps and FAQ), plus `docs/sitemap.xml`, `docs/robots.txt` and `docs/.nojekyll` for GitHub Pages.
 - [docs/SEO.md](docs/SEO.md): diagnosis, target search phrases, what was changed, and a setup checklist (social preview upload, Search Console, sitemap, backlinks, indexing time).
 - `scripts/setup-github-meta.sh`: one command to apply the GitHub-side SEO settings (About description, 20 topics, website, Pages source) with a token that has repository-admin rights; the CI/App token is intentionally not able to change repo settings.
 - [docs/LICENSING.md](docs/LICENSING.md): plain-English allowed/prohibited use, generated-code note, relicensing caveats and maintainer notes on separate commercial licensing.
 
 ### Fixed
+- **Panel contrast:** readable secondary text, status chips, syntax colours, placeholders and action buttons in light/dark fallback themes and simulated Figma themes. Hidden layers remain readable and are explicitly labelled; keyboard focus reveals hover-only actions.
+- **Dev Mode codegen change warnings** compare a fresh snapshot on every generation instead of reusing a stale diff. All 12 code targets expose the gate preference, single HTML exposes rem units, and TS/TSX files carry Figma's TypeScript language metadata.
+- **Unmeasurable text contrast** is reported as unknown for unavailable or mixed text fills and mixed sizes/weights rather than being skipped or treated as a single style.
 - **Design text stays text.** Export settings on a `TEXT` layer no longer turn copy into an image, zero-opacity layers are omitted, and single-line auto-sized text uses its exact line box instead of the browser-dependent `normal` line-height.
 - **Raster artwork is no longer mistaken for a vector icon.** Image-filled rectangles, ellipses and nested avatar stacks stay raster assets, including image content nested in boolean operations.
 - **Container image fills are real assets.** Multi-file web targets emit files and matching CSS URLs; single-file HTML embeds the original bytes. React Tailwind URLs are valid JSX, multiple image fills retain their own assets, and native targets render a supported single image fill instead of ignoring it. Unresolved Figma `url(<path-to-image>)` placeholders are rejected instead of leaking into output.
@@ -25,7 +31,7 @@ All notable changes to DevReady are listed here. The format follows [Keep a Chan
 - **Wrapped Auto text has deterministic web line-height.** Compatible uniform text uses Figma's SVG baseline spacing; native targets keep their platform font metrics rather than receiving an inferred cross-platform line box.
 
 ### Added
-- Fourteen codegen-fidelity and follow-up regressions covering these cases (**158 checks total**).
+- Codegen, handoff-preflight and keyboard regressions alongside the earlier fidelity checks (**165 Node checks total**, plus the separate browser suite). The browser suite adds axe contrast regressions for representative states and measured placeholder contrast; it does not replace Figma or screen-reader testing.
 
 ## [1.5.1] — 2026-10-20
 

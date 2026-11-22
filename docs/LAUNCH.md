@@ -87,16 +87,18 @@ Rows marked ✅ below are what those screenshots actually show — nothing more.
 | 2 | Design Mode, panel | Annotate: native annotation appears (Shift+Y); canvas note on a free plan; group → note fallback | ❌ Not run. The section and its "not seeing annotations?" help render, but no annotation was added. |
 | 3 | Design Mode, panel | Start tracking → edit text/fill/padding/rename → change list shows correct before → after; 1,000+ layer frame doesn't error | ⚠️ A baseline exists ("No changes since ready for dev · 20 Oct, 17:09", **Clear** works). No edit was made, so before → after was not exercised. |
 | 4 | Design Mode, panel | Export PNG/SVG/PDF; ZIP download; project ZIP with fonts | ⚠️ UI verified: 19 assets detected, per-asset SVG download and **Download project** render. The downloaded files were not opened. |
-| 5 | Dev Mode, Inspect → Plugins | Read-only behaviour: flag instead of native status; no canvas writes | ❌ Not run in Figma. *No canvas writes* is covered offline by the read-only contract test (every write API throws, as it does in Figma), and *flag instead of native status* is covered by the Dev Mode branch of `secReady()`. Neither is a substitute for launching it. |
-| 6 | Dev Mode, Inspect → Code | Each DevReady language returns within 3 s on a medium frame; preferences (unit, gate) apply | ❌ Not run. |
+| 5 | Dev Mode, Inspect → Plugins | Read-only behaviour: flag instead of native status; no canvas writes | ❌ Not run in Figma. *No canvas writes* and the flag fallback are covered offline by the read-only contract test. Neither is a substitute for launching it. |
+| 6 | Dev Mode, Inspect → Code | Each DevReady language returns within 3 s on a medium frame; preferences (unit, gate) apply; edit and revert after the first generation refreshes the change warning | ❌ Not run. The refresh and preferences are covered only by mocked codegen checks. |
 | 7 | Figma for VS Code | Codegen languages appear and produce output | ❌ Not run. |
 | 8 | Panel width | Narrowest and widest Inspect panel: no overflow or clipped buttons | ⚠️ One width (single column, Figma's default Inspect panel): no overflow, no clipped buttons. |
-| 9 | Themes | Light and dark: all text readable, chips and buttons visible | ⚠️ Dark only. Light theme not captured. |
+| 9 | Themes | Light and dark: all text readable, chips and buttons visible | ⚠️ Historical dark-theme capture predates the latest contrast changes; light was not captured. Standalone browser checks now cover both fallback and simulated Figma themes, but both need re-testing in Figma. |
 | 10 | Fonts | Google font, variable weight (e.g. 450), custom font (upload), system font (SF); ⋯ → Load Google Fonts in preview off → no font requests | ⚠️ "Fonts · 5 families" detected. Upload, variable weight and preview-off were not exercised. |
 | 11 | Variables | Light/dark collection: tokens and modes correct in CSS, SwiftUI and Compose | ⚠️ A single-mode variable resolved correctly (`background: var(--zinc-950, #09090B)` in the CSS panel and under Variables). Multi-mode not exercised. |
 | 12 | Remote library | Instance of a library component; variables from a library | ❌ Not run. |
 | 13 | Preview sandbox | Preview renders, height fits, Overlay/Difference work inside Figma's UI iframe (sandboxed `srcdoc` + CSP) | ❌ Not run (the Preview tab exists; it was not opened inside Figma). |
 | 14 | Message validation | Normal use never shows a "DevReady: invalid …" toast (component mapping, export at 0.5x–4x, font upload, dev resources, settings) | ⚠️ No invalid-input toast appeared during the session. That is consistent with validation working, not proof of it. |
+| 15 | Design and Dev Mode, preflight | Run optional preflight on an unready frame with missing fonts, gradients and more than 400 layers; verify limits, then mark ready or skip the check | ❌ Not run in Figma. Mocked and browser checks cover the read-only path and summaries. |
+| 16 | Keyboard and assistive technology | Navigate menus, layer rows and handoff controls with Tab, arrows, Enter, Space and Escape; verify focus and announced states | ❌ Not run in Figma or with a screen reader. Standalone browser checks cover keyboard interaction and find no axe text-contrast violations in representative panel states; design-colour samples and generated previews are excluded. Manual testing is still required. |
 
 ### What the 20 October session did establish
 
@@ -121,7 +123,7 @@ Rows marked ✅ below are what those screenshots actually show — nothing more.
 
 ### Still required before publishing
 
-Rows 2, 5, 6, 7, 12, 13 and the light theme. In particular **Dev Mode is the surface
+Rows 2, 5, 6, 7, 12, 13, 15, 16 and the light theme. In particular **Dev Mode is the surface
 most developers will use**, and it has not been run at all yet.
 
 What is already guaranteed by tests, so the real run only has to confirm it: the panel

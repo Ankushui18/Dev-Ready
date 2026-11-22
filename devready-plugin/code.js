@@ -49,6 +49,7 @@ const MSG_SCHEMA = {
   'ui-ready': {}, 'measure-native': {}, 'measure-clear': {}, 'notes-clear': {}, 'redlines': {}, 'clear-redlines': {},
   'settings': { settings: v => { if (!v || typeof v !== 'object') return undefined; const o = {}; Object.keys(SETTINGS_SCHEMA).forEach(k => { if (k in v) { const x = SETTINGS_SCHEMA[k](v[k]); if (x !== undefined) o[k] = x; } }); return o; } },
   'select': { id: V.id }, 'goto': { id: V.id }, 'design-shot': { id: V.id }, 'baseline-save': { id: V.id }, 'baseline-clear': { id: V.id },
+  'preflight': { id: V.id, requestId: V.int(1, Number.MAX_SAFE_INTEGER) },
   'mark': { id: V.id, status: V.opt(V.oneOf(['READY_FOR_DEV', 'COMPLETED'])), note: V.str(2000) },
   'export': EXPORT_ITEM,
   'export-all': { items: v => Array.isArray(v) ? v.slice(0, 300).map(i => checkFields(i || {}, EXPORT_ITEM)).filter(Boolean) : undefined, zipName: V.opt(V.re(/^[\w .\-]{1,100}\.zip$/, 104)) },
@@ -2044,8 +2045,10 @@ function clearBaseline(target) {
   diffCache[target.id] = null;
 }
 const diffCache = {};
-function diffBaseline(target) {
-  if (diffCache[target.id]) return diffCache[target.id];
+function diffBaseline(target, fresh) {
+  // The inspect panel invalidates this cache on page changes. Codegen has no
+  // such listener, so its requests must compare against a fresh snapshot.
+  if (!fresh && diffCache[target.id]) return diffCache[target.id];
   const raw = readChunked(target, 'baseline');
   if (!raw) return null;
   let base;
@@ -2074,7 +2077,7 @@ function diffBaseline(target) {
     Object.keys(base).forEach(id => { if (!now[id]) changes.push({ id: null, name: base[id][0], kind: 'removed', parts: [] }); });
   }
   const res = { at: target.getSharedPluginData(NS, 'baselineAt'), partial: partial, values: Object.keys(base).some(k => base[k] && base[k][4]), limit: SNAP_LIMIT, count: changes.length, changes: changes.slice(0, 150), containerId: target.id, containerName: target.name };
-  diffCache[target.id] = res;
+  if (!fresh) diffCache[target.id] = res;
   return res;
 }
 
@@ -2902,11 +2905,9 @@ function composeLayers(layers, assumed) {
   return { color: base, assumed: !!assumed };
 }
 function textFill(n) {
-  let f = topSolid(n.fills);
-  if (!f && isMixed(n.fills)) {
-    try { const segs = n.getStyledTextSegments(['fills']); if (segs && segs[0]) f = topSolid(segs[0].fills); } catch (e) { /* ignore */ }
-  }
-  return f;
+  // One segment cannot establish the contrast of an entire mixed-style layer.
+  if (isMixed(n.fills)) return { unknown: 'mixed fills' };
+  return topSolid(n.fills);
 }
 const TARGET_NAME_RE = /(^|[\s\/_\-])(button|btn|cta|tab|chip|checkbox|radio|switch|toggle|link|icon button)([\s\/_\-]|$)/i;
 function isInteractive(n) {
@@ -2924,21 +2925,27 @@ function a11yAudit(root, limit) {
     if (scanned >= (limit || 400)) { limited = true; return; }
     scanned++;
     if (n.type === 'TEXT' && n.characters && String(n.characters).trim()) {
-      const fg = textFill(n), size = isMixed(n.fontSize) ? 16 : n.fontSize;
-      const weight = isMixed(n.fontWeight) ? 400 : (n.fontWeight || 400);
-      if (fg && !fg.unknown) {
+      const fg = textFill(n), size = n.fontSize, weight = n.fontWeight || 400;
+      const name = String(n.characters).slice(0, 40);
+      if (!fg || fg.unknown) {
+        items.push({ id: n.id, name: name, kind: 'contrast', status: 'unknown', reason: 'textFill', detail: 'Text fill is ' + String(fg && fg.unknown || 'unavailable').toLowerCase() + ' — check contrast manually' });
+      } else {
         const bg = backgroundBehind(n);
-        if (bg && !bg.unknown) {
+        if (!bg || bg.unknown) {
+          items.push({ id: n.id, name: name, kind: 'contrast', status: 'unknown', reason: 'background', detail: 'Background is a ' + String(bg && bg.unknown || 'gradient/image').toLowerCase() + ' — check contrast manually' });
+        } else if (isMixed(size) || isMixed(weight)) {
+          items.push({ id: n.id, name: name, kind: 'contrast', status: 'unknown', reason: 'textStyle', detail: 'Text has mixed sizes or weights — check contrast manually' });
+        } else {
           const a = Math.min(1, fg.alpha * (n.opacity === undefined ? 1 : n.opacity));
           const eff = blendOver(fg.color, a, bg.color);
           const ratio = contrastRatio(eff, bg.color);
           const large = size >= 24 || (size >= 18.66 && weight >= 700);
           const need = large ? 3 : 4.5, aaa = large ? 4.5 : 7;
-          items.push({ id: n.id, name: String(n.characters).slice(0, 40), kind: 'contrast', status: ratio >= need ? 'pass' : 'fail', ratio: round(ratio, 2), need: need, aaa: ratio >= aaa, large: large,
+          items.push({ id: n.id, name: name, kind: 'contrast', status: ratio >= need ? 'pass' : 'fail', ratio: round(ratio, 2), need: need, aaa: ratio >= aaa, large: large,
             fg: colorHex(eff), bg: colorHex(bg.color), assumed: bg.assumed, size: size });
-        } else items.push({ id: n.id, name: String(n.characters).slice(0, 40), kind: 'contrast', status: 'unknown', detail: 'Background is a ' + String(bg && bg.unknown || 'gradient/image').toLowerCase() + ' — check contrast manually' });
+        }
       }
-      if (size < 12) items.push({ id: n.id, name: String(n.characters).slice(0, 40), kind: 'size', status: 'warn', detail: 'Text is ' + round(size, 1) + 'px — under 12px is hard to read' });
+      if (!isMixed(size) && size < 12) items.push({ id: n.id, name: name, kind: 'size', status: 'warn', detail: 'Text is ' + round(size, 1) + 'px — under 12px is hard to read' });
     }
     if (n !== root && isInteractive(n) && 'width' in n) {
       const w = n.width, h = n.height, min = Math.min(w, h), mobile = frameWidth(n) <= 600;
@@ -2976,7 +2983,40 @@ function a11yAudit(root, limit) {
     if (g.ids.length < 50) g.ids.push(it.id);
   });
   groups.sort((a, b) => order[a.status] - order[b.status] || b.count - a.count);
-  return { items: items.slice(0, 120), groups: groups.slice(0, 120), counts: counts, scanned: scanned, limited: limited };
+  const unmeasured = { background: 0, textFill: 0, textStyle: 0 };
+  items.forEach(i => { if (i.status === 'unknown' && i.reason in unmeasured) unmeasured[i.reason]++; });
+  return { items: items.slice(0, 120), groups: groups.slice(0, 120), counts: counts, unmeasured: unmeasured, assumed: items.filter(i => i.assumed).length, scanned: scanned, limited: limited };
+}
+
+/* Optional, read-only handoff check. These are heuristics, not a WCAG certification.
+   Layer counts are an upper bound for codegen: exported assets and mapped components
+   can collapse whole subtrees into one generated element. */
+function handoffPreflight(root) {
+  const a = a11yAudit(root, 400);
+  let scanned = 0, limited = false, missingFonts = 0, uncheckedFonts = 0;
+  const limit = 1501;
+  function visit(n) {
+    if (n.visible === false || n.opacity === 0) return;
+    if (scanned >= limit) { limited = true; return; }
+    scanned++;
+    if (n.type === 'TEXT') {
+      try {
+        const missing = n.hasMissingFont;
+        if (missing === true) missingFonts++;
+        else if (missing !== false) uncheckedFonts++;
+      } catch (e) { uncheckedFonts++; }
+    }
+    if ('children' in n) {
+      for (const child of n.children) { if (limited) break; visit(child); }
+    }
+  }
+  visit(root);
+  return {
+    accessibility: { counts: a.counts, unmeasured: a.unmeasured, assumed: a.assumed, scanned: a.scanned, limited: a.limited },
+    layers: { scanned: scanned, limited: limited, limit: limit },
+    missingFonts: missingFonts,
+    uncheckedFonts: uncheckedFonts
+  };
 }
 
 /* ------------------------------------------------------------------ */
@@ -3407,10 +3447,10 @@ if (figma.mode === 'codegen') {
     }
     let header = status ? (status.type === 'COMPLETED' ? '✅ Completed' : '🟢 Ready for dev') + ' · ' + status.nodeName : '⚪ No dev status (gate off)';
     try {
-      if (status) { const cont = await figma.getNodeByIdAsync(status.nodeId); const d = cont && diffBaseline(cont); if (d && d.count) header += ' · ⚠ ' + d.count + ' change' + (d.count > 1 ? 's' : '') + ' since ready'; }
+      if (status) { const cont = await figma.getNodeByIdAsync(status.nodeId); const d = cont && diffBaseline(cont, true); if (d && d.count) header += ' · ⚠ ' + d.count + ' change' + (d.count > 1 ? 's' : '') + ' since ready'; }
     } catch (e) { /* ignore */ }
     const out = await generateCode(node, event.language, unit, base, 150, { inlineBudget: 400 * 1024, fastFonts: true });
-    const LANG = { html: 'HTML', vue: 'HTML', svelte: 'HTML', css: 'CSS', jsx: 'JAVASCRIPT', swift: 'SWIFT', kotlin: 'KOTLIN', dart: 'PLAINTEXT', text: 'PLAINTEXT' };
+    const LANG = { html: 'HTML', vue: 'HTML', svelte: 'HTML', css: 'CSS', jsx: 'JAVASCRIPT', ts: 'TYPESCRIPT', tsx: 'TYPESCRIPT', swift: 'SWIFT', kotlin: 'KOTLIN', dart: 'PLAINTEXT', text: 'PLAINTEXT' };
     const res = out.files.map((f, i) => ({ title: (i === 0 ? header + '  ·  ' : '') + f.name, language: LANG[f.lang] || 'PLAINTEXT', code: f.code }));
     if (out.assets.length) res.push({ title: 'Assets (export from the DevReady panel → Download project)', language: 'PLAINTEXT', code: out.assets.map(a => 'assets/' + a.file + (a.scale > 1 ? '  (@' + a.scale + 'x)' : '')).join('\n') });
     return res;
@@ -3553,6 +3593,18 @@ if (figma.mode === 'codegen') {
             figma.currentPage.selection = [n];
             figma.viewport.scrollAndZoomIntoView([n]);
           }
+          break;
+        }
+        case 'preflight': {
+          // The request can only inspect the current selection's handoff target.
+          const selected = figma.currentPage.selection[0];
+          const target = selected && markTarget(selected);
+          if (!target || target.id !== msg.id) {
+            post({ type: 'preflight', id: msg.id, requestId: msg.requestId, error: 'Selection changed — select a frame and try again.' });
+            break;
+          }
+          try { post({ type: 'preflight', id: target.id, requestId: msg.requestId, out: handoffPreflight(target) }); }
+          catch (e) { post({ type: 'preflight', id: target.id, requestId: msg.requestId, error: 'Preflight could not read this frame. Try again.' }); }
           break;
         }
         case 'mark': {
