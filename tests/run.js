@@ -738,6 +738,56 @@ async function messageValidation() {
   }
 }
 
+async function codegenSurface() {
+  console.log('\nDev Mode codegen' + C.d(' — change warnings, preferences and language metadata'));
+  const B = createBuilders();
+  const text = B.T('Original', {});
+  const root = B.AL('Ready frame', 'VERTICAL', {}, [text], { devStatus: { type: 'READY_FOR_DEV' } });
+  root.parent = { type: 'PAGE' };
+  const store = {};
+  root.getSharedPluginData = (ns, key) => store[ns + '/' + key] || '';
+  root.setSharedPluginData = (ns, key, value) => { store[ns + '/' + key] = value; };
+  const eng = loadEngine(B, { codegenPreferences: { unit: 'PIXEL', customSettings: { gate: 'strict' } } });
+  const generate = eng.codegenHandlers.generate;
+  {
+    const errs = [];
+    eng.ctx.saveBaseline(root);
+    const title = async () => (await generate({ node: root, language: 'html-css' }))[0].title;
+    const first = await title();
+    text.characters = 'Changed';
+    const changed = await title();
+    text.characters = 'Original';
+    const reverted = await title();
+    if (/change since ready/.test(first)) errs.push('fresh baseline shows a change');
+    if (!/1 change since ready/.test(changed)) errs.push('an edit after the first generation did not update the warning');
+    if (/change since ready/.test(reverted)) errs.push('reverted change still appears in the warning');
+    record('codegen-surface', 'change warnings refresh between codegen requests', errs);
+  }
+  {
+    const errs = [];
+    const manifest = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'devready-plugin', 'manifest.json'), 'utf8'));
+    const gate = manifest.codegenPreferences.find(p => p.propertyName === 'gate');
+    const omitted = LANGS.filter(l => !gate || !gate.includedLanguages.includes(l));
+    if (omitted.length) errs.push('gate preference is missing for: ' + omitted.join(', '));
+    delete root.devStatus;
+    const locked = await generate({ node: root, language: 'html-single' });
+    if (!/Not ready/.test(locked[0].title)) errs.push('strict gate should lock an unready frame');
+    eng.figma.codegen.preferences.customSettings.gate = 'off';
+    const unlocked = await generate({ node: root, language: 'html-single' });
+    if (!/\.html$/.test(unlocked[0].title)) errs.push('gate off should generate single HTML');
+    record('codegen-surface', 'gate preference covers all targets and unlocks unready designs', errs);
+  }
+  {
+    const errs = [];
+    const output = await generate({ node: root, language: 'react-ts' });
+    const tsx = output.find(f => /\.tsx$/.test(f.title));
+    const types = output.find(f => /\.d\.ts$/.test(f.title));
+    if (!tsx || tsx.language !== 'TYPESCRIPT') errs.push('TSX is not tagged as TYPESCRIPT');
+    if (!types || types.language !== 'TYPESCRIPT') errs.push('declarations are not tagged as TYPESCRIPT');
+    record('codegen-surface', 'TypeScript files have Figma language metadata', errs);
+  }
+}
+
 function sandboxCheck() {
   console.log('\nfigma sandbox');
   const errs = [];
@@ -749,7 +799,7 @@ function sandboxCheck() {
   console.log('DevReady test suite');
   sandboxCheck();
   for (const fx of FIXTURES) if (!only || fx.name.includes(only)) await runFixture(fx);
-  if (!only) { await changeTracking(); await privacyAndOffline(); await messageValidation(); await require('./features')(record); await codegenQuality(); await codegenFollowup(); await typescriptTargets(); await goldenOutput(); await generatedProjectBuild(); repoLayout(); docConsistency(); }
+  if (!only) { await changeTracking(); await codegenSurface(); await privacyAndOffline(); await messageValidation(); await require('./features')(record); await codegenQuality(); await codegenFollowup(); await typescriptTargets(); await goldenOutput(); await generatedProjectBuild(); repoLayout(); docConsistency(); }
   const total = results.length;
   console.log('\n' + (failed ? C.r(failed + ' failed') : C.g('all passed')) + ' · ' + (total - failed) + '/' + total + ' checks');
   if (REPORT) {
@@ -760,7 +810,7 @@ function sandboxCheck() {
     md += '\n## Other checks\n\n';
     results.filter(r => !LANGS.includes(r.name)).forEach(r => { md += '- ' + (r.ok ? '✅' : '❌') + ' ' + r.name + (r.extra ? ' (' + r.extra + ')' : '') + '\n'; });
     md += '\nWhat "valid" means per language: JSX/TSX is parsed by esbuild; CSS by esbuild plus comment/brace checks; HTML is checked for injected markup, balanced `<style>` and well-formed tags; Swift, Kotlin and Dart are checked for balanced brackets and safe string literals (escapes, `\\(` and `$` templates), and Vue/Svelte for escaped template expressions. Swift, Kotlin and Dart are **not compiled** in CI.\n';
-    md += '\nBrowser checks (`npm run test:browser`: panel render in light/dark, preview sandbox against a hostile document, online and offline) run as a separate CI job.\n';
+    md += '\nBrowser checks (`npm run test:browser`) run separately: representative panel text contrast in fallback and simulated Figma light/dark themes, placeholders, keyboard and preflight interactions, and preview sandbox isolation. The axe scan excludes intentional design-colour samples and generated preview iframes; it is not a full accessibility audit or a substitute for real Figma and screen-reader testing.\n';
     void groups;
     fs.writeFileSync(path.join(__dirname, '..', 'docs', 'test-report.md'), md);
     console.log('wrote docs/test-report.md');

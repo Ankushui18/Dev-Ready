@@ -123,6 +123,7 @@ function loadEngine(B, options) {
   const notifyLog = [];
   const writes = [];              // read-only violations (should stay empty in Dev Mode)
   const posted = [];
+  const codegenHandlers = {};
   const page = options.page || {
     name: 'Page 1', type: 'PAGE', children: [], selection: options.selection || [],
     on() {}, findAll: () => [],
@@ -135,7 +136,7 @@ function loadEngine(B, options) {
     currentPage: page,
     viewport: { scrollAndZoomIntoView() {}, center: { x: 0, y: 0 }, zoom: 1 },
     mixed: Symbol('mixed'),
-    codegen: { on() {}, refresh() {} },
+    codegen: { preferences: options.codegenPreferences || {}, on(type, handler) { codegenHandlers[type] = handler; }, refresh() {} },
     getNodeByIdAsync: async id => B.ALL[id] || null,
     getStyleByIdAsync: async () => null,
     getImageByHash: hash => {
@@ -194,7 +195,7 @@ function loadEngine(B, options) {
   };
   /** run(expr): evaluate inside the engine (reaches top-level const/let too). */
   return {
-    generateCode: sandbox.generateCode, ctx: sandbox, fetched, figma, notifyLog, writes, posted, page, send,
+    generateCode: sandbox.generateCode, ctx: sandbox, fetched, figma, notifyLog, writes, posted, page, send, codegenHandlers,
     run: expr => vm.runInContext(expr, sandbox)
   };
 }

@@ -102,6 +102,76 @@ module.exports = async function featureTests(record) {
     record('a11y', 'identical findings are grouped (count + real ids) instead of one row per layer', errs);
   }
   {
+    // The handoff check runs for the selected frame, without writing or sending data.
+    const errs = [];
+    const B = createBuilders();
+    const missing = B.T('Low contrast', {}, { fills: [solid('#777777')], hasMissingFont: true });
+    const unchecked = B.T('Font status unavailable', {}, { fills: [solid('#000000')] });
+    const throwing = B.T('Font read failed', {}, { fills: [solid('#000000')] });
+    Object.defineProperty(throwing, 'hasMissingFont', { get() { throw new Error('Unavailable'); } });
+    const hidden = B.T('Hidden', {}, { fills: [solid('#000000')], visible: false, hasMissingFont: true });
+    const root = frame(B, 393, '#FFFFFF', [missing, unchecked, throwing, hidden]);
+    root.parent = { type: 'PAGE' };
+    let pluginWrites = 0;
+    root.setSharedPluginData = () => { pluginWrites++; };
+    const eng = loadEngine(B, { mode: 'inspect', editorType: 'dev', readOnly: true, selection: [missing] });
+    await eng.send({ type: 'preflight', id: root.id, requestId: 7 });
+    const response = eng.posted.find(m => m.type === 'preflight');
+    const out = response && response.out;
+    if (!response || response.id !== root.id || response.requestId !== 7) errs.push('response lost request or target identity');
+    if (!out || !out.accessibility.counts.fail) errs.push('low contrast was not reported');
+    if (!out || out.missingFonts !== 1 || out.uncheckedFonts !== 2) errs.push('missing, unknown or hidden font counts are wrong: ' + JSON.stringify(out));
+    if (!out || out.layers.scanned !== 4) errs.push('hidden layers should not be counted');
+    if (pluginWrites || eng.writes.length || eng.fetched.length) errs.push('preflight must be read-only and offline');
+    record('preflight', 'handoff preflight reports accessibility and font status without writes', errs);
+  }
+  {
+    const errs = [];
+    const B = createBuilders();
+    const gradientText = B.T('Gradient text', {}, { fills: [{ type: 'GRADIENT_LINEAR', visible: true }], hasMissingFont: false });
+    const noFill = B.T('No text fill', {}, { hasMissingFont: false });
+    const mixedStyle = B.T('Mixed size', {}, { fills: [solid('#000000')], fontSize: Symbol('mixed'), hasMissingFont: false });
+    const mixedFill = B.T('Mixed fill', {}, { fills: Symbol('mixed'), hasMissingFont: false });
+    const onGradient = B.T('Gradient background', {}, { fills: [solid('#000000')], hasMissingFont: false });
+    const background = frame(B, 100, null, [onGradient], { fills: [{ type: 'GRADIENT_LINEAR', visible: true }] });
+    const root = frame(B, 393, '#FFFFFF', [gradientText, noFill, mixedStyle, mixedFill, background]); root.parent = { type: 'PAGE' };
+    const eng = loadEngine(B), out = eng.ctx.handoffPreflight(root);
+    const u = out.accessibility.unmeasured;
+    if (u.background !== 1 || u.textFill !== 3 || u.textStyle !== 1 || out.accessibility.counts.unknown !== 5) errs.push('unknown contrast causes are not reported accurately: ' + JSON.stringify(out.accessibility));
+    const floating = frame(B, 393, null, [B.T('Floating', {}, { fills: [solid('#000000')] })]); floating.parent = { type: 'PAGE' };
+    if (eng.ctx.handoffPreflight(floating).accessibility.assumed !== 1) errs.push('an assumed white background was not disclosed');
+    record('preflight', 'unmeasured backgrounds, text fills and styles are not reported as passing', errs);
+  }
+  {
+    const errs = [];
+    const B = createBuilders();
+    const root = frame(B, 393, '#FFFFFF', Array.from({ length: 1600 }, (_, i) => B.R('Layer ' + i, 10, 10, {})));
+    root.parent = { type: 'PAGE' };
+    const eng = loadEngine(B), out = eng.ctx.handoffPreflight(root);
+    if (!out.accessibility.limited || out.accessibility.scanned !== 400) errs.push('accessibility scan limit was not reported');
+    if (!out.layers.limited || out.layers.scanned !== 1501) errs.push('large-frame layer count was not reported as partial');
+    const exactA11y = frame(B, 393, '#FFFFFF', Array.from({ length: 399 }, (_, i) => B.R('A ' + i, 1, 1, {})));
+    const exactLayers = frame(B, 393, '#FFFFFF', Array.from({ length: 1500 }, (_, i) => B.R('B ' + i, 1, 1, {})));
+    const exactA = eng.ctx.handoffPreflight(exactA11y), exactL = eng.ctx.handoffPreflight(exactLayers);
+    if (exactA.accessibility.limited || exactA.accessibility.scanned !== 400) errs.push('exactly 400 layers should not be partial');
+    if (exactL.layers.limited || exactL.layers.scanned !== 1501) errs.push('exactly 1501 layers should not be partial');
+    record('preflight', 'large handoff checks disclose both scan limits', errs);
+  }
+  {
+    const errs = [];
+    const B = createBuilders();
+    const selected = B.T('Selected', {}, { fills: [solid('#000000')] });
+    const root = frame(B, 393, '#FFFFFF', [selected]); root.parent = { type: 'PAGE' };
+    const other = frame(B, 393, '#FFFFFF', []); other.parent = { type: 'PAGE' };
+    const eng = loadEngine(B, { mode: 'inspect', editorType: 'dev', readOnly: true, selection: [selected] });
+    await eng.send({ type: 'preflight', id: other.id, requestId: 9 });
+    const response = eng.posted.find(m => m.type === 'preflight');
+    if (!response || !response.error || response.out) errs.push('preflight accepted a different selection target');
+    if (eng.ctx.validateMsg({ type: 'preflight', id: root.id, requestId: 0 }).type !== '__invalid') errs.push('invalid request id was accepted');
+    if (eng.ctx.validateMsg({ type: 'preflight', id: 'bad\"id', requestId: 1 }).type !== '__invalid') errs.push('invalid node id was accepted');
+    record('preflight', 'handoff requests validate target and request identity', errs);
+  }
+  {
     // Dev Mode → Plugins is read-only: Figma throws on anything that changes the document, and
     // an unguarded write there surfaces to the user as a red toast. Drive the inspect handlers
     // with every document-writing API trapped, so the read-only contract is tested rather than

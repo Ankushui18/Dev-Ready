@@ -19,16 +19,25 @@ Use **Issues → New issue → Bug report**. The most useful details are:
 
 ## Development
 
+The repository tooling needs Node 20.19+ on 20.x, 22.13+ on 22.x, or 24+ (Node 24+ is recommended); these ranges match ESLint 10. The plugin itself does not need Node to run in Figma.
+
 ```bash
 git clone https://github.com/Ankushui18/Dev-Ready.git
 cd Dev-Ready
 npm ci
-npm run verify  # layout + Figma sandbox check + ESLint + 144 checks (what CI runs)
-npm test        # just the test suite
+npm run verify  # layout + Figma sandbox check + ESLint + 165 checks (what CI runs)
+npm test        # just the Node suite
 ```
 
-`npm run test:browser` needs Python Playwright
-(`pip install playwright && python -m playwright install chromium`).
+The separate browser suite also needs Python Playwright and Chromium:
+
+```bash
+python -m pip install -r tests/requirements-browser.txt
+python -m playwright install chromium
+npm run test:browser
+```
+
+It runs axe contrast checks on representative panel states, checks placeholders and keyboard/preflight behaviour, and tests preview isolation. It excludes design-colour samples and generated previews and does not replace testing in Figma or with a screen reader. By default it uses Playwright's Chromium; `DEVREADY_TEST_CHROMIUM=/path/to/chromium` optionally selects another executable, which may not match Playwright's supported version.
 
 Load the plugin in the Figma desktop app: **Plugins → Development → Import plugin from manifest…** and pick `devready-plugin/manifest.json`. After you edit `code.js` or `ui.html`, re-run the plugin. You only need to re-import if `manifest.json` changed.
 

@@ -1,7 +1,7 @@
 # Architecture
 
 A map of the repository for someone who has to change the code, written to be read
-in ten minutes. It describes v1.2.0.
+in ten minutes. Line numbers are approximate; section names are the stable anchors.
 
 There is **no build step**. `code.js` and `ui.html` are loaded by Figma exactly as
 they are committed, so both are one file each, dependency-free, and ES2020-era
@@ -24,7 +24,7 @@ matters.
 
 ---
 
-## `devready-plugin/code.js` (≈3,500 lines)
+## `devready-plugin/code.js` (≈3,860 lines)
 
 Top-level sections, in file order:
 
@@ -70,11 +70,14 @@ selectionchange
        → post({ type: 'state', … })     one message, whole panel state
 ```
 
-The panel is **stateless between renders**: `refresh()` sends one `state` object and
-`render()` draws it. When you add a panel feature, extend `buildSpec()` and the
-`state` payload rather than adding new ad-hoc messages.
+`refresh()` sends one `state` object and `render()` draws it, while `S` retains UI
+state. Renders preserve draft inputs and focus for the same selection. The optional handoff
+preflight is a separate, validated request: it checks the current mark target
+read-only, returns its request and target IDs, and is discarded by the UI if either
+no longer matches. Inspect-mode diffs are invalidated on page changes; codegen
+requests bypass that cache and take a fresh snapshot each time.
 
-## `devready-plugin/ui.html` (≈1,660 lines)
+## `devready-plugin/ui.html` (≈1,850 lines)
 
 One file, three layers:
 
@@ -113,7 +116,7 @@ Every UI → plugin message is validated in `validateMsg()` before the switch in
 - wrong types or out-of-range values → `{ type: '__invalid', … }` and a toast;
 - node ids must look like Figma ids, URLs must be `http(s)`.
 
-Message types (see `MSG_SCHEMA`): `ui-ready`, `settings`, `select`, `mark`, `export`,
+Message types (see `MSG_SCHEMA`): `ui-ready`, `settings`, `select`, `preflight`, `mark`, `export`,
 `export-all`, `export-project`, `gen-code`, `tokens-export`, `design-shot`,
 `font-upload`, `font-remove`, `baseline-save`, `baseline-clear`, `measure-native`, `measure-clear`,
 `annotate-add`, `annotate-remove`, `notes-clear`, `goto`, `devres-add`,
@@ -158,7 +161,7 @@ constructs node trees via builders (`T`, `AL`, `ABS`, `R`, `ICON`, `COMPONENT`,
 Figma is needed. `tests/validators.js` parses each output (esbuild for JSX/CSS;
 structural checks for HTML, Swift, Kotlin, Dart, Vue, Svelte).
 
-Beyond per-target assertions, three groups protect the output itself:
+Beyond per-target assertions, several groups protect the output and interaction:
 
 | Group | What it proves | Where |
 |---|---|---|
@@ -166,6 +169,11 @@ Beyond per-target assertions, three groups protect the output itself:
 | **Generated project build** | The emitted imports actually resolve: the files are written to a temp dir and bundled with esbuild | `generatedProjectBuild()` in `tests/run.js` |
 | **Doc consistency** | The README badge and `docs/test-report.md` match the number of checks the suite ran | `docConsistency()` in `tests/run.js` |
 | **Dev Mode read-only contract** | The Dev Mode panel never writes to the document. The engine starts in `inspect` mode with every canvas-writing API throwing, then messages that touch the canvas are delivered and the traps must stay untouched | `tests/features.js` (`dev mode`), `loadEngine({ readOnly: true })` in `tests/harness.js` |
+| **Codegen and preflight** | Mocked codegen refreshes warnings after an edit and revert; preflight is read-only, validates request identity and discloses scan limits and unknowns | `tests/run.js` (`codegenSurface`), `tests/features.js` (`preflight`) |
+| **Keyboard and panel** | Menus, layer rows, focus restoration, drafts and preflight interactions work in a browser | `tests/browser.py` (Playwright; not a substitute for running in Figma) |
+| **Panel contrast** | Axe checks representative inspector, code, menu and handoff text in fallback and simulated host themes; placeholder contrast is measured separately | `tests/browser.py` + `axe-core` (excludes intentional design-colour chips and generated-preview iframes; not a full audit) |
+
+Tooling requires Node 20.19+ on 20.x, 22.13+ on 22.x, or 24+; CI runs strict-engine installs and verification at the minimum of each range. The separate browser job installs the pinned Python Playwright dependency and axe-core from the npm lockfile.
 
 When you add or remove a check, regenerate the report (`npm test -- --report`) — the
 consistency check fails the build otherwise. When the output change is deliberate,

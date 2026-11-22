@@ -9,7 +9,7 @@ A source-available Figma plugin that inspects design specs like Dev Mode, genera
   <a href=".github/workflows/ci.yml"><img src="https://github.com/Ankushui18/Dev-Ready/actions/workflows/ci.yml/badge.svg" alt="Tests"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-PolyForm%20Noncommercial%201.0.0-blue" alt="PolyForm Noncommercial 1.0.0"></a>
   <img src="https://img.shields.io/badge/Figma-Design%20%2B%20Dev%20Mode-0d99ff" alt="Figma Design + Dev Mode">
-  <img src="https://img.shields.io/badge/tests-158%20passing-brightgreen" alt="158 checks passing">
+  <img src="https://img.shields.io/badge/tests-165%20passing-brightgreen" alt="165 checks passing">
 </p>
 
 <p align="center"><a href="https://ankushui18.github.io/Dev-Ready/">Project website</a> · <a href="docs/SEO.md">SEO & discoverability</a> · <a href="docs/LICENSING.md">Licensing, in plain English</a></p>
@@ -78,7 +78,8 @@ what to do if a search still doesn't show it.
 | **Code (12 targets)** | **React + TypeScript**, React + TypeScript + Tailwind, React + Tailwind, React + CSS, HTML + CSS, single-file HTML, Vue, Svelte, React Native, SwiftUI, Jetpack Compose, Flutter. Semantic tags, BEM classes, design tokens, real components for repeated instances — with **typed props** and ambient asset declarations in the TypeScript targets — and a project ZIP with `fonts/` + `assets/`. |
 | **Preview & compare** | Renders the generated HTML next to, or on top of, the Figma design. Difference blend mode makes mismatches visible. |
 | **Change tracking** | Lists layers that changed since handoff — size/position, style, text, name, added and removed — with **before → after** values. |
-| **Accessibility** | WCAG 2.2 contrast for every text layer, touch-target sizes, unlabelled icon buttons, text under 12px. Click a row to select the layer. |
+| **Accessibility** | Heuristic contrast, touch-target, label and text-size checks on up to 400 non-hidden layers. Unmeasurable contrast and assumed backgrounds are flagged; this is not a full WCAG audit. |
+| **Handoff preflight** | Optional, read-only summary of accessibility findings, unavailable fonts and scan limits before marking a frame ready. |
 | **Design tokens** | Export this layer or the whole file as CSS variables, SCSS, JSON (design-tokens format) or a Tailwind v4 `@theme`, with every variable mode. |
 | **Annotations** | Figma-native annotations with categories and pinned properties, plus a canvas-note fallback that works on every plan. |
 | **Assets & export** | Icons and images found automatically. PNG/JPG/SVG/PDF at 0.5–4x, or everything as one ZIP. |
@@ -116,7 +117,7 @@ Where to find it afterwards:
 
 **No Figma file handy?** Open `devready-plugin/ui.html` in any browser. The panel runs on sample data — the fastest way to see the UI (and to work on it).
 
-**First run shows a lock.** That is the gate working. Select a frame → **Mark as ready for dev** (or **Inspect anyway** if you just want to look around).
+**First run shows a lock.** That is the gate working. Select a frame → optionally **Run preflight** → **Mark as ready for dev** (or **Inspect anyway** if you just want to look around). Preflight does not change the status or block handoff.
 
 ---
 
@@ -132,6 +133,9 @@ The panel always tells you **which source** the status came from, and the flag n
 - **Gate off** (⚙ Settings, or *Inspect anyway*) → it behaves like a plain inspector and code generator.
 - **Mark as reviewed** → saves a fresh change-tracking snapshot.
 - **Start tracking** → for designs handed off before you installed the plugin.
+- **Handoff preflight** → optionally check the locked frame before marking it ready. It reports heuristic accessibility findings, unmeasured or assumed contrast, fonts unavailable in Figma and scan limits. The accessibility scan stops after 400 layers; font/layer scanning stops after 1,501. Results are not a WCAG certification and can become stale after edits.
+
+Menus and layer rows also support keyboard navigation: use <kbd>Tab</kbd> to reach a control, <kbd>Enter</kbd> or <kbd>Space</kbd> to activate it, arrow keys to navigate menus and <kbd>Esc</kbd> to close them.
 
 ---
 
@@ -192,14 +196,19 @@ Dev-Ready/
 
 ## Quality
 
+Repository tooling requires Node **20.19+ in the 20.x line, 22.13+ in the 22.x line, or 24+** (Node 24+ recommended). Node 18, 21 and 23 do not satisfy ESLint 10's engine requirements. Installing the plugin in Figma itself does not require Node.
+
 ```bash
 npm ci
 npm run verify        # layout + Figma sandbox check + ESLint + tests (what CI runs)
-npm test              # 158 checks: 9 fixtures × 12 targets, privacy, messages, tracking,
+npm test              # 165 checks: 9 fixtures × 12 targets, privacy, messages, tracking,
                       # tsc, golden output, and a real bundle of the generated React project
 npm test -- --update-golden   # accept a deliberate change to generated output
 npm run lint          # ESLint, including the script inside ui.html
-npm run test:browser  # Chromium: renders the panel, attacks the preview sandbox (needs Python Playwright)
+# For the separate browser suite, install Python Playwright and Chromium first:
+python -m pip install -r tests/requirements-browser.txt
+python -m playwright install chromium
+npm run test:browser  # contrast, keyboard/preflight and preview isolation
 ```
 
 Every push runs [CI](.github/workflows/ci.yml):
@@ -212,7 +221,9 @@ Every push runs [CI](.github/workflows/ci.yml):
 - **Hostile layer names** can't inject markup or break string literals, and design text can't reach `{{ }}`, `{ }` or `$` interpolation.
 - **Every UI → plugin message** is validated against a schema (15 attack cases), and crafted component mappings can't inject code.
 - **Privacy:** no network APIs in `code.js`, private font names never appear in a Google URL, and only Google Fonts are allowed by the manifest.
-- **Change tracking** stays under Figma's 100 kB plugin-data limit, and before → after values are correct.
+- **Change tracking** stays under Figma's 100 kB plugin-data limit, before → after values are correct, and mocked codegen requests refresh warnings after edits.
+- **Keyboard and preflight checks** exercise menu and row interaction, focus, scan limits and the read-only handoff flow in mocks and a browser.
+- **Panel contrast regression checks** run axe on representative light/dark fallback and simulated Figma themes, plus explicit placeholder measurements. Intentional design-colour samples and generated-preview iframes are excluded; automated checks do not establish full accessibility compliance.
 - **The preview iframe is sandboxed** — a hostile document can't run scripts, reach other hosts or touch the panel (checked in a real browser).
 - **Repository layout** is correct, so a mis-placed upload fails the build.
 
@@ -229,7 +240,7 @@ Honest list — these are APIs Figma doesn't give plugins, not things we haven't
 - **Change tracking** shows before → after for position, size, fills, strokes, radius, effects, layout/padding, font and text (first 80 characters). Gradients stops and individual effect parameters are flagged by category only. It covers the first 2,500 layers of a frame.
 - **SwiftUI, Compose, Flutter and React Native output** is checked for structure and safe escaping, but not compiled in CI. JSX and CSS are parsed by esbuild. Native text with Figma Auto line-height uses the platform font engine's metrics; SVG baseline measurements are applied only to web CSS, where they have a direct meaning.
 - **Native annotations and native *Ready for dev*** depend on your Figma plan and seat; DevReady falls back to canvas notes and its own flag, and the UI says which one is in use.
-- **Partially tested on a real Figma file** (20 Oct 2026, Design mode, dark theme): the panel, the gate and its status source, inspect data, variables, assets, and full-tree HTML + CSS on a 214-layer frame all worked. **Dev Mode (Inspect → Plugins, the Code section) and Figma for VS Code have not been run yet**, and neither has the light theme. [docs/LAUNCH.md](docs/LAUNCH.md#3-environment-test-matrix) has the row-by-row result and the screenshots, including the rows that failed.
+- **Partially tested on a real Figma file** (20 Oct 2026, Design mode, dark theme): the panel, the gate and its status source, inspect data, variables, assets, and full-tree HTML + CSS on a 214-layer frame all worked. **The latest preflight, keyboard and contrast changes have not been tested in real Figma or with a screen reader.** Dev Mode (Inspect → Plugins, the Code section), Figma for VS Code and the light theme also remain untested. [docs/LAUNCH.md](docs/LAUNCH.md#3-environment-test-matrix) has the row-by-row result and screenshots.
 
 ---
 

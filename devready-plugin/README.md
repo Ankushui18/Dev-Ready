@@ -29,6 +29,12 @@ For a selected layer, the plugin walks up its parent layers. The first one with 
 
 You can turn the gate off in ⚙ Settings, or use the "Inspect anyway" button.
 
+### Optional handoff preflight
+
+On the locked screen, select a frame and choose **Run preflight** before **Mark as ready for dev**. The check is optional and read-only; it never blocks or marks the frame. It reports accessibility failures and warnings, unmeasured backgrounds/text fills or mixed styles, assumed white backgrounds, text layers whose fonts are unavailable in Figma, and large-frame code-budget warnings. It examines up to 400 non-hidden layers for accessibility and up to 1,501 visible layers for fonts and layer count, and explicitly flags incomplete scans. A count near a code budget is an upper bound, not a prediction of truncation, because assets and component mappings can collapse layers. These heuristics are **not a full WCAG audit**; rerun after edits and check unmeasurable cases manually.
+
+Use Tab to reach menus and selectable rows, Enter or Space to activate, the arrow keys to navigate a menu, and Escape to return to its trigger.
+
 ## Using it in Dev Mode (developer side)
 1. Open the file and press **Shift + D** (or use the `</>` toggle) to switch to **Dev Mode**.
 2. **Inspect panel → Plugins → DevReady Inspect** shows the full inspector inside Dev Mode's own panel. Drag the panel edge to make it wider.
@@ -97,7 +103,7 @@ Code is built from the whole layer tree, not just the one layer you selected:
 - **Download .html** saves the single file.
 
 ## Accessibility and design tokens
-- **Accessibility** (Inspect): WCAG 2.2 AA contrast for each text layer, touch-target size, missing labels on icon-only controls, tiny text. Rows show the measured colors and ratio; click one to select the layer. Backgrounds are found from covering layers and ancestors; gradients/images are reported as unmeasured. **Identical findings are grouped** (`40 layers · #6B7280 on #09090B · 4.12:1 needs 4.5`), so repeated content doesn't bury the rest of the panel; the list is capped at 25 groups with *Show N more*.
+- **Accessibility** (Inspect): heuristic WCAG 2.2 AA contrast, touch-target, icon-label and tiny-text checks for up to 400 non-hidden layers. Rows show measured colors and ratios; select one by click or keyboard. Gradients, images and mixed text styles can make contrast unmeasurable, and a missing background can be assumed white. **Identical findings are grouped** (`40 layers · #6B7280 on #09090B · 4.12:1 needs 4.5`), so repeated content doesn't bury the panel; the list is capped at 25 groups with *Show N more*. These checks do not constitute a full WCAG audit.
 - **Design tokens**: export what the layer uses, or the whole file, as CSS variables, SCSS, JSON (design-tokens format) or a Tailwind v4 `@theme`. All variable modes become `[data-theme=...]` overrides; aliases stay references.
 
 ## Inspect panel layout (matches Figma Dev Mode)
@@ -188,7 +194,7 @@ What the plugin does now:
 
 ## Testing
 
-From the repo root: `npm ci && npm run verify` (layout, Figma sandbox check, ESLint, tests). The suite runs 9 fixture designs through all 12 code targets and checks each output parses (JSX/CSS with esbuild; HTML, Swift, Kotlin, Dart, Vue and Svelte with structural checks). It also tests:
+From the repo root: `npm ci && npm run verify` (layout, Figma sandbox check, ESLint, tests). The tooling requires Node 20.19+ on 20.x, 22.13+ on 22.x, or 24+; Node 24+ is recommended. Figma plugin installation does not require Node. The suite runs 9 fixture designs through all 12 code targets and checks each output parses (JSX/CSS with esbuild; HTML, Swift, Kotlin, Dart, Vue and Svelte with structural checks). It also tests:
 - escaping of hostile layer names;
 - message validation and mapping injection;
 - change tracking (100 kB limit, before → after values);
@@ -196,7 +202,7 @@ From the repo root: `npm ci && npm run verify` (layout, Figma sandbox check, ESL
 
 Two further groups test the output itself: **golden files** (`tests/golden/`, four fixture × target pairs) fail with a one-line diff when generated code drifts — accept a deliberate change with `npm test -- --update-golden` — and the **generated React project is bundled with esbuild**, so every import it emits must resolve.
 
-`npm run test:browser` renders the panel in Chromium and attacks the preview sandbox. See [docs/test-report.md](../docs/test-report.md).
+For `npm run test:browser`, first install the pinned Python dependency (`python -m pip install -r tests/requirements-browser.txt`) and Chromium (`python -m playwright install chromium`). The separate suite checks representative panel contrast and placeholder colours, keyboard and preflight interactions, and preview sandbox isolation. It excludes design-colour samples and generated previews; it is not a full accessibility audit. See [docs/test-report.md](../docs/test-report.md).
 
 ## Troubleshooting
 
