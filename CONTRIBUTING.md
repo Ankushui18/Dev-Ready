@@ -63,7 +63,8 @@ Load the plugin in the Figma desktop app: **Plugins → Development → Import p
 
 ## Releasing
 
-1. Update `CHANGELOG.md` and the `version` in `package.json`.
-2. Run `npm test -- --report` to refresh `docs/test-report.md`.
-3. Tag the release: `git tag v1.x.y && git push --tags`.
-4. Create a GitHub release and attach `devready-plugin.zip`.
+1. Update `CHANGELOG.md`, `package.json`, `package-lock.json`, the README status and the website's `softwareVersion`. Call out licence or compatibility changes prominently.
+2. Refresh `docs/test-report.md` with `npm test -- --report` if the Node suite changes; run `npm run verify` and the browser suite. Document any manual-testing gaps.
+3. Merge the release changes. Build and inspect an archive from the resulting commit with `npm run zip`; it must contain the plugin, `LICENSE` and `NOTICE`.
+4. Tag that commit (for example, `git tag -a vX.Y.Z <commit> -m "Release vX.Y.Z"` and `git push origin vX.Y.Z`). Tag-triggered CI runs the checks, builds the ZIP and creates the GitHub release using the matching changelog section.
+5. Verify the release notes, tag, downloadable ZIP and CI result. If a release already exists, CI preserves its notes and ZIP, and only uploads the ZIP when missing.

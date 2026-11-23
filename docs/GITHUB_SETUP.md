@@ -34,7 +34,7 @@ Verify any time:
 ```bash
 npm ci
 npm run check:layout    # must print "layout OK"
-npm run verify          # layout + sandbox + lint + 144 checks
+npm run verify          # layout + sandbox + lint + 165 checks
 ```
 
 > ⚠️ **Never use GitHub's web "Add file → Upload files" for a folder.** Dragging a
@@ -120,17 +120,16 @@ submitting the sitemap is what actually gets the page crawled. Full checklist:
 (Design Mode / Dev Mode / Code section / VS Code) and the code target, which are the
 two details a bug report needs.
 
-## 5. First release
+## 5. GitHub releases
 
-CI builds `devready-plugin.zip` and attaches it to the release when you push a tag:
+Follow the [release checklist](../CONTRIBUTING.md#releasing): update the versions and
+changelog, verify and merge the release commit, inspect `devready-plugin.zip`, and tag
+that commit. Highlight licence or compatibility changes in the changelog section.
 
-```bash
-git tag v1.2.0
-git push origin v1.2.0
-```
-
-The `release` job waits for *Test* and *Browser*, then creates the GitHub Release.
-Paste the matching `CHANGELOG.md` section into the release notes.
+Tag-triggered CI waits for *Test* and *Browser*, then creates a GitHub release using
+the matching changelog section and attaches the ZIP. If a maintainer already created
+the release, CI preserves its notes and any existing ZIP; it uploads an archive only
+when one is missing.
 
 After that, users install straight from **Releases** — unzip, then **Plugins →
 Development → Import plugin from manifest…** → pick `devready-plugin/manifest.json`.

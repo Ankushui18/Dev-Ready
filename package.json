@@ -1,6 +1,6 @@
 {
   "name": "dev-ready",
-  "version": "1.5.1",
+  "version": "2.0.0",
   "description": "Free Figma Dev Mode alternative plugin: Dev Mode-style inspect, design handoff, design tokens, accessibility checks and design-to-code in 12 targets (React + TypeScript, React, Vue, Svelte, React Native, HTML, SwiftUI, Compose, Flutter), gated on Ready for dev. Non-commercial use.",
   "private": true,
   "license": "PolyForm-Noncommercial-1.0.0",
@@ -22,7 +22,7 @@
   "devDependencies": {
     "@eslint/js": "^10.0.1",
     "axe-core": "^4.14.1",
-    "esbuild": "0.24.2",
+    "esbuild": "0.25.12",
     "eslint": "^10.13.0",
     "globals": "^17.13.0",
     "typescript": "^5.9.3"
