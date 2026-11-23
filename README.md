@@ -33,7 +33,7 @@ DevReady is a **Figma plugin**, not a website. Pick the path that matches you:
 | **Fix the repo if files were uploaded to the wrong place** | [docs/GITHUB_SETUP.md](docs/GITHUB_SETUP.md) |
 | **Help people find this repo on Google** | [docs/SEO.md](docs/SEO.md) |
 
-> **Status: v1.5.1, local development plugin.** It is not on Figma Community yet, so you install it from this repo (below). Everything runs inside Figma — no account, no server, no tracking.
+> **Status: v2.0.0, local development plugin.** It is not on Figma Community yet, so you install it from GitHub (below). Everything runs inside Figma — no account, no server, no tracking.
 
 ---
 
@@ -103,9 +103,9 @@ what to do if a search still doesn't show it.
 
 ## Install (2 minutes)
 
-**You need:** the Figma **desktop app** (plugins can't be imported into the browser version) and this repository on disk.
+**You need:** the Figma **desktop app** (plugins can't be imported into the browser version) and the plugin files on disk.
 
-1. **Get the files.** `git clone https://github.com/Ankushui18/Dev-Ready.git`, or on GitHub use **Code → Download ZIP** and unzip it.
+1. **Get the files.** Download `devready-plugin.zip` from [GitHub Releases](https://github.com/Ankushui18/Dev-Ready/releases/latest) and unzip it, or clone the repository with `git clone https://github.com/Ankushui18/Dev-Ready.git`.
 2. **Import the plugin.** In Figma: **Plugins → Development → Import plugin from manifest…** → choose `devready-plugin/manifest.json` (the one *inside* the `devready-plugin/` folder).
 3. **Run it.** Open any file → **Plugins → Development → DevReady Inspect**.
 
@@ -259,6 +259,6 @@ or bundling the plugin into a commercial product. The plugin is *source-availabl
 OSI open source. [docs/LICENSING.md](docs/LICENSING.md) has plain-English examples, and
 [NOTICE](NOTICE) carries the required copyright notice.
 
-This replaces MIT on 4 November 2026. Copies released before then (up to v1.5.1) were
-MIT, and that grant cannot be revoked for those copies. Issues and ideas:
+This replaces MIT on 4 November 2026. The published v1.5.0 release and source copies
+distributed under MIT before that date retain their original grant. Issues and ideas:
 [CONTRIBUTING.md](CONTRIBUTING.md).

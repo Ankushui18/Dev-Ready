@@ -72,11 +72,12 @@ same reason. Do not delete the copyright notice.
 
 ## Why MIT disappeared, and what it means for old copies
 
-Releases up to and including **v1.5.1** were published under the MIT License, which
-allowed commercial use. An MIT grant is **irrevocable**: anyone who obtained those
-copies may continue using, modifying and selling them under MIT, and forks based on
-those tags can stay MIT. Changing `LICENSE` applies only to the source from this commit
-onward — it cannot retroactively withdraw rights already granted.
+The published **v1.5.0** GitHub release was distributed under the MIT License, which
+allowed commercial use. Source snapshots identified as v1.5.1 were also distributed
+under MIT before the licence change, although v1.5.1 was not a tagged GitHub release.
+An MIT grant is **irrevocable**: recipients may continue using, modifying and selling
+those copies under MIT, and forks based on them can stay MIT. Changing `LICENSE`
+applies to later source — it cannot retroactively withdraw rights already granted.
 
 Two related caveats for the maintainer:
 

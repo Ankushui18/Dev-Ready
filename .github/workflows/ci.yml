@@ -88,10 +88,38 @@ jobs:
       - name: Build devready-plugin.zip
         run: node scripts/zip.js
 
-      - name: Create GitHub release
+      - name: Create release or attach missing ZIP
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release create "${GITHUB_REF_NAME}" devready-plugin.zip \
-            --title "${GITHUB_REF_NAME}" \
-            --notes "See CHANGELOG.md for what changed. Install: unzip, then in Figma use Plugins → Development → Import plugin from manifest… and pick devready-plugin/manifest.json."
+          # A maintainer may already have published this tag with release notes.
+          # Preserve an existing ZIP (and its checksum) rather than replacing it.
+          if gh release view "${GITHUB_REF_NAME}" >/dev/null 2>&1; then
+            if gh release view "${GITHUB_REF_NAME}" --json assets --jq '.assets[].name' | grep -Fxq 'devready-plugin.zip'; then
+              echo "Release and ZIP already exist; keeping them unchanged."
+            else
+              gh release upload "${GITHUB_REF_NAME}" devready-plugin.zip
+            fi
+          else
+            version="${GITHUB_REF_NAME#v}"
+            notes="$(mktemp)"
+            # Version headings use `## [x.y.z]`; stop at the next version.
+            awk -v heading="## [$version]" '
+              index($0, heading) == 1 { found=1; next }
+              found && /^## \[/ { exit }
+              found { print }
+            ' CHANGELOG.md > "$notes"
+            if [ ! -s "$notes" ]; then
+              echo "No changelog section for ${GITHUB_REF_NAME}; refusing a release without notes." >&2
+              exit 1
+            fi
+            cat >> "$notes" <<'EOF'
+
+          ### Install
+          Download and unzip `devready-plugin.zip`. In Figma desktop, choose Plugins → Development → Import plugin from manifest… and select `devready-plugin/manifest.json`. This is a local development plugin, not a Figma Community listing.
+          EOF
+            gh release create "${GITHUB_REF_NAME}" devready-plugin.zip \
+              --verify-tag \
+              --title "${GITHUB_REF_NAME}" \
+              --notes-file "$notes"
+          fi

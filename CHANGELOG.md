@@ -4,18 +4,23 @@ All notable changes to DevReady are listed here. The format follows [Keep a Chan
 
 ## [Unreleased]
 
-### Changed
+## [2.0.0] — 2026-11-22
+
+### Breaking changes
+- **Licence changed from MIT to PolyForm Noncommercial 1.0.0.** Free for personal, research, educational, charitable and other non-commercial use; commercial use is no longer permitted. `LICENSE` holds the canonical terms and `NOTICE` carries the required copyright notice; both are included in the release ZIP. The published v1.5.0 release and earlier source copies distributed under MIT retain their original terms. See [licensing notes](https://github.com/Ankushui18/Dev-Ready/blob/v2.0.0/docs/LICENSING.md).
 - **Repository tooling now requires Node 20.19+ on 20.x, 22.13+ on 22.x, or 24+**, matching ESLint 10; CI verifies each minimum with strict engine checks. Node is not required to install the plugin in Figma.
-- **Licence changed from MIT to PolyForm Noncommercial 1.0.0.** Free for personal, research, educational, charitable and other non-commercial use; commercial use is no longer permitted. `LICENSE` now holds the canonical PolyForm text, `NOTICE` carries the required copyright notice, and `package.json` / `package-lock.json` use the SPDX id `PolyForm-Noncommercial-1.0.0`. Release ZIPs now include `LICENSE` and `NOTICE`. README, FAQ, launch copy and setup docs no longer call the project "open source"; [docs/LICENSING.md](docs/LICENSING.md) explains the change, the MIT history and what it means for commercial users.
+
+### Changed
+- **Development-tool security:** upgraded esbuild to 0.25.12 and updated the lockfile to ESLint 10.15.0 and minimatch 11.0.9 to address audit advisories. These tools are not shipped with the Figma plugin.
 - **SEO:** the repository had no description, topics, homepage or indexable HTML, which is why a Google search for the project name plus "Figma Dev Mode"/"git" returned nothing. README heading, opening paragraph, image alt text and badges now use the phrases people search for.
 
 ### Added
 - **Optional handoff preflight** on the locked screen: a read-only summary of accessibility findings, unmeasured or assumed contrast, missing fonts and scan/code-budget limits. It does not block marking ready and is not a full WCAG audit.
 - **Keyboard access** to menus, layer rows and compact controls, with accessible checked/expanded states, focus restoration and preserved form drafts on same-selection refreshes.
 - **A crawlable project website** at `docs/index.html` (title, meta description, canonical URL, Open Graph / Twitter cards, `SoftwareApplication` + `FAQPage` JSON-LD, a Dev Mode comparison table, install steps and FAQ), plus `docs/sitemap.xml`, `docs/robots.txt` and `docs/.nojekyll` for GitHub Pages.
-- [docs/SEO.md](docs/SEO.md): diagnosis, target search phrases, what was changed, and a setup checklist (social preview upload, Search Console, sitemap, backlinks, indexing time).
+- [SEO notes](https://github.com/Ankushui18/Dev-Ready/blob/v2.0.0/docs/SEO.md): diagnosis, target search phrases, what was changed, and a setup checklist (social preview upload, Search Console, sitemap, backlinks, indexing time).
 - `scripts/setup-github-meta.sh`: one command to apply the GitHub-side SEO settings (About description, 20 topics, website, Pages source) with a token that has repository-admin rights; the CI/App token is intentionally not able to change repo settings.
-- [docs/LICENSING.md](docs/LICENSING.md): plain-English allowed/prohibited use, generated-code note, relicensing caveats and maintainer notes on separate commercial licensing.
+- [Licensing notes](https://github.com/Ankushui18/Dev-Ready/blob/v2.0.0/docs/LICENSING.md): plain-English allowed/prohibited use, generated-code note, relicensing caveats and maintainer notes on separate commercial licensing.
 
 ### Fixed
 - **Panel contrast:** readable secondary text, status chips, syntax colours, placeholders and action buttons in light/dark fallback themes and simulated Figma themes. Hidden layers remain readable and are explicitly labelled; keyboard focus reveals hover-only actions.
@@ -30,10 +35,13 @@ All notable changes to DevReady are listed here. The format follows [Keep a Chan
 - **Mixed absolute and auto-layout siblings keep Figma's paint order.** Bottom bars remain above earlier overlapping rows, including reversed auto-layout stacking.
 - **Wrapped Auto text has deterministic web line-height.** Compatible uniform text uses Figma's SVG baseline spacing; native targets keep their platform font metrics rather than receiving an inferred cross-platform line box.
 
-### Added
+### Tests and known limits
 - Codegen, handoff-preflight and keyboard regressions alongside the earlier fidelity checks (**165 Node checks total**, plus the separate browser suite). The browser suite adds axe contrast regressions for representative states and measured placeholder contrast; it does not replace Figma or screen-reader testing.
+- **Dev Mode read-only contract:** the untagged v1.5.1 source update added a mock test trapping document-writing APIs, while checking the documented plugin-data, relaunch-data and measurement exceptions. It is not a substitute for launching Dev Mode in Figma.
+- The latest preflight, keyboard and contrast changes have not been tested in real Figma or with a screen reader. Dev Mode Code and Figma for VS Code also remain untested. Preflight is optional and is not a full WCAG audit.
+- The change list displays up to 150 rows even when the total count is higher.
 
-## [1.5.1] — 2026-10-20
+## [1.5.1] — 2026-10-20 (source update; not a tagged GitHub release)
 
 No product change. The Dev Mode surface is the one part of the launch matrix that has
 never been run, so its read-only contract is now a test instead of a promise.

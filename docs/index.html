@@ -40,7 +40,7 @@
   "applicationCategory": "DeveloperApplication",
   "applicationSubCategory": "Figma plugin",
   "operatingSystem": "Figma desktop app (macOS, Windows); runs in Figma Design mode, Dev Mode and Figma for VS Code",
-  "softwareVersion": "1.5.1",
+  "softwareVersion": "2.0.0",
   "description": "A free Figma Dev Mode alternative for design handoff. Inspect panel, design tokens, WCAG 2.2 checks, change tracking and design-to-code in 12 targets, gated on Ready for dev.",
   "license": "https://polyformproject.org/licenses/noncommercial/1.0.0",
   "isAccessibleForFree": true,
@@ -60,8 +60,9 @@
     "Dev Mode-style Inspect panel",
     "Design-to-code in 12 targets",
     "Ready for dev handoff gate",
+    "Optional read-only handoff preflight",
     "Design token export",
-    "WCAG 2.2 accessibility checks",
+    "Heuristic accessibility checks",
     "Change tracking with before and after values",
     "Asset export and project ZIP"
   ],
@@ -106,7 +107,7 @@
       "name": "Is DevReady free for commercial use?",
       "acceptedAnswer": {
         "@type": "Answer",
-        "text": "No. Since 4 November 2026 DevReady is licensed under PolyForm Noncommercial 1.0.0. It is free for personal, research, educational, charitable and other non-commercial use; use by or for a for-profit business, client work, or selling a product built on the plugin is not permitted. Releases up to v1.5.1 were MIT, and that grant is irrevocable for those copies."
+        "text": "No. Since 4 November 2026 DevReady is licensed under PolyForm Noncommercial 1.0.0. It is free for personal, research, educational, charitable and other non-commercial use; use by or for a for-profit business, client work, or selling a product built on the plugin is not permitted. The v1.5.0 GitHub release and source copies previously distributed under MIT retain their original grant."
       }
     },
     {
@@ -114,7 +115,7 @@
       "name": "How do I install the DevReady Figma plugin?",
       "acceptedAnswer": {
         "@type": "Answer",
-        "text": "Clone or download the GitHub repository, then in the Figma desktop app use Plugins, Development, Import plugin from manifest and pick devready-plugin/manifest.json. Run it from Plugins, Development, DevReady Inspect, or in Dev Mode from Inspect, Plugins. Everything runs inside Figma: no account, no server, no tracking."
+        "text": "Download devready-plugin.zip from GitHub Releases and unzip it, or clone the repository. In the Figma desktop app use Plugins, Development, Import plugin from manifest and pick devready-plugin/manifest.json. Run it from Plugins, Development, DevReady Inspect, or in Dev Mode from Inspect, Plugins. Everything runs inside Figma: no account, no server, no tracking."
       }
     }
   ]
@@ -201,7 +202,7 @@
       <span class="pill"><b>12</b> code targets</span>
       <span class="pill">Figma Design + <b>Dev Mode</b></span>
       <span class="pill"><b>No network requests</b> in the plugin</span>
-      <span class="pill"><b>158</b> automated checks</span>
+      <span class="pill"><b>165</b> automated Node checks</span>
     </div>
     <div class="cta">
       <a class="btn primary" href="https://github.com/Ankushui18/Dev-Ready">Get it on GitHub</a>
@@ -221,9 +222,9 @@
       <div class="grid">
         <div class="card"><div class="tag">Inspect</div><h3>Dev Mode-style specs</h3><p>Box model, Auto Layout, typography, fills, strokes, effects, variables in every mode, component properties and overrides, dev resources and interactions.</p></div>
         <div class="card"><div class="tag">Design to code</div><h3>12 code targets</h3><p>React + TypeScript, React + Tailwind, React + CSS, HTML + CSS, single-file HTML, Vue, Svelte, React Native, SwiftUI, Jetpack Compose and Flutter — with typed props, design tokens and a project ZIP.</p></div>
-        <div class="card"><div class="tag">Handoff</div><h3>Ready for dev gate</h3><p>Designers mark a frame ready; only then do specs, code and assets unlock. Turn the gate off and DevReady is simply a free Figma inspector and code generator.</p></div>
+        <div class="card"><div class="tag">Handoff</div><h3>Ready for dev gate</h3><p>Designers mark a frame ready; an optional, read-only preflight summarizes accessibility findings, font availability and scan limits first. Turn the gate off to inspect without it.</p></div>
         <div class="card"><div class="tag">Tokens</div><h3>Design token export</h3><p>Export one layer or a whole file as CSS variables, SCSS, design-tokens JSON or a Tailwind v4 <code>@theme</code> block, including every variable mode.</p></div>
-        <div class="card"><div class="tag">Accessibility</div><h3>WCAG 2.2 checks</h3><p>Contrast for every text layer, touch-target sizes, unlabelled icon buttons and text under 12px. Click a finding to select the layer.</p></div>
+        <div class="card"><div class="tag">Accessibility</div><h3>Heuristic accessibility checks</h3><p>Review contrast, touch targets, missing labels and small text for up to 400 non-hidden layers. Unmeasurable results are flagged; this is not a full WCAG audit.</p></div>
         <div class="card"><div class="tag">Change tracking</div><h3>Before → after</h3><p>See which layers changed since handoff — size, position, style, text, added and removed — with the old and new values side by side.</p></div>
       </div>
     </div>
@@ -256,12 +257,12 @@
       <h2>Install the Figma plugin in 2 minutes</h2>
       <p class="sub">DevReady is a local development plugin — it is not on Figma Community yet. You need the Figma desktop app.</p>
       <ol class="steps">
-        <li>Clone or download the repository: <code>git clone https://github.com/Ankushui18/Dev-Ready.git</code></li>
+        <li>Download and unzip <code>devready-plugin.zip</code> from <a href="https://github.com/Ankushui18/Dev-Ready/releases/latest">GitHub Releases</a>, or clone the repository: <code>git clone https://github.com/Ankushui18/Dev-Ready.git</code>.</li>
         <li>In Figma: <strong>Plugins → Development → Import plugin from manifest…</strong> and choose <code>devready-plugin/manifest.json</code>.</li>
         <li>Open any file and run <strong>Plugins → Development → DevReady Inspect</strong>. In Dev Mode (<kbd>Shift</kbd>+<kbd>D</kbd>) it lives under <strong>Inspect → Plugins</strong>, and its codegen languages appear in <strong>Inspect → Code</strong>.</li>
         <li>No Figma file handy? Open <code>devready-plugin/ui.html</code> in a browser — the panel runs on sample data.</li>
       </ol>
-      <p class="sub">The first run shows a lock: that is the ready-for-dev gate. Select a frame and choose <strong>Mark as ready for dev</strong>, or <strong>Inspect anyway</strong> to look around.</p>
+      <p class="sub">The first run shows a lock: that is the ready-for-dev gate. Select a frame, optionally <strong>Run preflight</strong>, then choose <strong>Mark as ready for dev</strong>, or <strong>Inspect anyway</strong> to look around.</p>
     </div>
   </section>
 
@@ -284,11 +285,11 @@
       </details>
       <details>
         <summary>Is DevReady free for commercial use?</summary>
-        <p>No. Since 4 November 2026 DevReady is licensed under PolyForm Noncommercial 1.0.0. It is free for personal, research, educational, charitable and other non-commercial use; use by or for a for-profit business, client work, or selling a product built on the plugin is not permitted. Releases up to v1.5.1 were MIT, and that grant is irrevocable for those copies. See the <a href="https://github.com/Ankushui18/Dev-Ready/blob/main/docs/LICENSING.md">licensing notes</a>.</p>
+        <p>No. Since 4 November 2026 DevReady is licensed under PolyForm Noncommercial 1.0.0. It is free for personal, research, educational, charitable and other non-commercial use; use by or for a for-profit business, client work, or selling a product built on the plugin is not permitted. The v1.5.0 GitHub release and source copies previously distributed under MIT retain their original grant. See the <a href="https://github.com/Ankushui18/Dev-Ready/blob/main/docs/LICENSING.md">licensing notes</a>.</p>
       </details>
       <details>
         <summary>How do I install the DevReady Figma plugin?</summary>
-        <p>Clone or download the GitHub repository, then in the Figma desktop app use Plugins → Development → Import plugin from manifest and pick <code>devready-plugin/manifest.json</code>. Run it from Plugins → Development → DevReady Inspect, or in Dev Mode from Inspect → Plugins. Everything runs inside Figma: no account, no server, no tracking.</p>
+        <p>Download and unzip <code>devready-plugin.zip</code> from <a href="https://github.com/Ankushui18/Dev-Ready/releases/latest">GitHub Releases</a>, or clone the repository. In the Figma desktop app use Plugins → Development → Import plugin from manifest and pick <code>devready-plugin/manifest.json</code>. Run it from Plugins → Development → DevReady Inspect, or in Dev Mode from Inspect → Plugins. Everything runs inside Figma: no account, no server, no tracking.</p>
       </details>
       <details>
         <summary>Does the plugin send my designs anywhere?</summary>
@@ -301,7 +302,7 @@
     <div class="wrap">
       <div class="notice">
         <h2>Licence: free for non-commercial use</h2>
-        <p>DevReady Inspect uses <a href="https://polyformproject.org/licenses/noncommercial/1.0.0">PolyForm Noncommercial 1.0.0</a> (SPDX <code>PolyForm-Noncommercial-1.0.0</code>), replacing MIT on 4 November 2026. Personal projects, study, research, hobby work, charities, schools and public institutions are free to use, modify and share it. Commercial use — including running it at a for-profit company, client work or selling it — is not permitted. The source is available, but it is not OSI open source. Copies released up to v1.5.1 remain under the irrevocable MIT grant.</p>
+        <p>DevReady Inspect uses <a href="https://polyformproject.org/licenses/noncommercial/1.0.0">PolyForm Noncommercial 1.0.0</a> (SPDX <code>PolyForm-Noncommercial-1.0.0</code>), replacing MIT on 4 November 2026. Personal projects, study, research, hobby work, charities, schools and public institutions are free to use, modify and share it. Commercial use — including running it at a for-profit company, client work or selling it — is not permitted. The source is available, but it is not OSI open source. The v1.5.0 GitHub release and source copies previously distributed under MIT retain their original grant.</p>
       </div>
     </div>
   </section>

@@ -1,11 +1,14 @@
 Required Notice: Copyright (c) 2026 Ankushui18
 
 DevReady Inspect is licensed under the PolyForm Noncommercial License 1.0.0.
-The full terms are in LICENSE, and a plain-English explanation is in docs/LICENSING.md.
+The full terms are in LICENSE and at:
 <https://polyformproject.org/licenses/noncommercial/1.0.0>
+A plain-English explanation is available at:
+<https://github.com/Ankushui18/Dev-Ready/blob/main/docs/LICENSING.md>
 
 Keep this NOTICE file, the LICENSE file, or the license URL above with every copy
 or substantial portion of the software you distribute, as the license requires.
 
-Releases up to and including v1.5.1 were published under the MIT License. That
-grant is irrevocable for those copies; this notice applies to the current source.
+The published v1.5.0 release and source copies distributed under the MIT License
+before 4 November 2026 retain their original MIT grant. This notice applies to the
+current source.
