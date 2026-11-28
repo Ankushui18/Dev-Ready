@@ -32,7 +32,12 @@ interface ShareModalProps {
 
 export const ShareModal: React.FC<ShareModalProps> = ({ bundle, onClose, onNotify }) => {
   const [shareUrl, setShareUrl] = useState<string | null>(null);
-  const [meta, setMeta] = useState<{ backend: string; ttlDays: number; encrypted: boolean } | null>(null);
+  const [meta, setMeta] = useState<{
+    backend: string;
+    ttlDays: number;
+    encrypted: boolean;
+    strippedScreenshot?: boolean;
+  } | null>(null);
   const [loading, setLoading] = useState(false);
   const [revokingId, setRevokingId] = useState<string | null>(null);
   const [activeLinks, setActiveLinks] = useState<SavedShareLink[]>(() => getSavedShareLinks(bundle.id));
@@ -60,12 +65,17 @@ export const ShareModal: React.FC<ShareModalProps> = ({ bundle, onClose, onNotif
     try {
       const res = await createEncryptedShareLink(bundle);
       setShareUrl(res.url);
-      setMeta({ backend: res.backend, ttlDays: res.ttlDays, encrypted: res.encrypted });
+      setMeta({
+        backend: res.backend,
+        ttlDays: res.ttlDays,
+        encrypted: res.encrypted,
+        strippedScreenshot: res.strippedScreenshot
+      });
       setActiveLinks(getSavedShareLinks(bundle.id));
       await navigator.clipboard.writeText(res.url).catch(() => {});
       setCopied(true);
       setTimeout(() => setCopied(false), 1800);
-      onNotify('Encrypted link copied to clipboard');
+      onNotify(res.backend === 'hash' ? 'Share link copied to clipboard' : 'Encrypted link copied to clipboard');
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to create share link');
     } finally {
@@ -152,7 +162,11 @@ export const ShareModal: React.FC<ShareModalProps> = ({ bundle, onClose, onNotif
             <div className="fig-access-copy">
               <div className="fig-access-title">Anyone with the link</div>
               <div className="fig-access-sub">
-                Can inspect &amp; copy code · {meta ? `${meta.ttlDays}d` : '7 days'} · E2E encrypted
+                {meta?.backend === 'hash'
+                  ? 'Permanent portable link · Full Dev Mode & codegen · No login needed'
+                  : meta?.backend === 'upstash'
+                    ? `Can inspect & copy code · ${meta.ttlDays}d · E2E encrypted`
+                    : 'Opens full interactive Dev Mode, redlines & codegen in any browser'}
               </div>
             </div>
           </div>
@@ -164,34 +178,43 @@ export const ShareModal: React.FC<ShareModalProps> = ({ bundle, onClose, onNotif
               disabled={loading}
             >
               {loading ? <Loader2 size={13} className="spin" /> : <Link2 size={13} />}
-              <span>{loading ? 'Encrypting link…' : 'Create & copy link'}</span>
+              <span>{loading ? 'Creating share link…' : 'Create & copy share link'}</span>
             </button>
           ) : (
-            <div className="fig-input-row">
-              <input
-                type="text"
-                readOnly
-                value={shareUrl}
-                className="fig-input"
-                onFocus={e => e.currentTarget.select()}
-              />
-              <button
-                className="fig-btn-primary"
-                onClick={async () => {
-                  try {
-                    await navigator.clipboard.writeText(shareUrl);
-                    setCopied(true);
-                    setTimeout(() => setCopied(false), 1600);
-                    onNotify('Link copied');
-                  } catch {
-                    onNotify('Clipboard blocked — select link & press Copy');
-                  }
-                }}
-              >
-                {copied ? <Check size={12} /> : <Copy size={12} />}
-                <span>{copied ? 'Copied' : 'Copy'}</span>
-              </button>
-            </div>
+            <>
+              <div className="fig-input-row">
+                <input
+                  type="text"
+                  readOnly
+                  value={shareUrl}
+                  className="fig-input"
+                  onFocus={e => e.currentTarget.select()}
+                />
+                <button
+                  className="fig-btn-primary"
+                  onClick={async () => {
+                    try {
+                      await navigator.clipboard.writeText(shareUrl);
+                      setCopied(true);
+                      setTimeout(() => setCopied(false), 1600);
+                      onNotify('Link copied');
+                    } catch {
+                      onNotify('Clipboard blocked — select link & press Copy');
+                    }
+                  }}
+                >
+                  {copied ? <Check size={12} /> : <Copy size={12} />}
+                  <span>{copied ? 'Copied' : 'Copy'}</span>
+                </button>
+              </div>
+              <p className="fig-hint-line" style={{ marginTop: 8 }}>
+                {meta?.backend === 'hash'
+                  ? meta.strippedScreenshot
+                    ? 'Vector specs, layout & code included in URL #hash (works forever). Use Interactive HTML below to include the 2× PNG screenshot.'
+                    : 'All layers, tokens & code live directly inside the URL #hash — works forever on any browser with zero server storage.'
+                  : 'Send this link to any developer — they can inspect layers, redlines & code without Figma.'}
+              </p>
+            </>
           )}
 
           {error && (

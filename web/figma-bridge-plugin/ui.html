@@ -5,36 +5,46 @@
 <title>DevReady Web Bridge</title>
 <style>
   *{box-sizing:border-box;margin:0;padding:0}
-  body{font-family:Inter,system-ui,-apple-system,sans-serif;background:#16181d;color:#f3f4f6;padding:16px;font-size:12.5px}
-  .head{display:flex;align-items:center;gap:8px;margin-bottom:14px}
-  .dot{width:10px;height:10px;border-radius:3px;background:linear-gradient(135deg,#10b981,#0d99ff)}
-  h1{font-size:14px;font-weight:700}
-  .badge{margin-left:auto;font-size:10px;padding:2px 6px;border-radius:999px;background:rgba(16,185,129,.16);color:#10b981;font-weight:600}
-  .card{background:#1e2028;border:1px solid rgba(255,255,255,.08);border-radius:10px;padding:12px;margin-bottom:12px}
-  .sel-name{font-weight:600;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-  .sel-meta{font-size:11px;color:#9ca3af;margin-top:3px;font-family:ui-monospace,monospace}
-  label{display:block;font-size:11px;color:#9ca3af;margin-bottom:5px;font-weight:500}
-  input[type=url]{width:100%;padding:8px 10px;border-radius:7px;background:#111318;border:1px solid rgba(255,255,255,.12);color:#f3f4f6;font-size:12px;outline:none}
+  body{font-family:Inter,system-ui,-apple-system,sans-serif;background:#1e1e1e;color:#f3f4f6;padding:14px;font-size:12px;line-height:1.45}
+  .head{display:flex;align-items:center;gap:8px;margin-bottom:12px}
+  .logo{display:grid;grid-template-columns:1fr 1fr;gap:2px;width:20px;height:20px;padding:3px;border-radius:5px;background:#141414;border:1px solid rgba(255,255,255,.12)}
+  .logo span{border-radius:1.5px}
+  .logo span:nth-child(1){background:#f24e1e}
+  .logo span:nth-child(2){background:#0d99ff}
+  .logo span:nth-child(3){background:#9747ff}
+  .logo span:nth-child(4){background:#14ae5c}
+  h1{font-size:13.5px;font-weight:600}
+  .badge{margin-left:auto;font-size:10px;padding:2px 7px;border-radius:999px;background:rgba(20,174,92,.16);color:#14ae5c;font-weight:600}
+  .card{background:#2c2c2c;border:1px solid rgba(255,255,255,.08);border-radius:9px;padding:11px;margin-bottom:10px}
+  .sel-name{font-weight:600;font-size:12.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .sel-meta{font-size:11px;color:rgba(255,255,255,.55);margin-top:2px;font-family:ui-monospace,SFMono-Regular,monospace}
+  label.lbl{display:block;font-size:11px;color:rgba(255,255,255,.62);margin-bottom:5px;font-weight:500}
+  input[type=url]{width:100%;padding:7px 9px;border-radius:6px;background:#1e1e1e;border:1px solid rgba(255,255,255,.12);color:#f3f4f6;font-size:11.5px;outline:none}
   input[type=url]:focus{border-color:#0d99ff}
-  .btn{width:100%;padding:10px 12px;border-radius:8px;border:0;font-weight:600;font-size:12.5px;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px;margin-top:8px}
-  .btn-primary{background:#10b981;color:#fff}
-  .btn-primary:hover{filter:brightness(1.08)}
-  .btn-secondary{background:#262934;color:#f3f4f6;border:1px solid rgba(255,255,255,.1)}
-  .btn-secondary:hover{background:#2f3342}
-  .btn:disabled{opacity:.45;cursor:not-allowed}
-  .row{display:grid;grid-template-columns:1fr 1fr;gap:8px}
-  .status{margin-top:12px;padding:9px 10px;border-radius:8px;font-size:11.5px;line-height:1.45;display:none}
-  .status.ok{display:block;background:rgba(16,185,129,.14);border:1px solid rgba(16,185,129,.3);color:#6ee7b7}
-  .status.err{display:block;background:rgba(244,63,94,.14);border:1px solid rgba(244,63,94,.3);color:#fda4af}
-  .status.info{display:block;background:rgba(13,153,255,.14);border:1px solid rgba(13,153,255,.3);color:#7dd3fc}
-  .foot{margin-top:14px;font-size:11px;color:#6b7280;line-height:1.45}
+  .opt-row{display:flex;align-items:center;gap:7px;margin-top:8px;font-size:11px;color:rgba(255,255,255,.68);cursor:pointer;user-select:none}
+  .opt-row input{accent-color:#0d99ff;cursor:pointer}
+  .btn{width:100%;padding:9px 11px;border-radius:7px;border:0;font-weight:600;font-size:12px;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px;margin-top:8px;transition:filter 120ms ease,background 120ms ease}
+  .btn-primary{background:#0d99ff;color:#fff}
+  .btn-primary:hover:not(:disabled){filter:brightness(1.08)}
+  .btn-secondary{background:#383838;color:#f3f4f6;border:1px solid rgba(255,255,255,.09)}
+  .btn-secondary:hover:not(:disabled){background:#424242}
+  .btn:disabled{opacity:.42;cursor:not-allowed}
+  .row{display:grid;grid-template-columns:1fr 1fr;gap:7px}
+  .status{margin-top:10px;padding:9px 10px;border-radius:8px;font-size:11.5px;line-height:1.45;display:none}
+  .status.ok{display:block;background:rgba(20,174,92,.14);border:1px solid rgba(20,174,92,.32);color:#86efac}
+  .status.err{display:block;background:rgba(242,72,34,.14);border:1px solid rgba(242,72,34,.34);color:#fca5a5}
+  .status.info{display:block;background:rgba(13,153,255,.14);border:1px solid rgba(13,153,255,.32);color:#7dd3fc}
+  .status-actions{display:flex;gap:6px;margin-top:8px}
+  .status-btn{flex:1;padding:6px 8px;border-radius:6px;border:1px solid rgba(255,255,255,.18);background:rgba(0,0,0,.22);color:#fff;font-size:11px;font-weight:600;cursor:pointer;text-align:center;text-decoration:none}
+  .status-btn:hover{background:rgba(255,255,255,.12)}
+  .foot{margin-top:10px;font-size:10.5px;color:rgba(255,255,255,.45);line-height:1.45}
 </style>
 </head>
 <body>
   <div class="head">
-    <span class="dot"></span>
+    <div class="logo" aria-hidden="true"><span></span><span></span><span></span><span></span></div>
     <h1>DevReady Web Bridge</h1>
-    <span class="badge">E2E Encrypted</span>
+    <span class="badge">Live Sync</span>
   </div>
 
   <div class="card">
@@ -43,8 +53,12 @@
   </div>
 
   <div class="card">
-    <label for="webUrl">DevReady Web Studio URL (Vercel or localhost)</label>
+    <label class="lbl" for="webUrl">DevReady Studio URL</label>
     <input id="webUrl" type="url" placeholder="https://devready-studio.vercel.app" value="https://devready-studio.vercel.app" />
+    <label class="opt-row">
+      <input id="chkShot" type="checkbox" checked />
+      <span>Include PNG screenshot (for JSON / Clipboard)</span>
+    </label>
     <button id="btnOpenWeb" class="btn btn-primary" disabled>Open in Web Dev Mode ↗</button>
     <div class="row">
       <button id="btnCopy" class="btn btn-secondary" disabled>Copy for Web</button>
@@ -55,148 +69,281 @@
   <div id="status" class="status"></div>
 
   <p class="foot">
-    <strong>Zero-cost architecture:</strong> "Open in Web Dev Mode" compresses and AES-256 encrypts your frame locally before transferring to your Vercel URL (key stays in URL <code>#k=</code>). Or use <strong>Copy for Web</strong> for 100% offline transfer.
+    <strong>Zero-config sync:</strong> Click <strong>Open in Web Dev Mode ↗</strong> to launch directly in your browser. Use <strong>Download .json</strong> or <strong>Copy for Web</strong> for full-resolution screenshots &amp; offline handoff.
   </p>
 
 <script>
 const $ = id => document.getElementById(id);
 let hasSelection = false;
+let busy = false;
+let pendingCopyText = '';
+let pendingOpenUrl = '';
 
-function setStatus(kind, text) {
+function updateButtons() {
+  const disabled = !hasSelection || busy;
+  $('btnOpenWeb').disabled = disabled;
+  $('btnCopy').disabled = disabled;
+  $('btnDownload').disabled = disabled;
+}
+
+function setStatus(kind, text, opts) {
   const el = $('status');
   el.className = 'status ' + kind;
-  el.textContent = text;
+  el.textContent = '';
+
+  const msgDiv = document.createElement('div');
+  msgDiv.textContent = text;
+  el.appendChild(msgDiv);
+
+  if (opts && (opts.copyText || opts.openUrl)) {
+    const actions = document.createElement('div');
+    actions.className = 'status-actions';
+    if (opts.openUrl) {
+      pendingOpenUrl = opts.openUrl;
+      const openBtn = document.createElement('button');
+      openBtn.type = 'button';
+      openBtn.className = 'status-btn';
+      openBtn.textContent = 'Open in Browser ↗';
+      openBtn.onclick = () => {
+        parent.postMessage({ pluginMessage: { type: 'open-url', url: pendingOpenUrl } }, '*');
+      };
+      actions.appendChild(openBtn);
+    }
+    if (opts.copyText) {
+      pendingCopyText = opts.copyText;
+      const copyBtn = document.createElement('button');
+      copyBtn.type = 'button';
+      copyBtn.className = 'status-btn';
+      copyBtn.textContent = opts.copyLabel || 'Copy to Clipboard';
+      copyBtn.onclick = () => {
+        const ok = syncCopyText(pendingCopyText);
+        copyBtn.textContent = ok ? 'Copied ✓' : 'Select & Cmd/Ctrl+C';
+      };
+      actions.appendChild(copyBtn);
+    }
+    el.appendChild(actions);
+  }
+}
+
+function syncCopyText(text) {
+  try {
+    const ta = document.createElement('textarea');
+    ta.value = text;
+    ta.style.position = 'fixed';
+    ta.style.left = '-9999px';
+    ta.style.top = '0';
+    document.body.appendChild(ta);
+    ta.focus();
+    ta.select();
+    const ok = document.execCommand('copy');
+    ta.remove();
+    return ok;
+  } catch (_) {
+    return false;
+  }
 }
 
 function toBase64Url(bytes) {
   let bin = '';
-  for (let i = 0; i < bytes.length; i += 0x8000) {
-    bin += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+  for (let i = 0; i < bytes.length; i += 0x4000) {
+    const slice = bytes.subarray(i, Math.min(i + 0x4000, bytes.length));
+    for (let j = 0; j < slice.length; j++) {
+      bin += String.fromCharCode(slice[j]);
+    }
   }
   return btoa(bin).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 }
 
+// Deadlock-free gzip: start reading readable stream BEFORE writing to writable!
 async function gzip(bytes) {
   if (typeof CompressionStream === 'undefined') return bytes;
-  const cs = new CompressionStream('gzip');
-  const w = cs.writable.getWriter();
-  await w.write(bytes);
-  await w.close();
-  return new Uint8Array(await new Response(cs.readable).arrayBuffer());
+  try {
+    const cs = new CompressionStream('gzip');
+    const outPromise = new Response(cs.readable).arrayBuffer();
+    const w = cs.writable.getWriter();
+    await w.write(bytes);
+    await w.close();
+    return new Uint8Array(await outPromise);
+  } catch (_) {
+    return bytes;
+  }
 }
 
 $('webUrl').addEventListener('change', () => {
   parent.postMessage({ pluginMessage: { type: 'save-url', webUrl: $('webUrl').value } }, '*');
 });
 
-$('btnOpenWeb').onclick = () => {
-  setStatus('info', 'Extracting frame specs, 2× PNG & SVG icons…');
-  parent.postMessage({ pluginMessage: { type: 'extract', mode: 'cloud', includeScreenshot: true } }, '*');
-};
+function startExtract(mode, statusText) {
+  if (!hasSelection || busy) return;
+  busy = true;
+  updateButtons();
+  setStatus('info', statusText);
+  parent.postMessage({
+    pluginMessage: {
+      type: 'extract',
+      mode: mode,
+      includeScreenshot: $('chkShot').checked
+    }
+  }, '*');
+}
 
-$('btnCopy').onclick = () => {
-  setStatus('info', 'Packing offline clipboard bundle…');
-  parent.postMessage({ pluginMessage: { type: 'extract', mode: 'clipboard', includeScreenshot: true } }, '*');
-};
-
-$('btnDownload').onclick = () => {
-  setStatus('info', 'Exporting .devready.json bundle…');
-  parent.postMessage({ pluginMessage: { type: 'extract', mode: 'file', includeScreenshot: true } }, '*');
-};
+$('btnOpenWeb').onclick = () => startExtract('cloud', 'Extracting frame layers, tokens & preview…');
+$('btnCopy').onclick = () => startExtract('clipboard', 'Packing clipboard bundle…');
+$('btnDownload').onclick = () => startExtract('file', 'Exporting .devready.json bundle…');
 
 window.onmessage = async (event) => {
   const msg = event.data && event.data.pluginMessage;
   if (!msg) return;
 
-  if (msg.type === 'config' && msg.webUrl) {
-    $('webUrl').value = msg.webUrl;
-  }
-
-  if (msg.type === 'selection') {
-    hasSelection = Boolean(msg.node);
-    $('btnOpenWeb').disabled = !hasSelection;
-    $('btnCopy').disabled = !hasSelection;
-    $('btnDownload').disabled = !hasSelection;
-    if (msg.node) {
-      $('selName').textContent = msg.node.name;
-      $('selMeta').textContent = `${msg.node.type} · ${msg.node.width} × ${msg.node.height}px`;
-    } else {
-      $('selName').textContent = 'No frame selected';
-      $('selMeta').textContent = 'Select any frame or component on the Figma canvas';
-    }
-  }
-
-  if (msg.type === 'error') {
-    setStatus('err', msg.message);
-  }
-
-  if (msg.type === 'extracted') {
-    const baseUrl = $('webUrl').value.trim().replace(/\/+$/, '');
-    const bundle = msg.bundle;
-    const raw = new TextEncoder().encode(JSON.stringify(bundle));
-    const compressed = await gzip(raw);
-
-    if (msg.mode === 'file') {
-      const blob = new Blob([JSON.stringify(bundle, null, 2)], { type: 'application/json' });
-      const a = document.createElement('a');
-      a.href = URL.createObjectURL(blob);
-      a.download = (bundle.name || 'frame').toLowerCase().replace(/[^a-z0-9]+/g, '-') + '.devready.json';
-      a.click();
-      setStatus('ok', `Exported ${msg.layerCount} layers to .devready.json. Drop it into Web Studio.`);
-      return;
+  try {
+    if (msg.type === 'config' && msg.webUrl) {
+      $('webUrl').value = msg.webUrl;
     }
 
-    if (msg.mode === 'clipboard') {
-      const encoded = 'DEVREADY1:' + toBase64Url(compressed);
-      const ta = document.createElement('textarea');
-      ta.value = encoded;
-      document.body.appendChild(ta);
-      ta.select();
-      document.execCommand('copy');
-      ta.remove();
-      setStatus('ok', `Copied ${msg.layerCount} layers! Opening Web Studio — press Ctrl+V / Cmd+V.`);
-      if (baseUrl) parent.postMessage({ pluginMessage: { type: 'open-url', url: baseUrl + '/?from=figma' } }, '*');
-      return;
-    }
-
-    if (msg.mode === 'cloud') {
-      try {
-        let envelope;
-        let keyFrag = '';
-        if (window.crypto && crypto.subtle) {
-          const key = await crypto.subtle.generateKey({ name: 'AES-GCM', length: 256 }, true, ['encrypt']);
-          const iv = crypto.getRandomValues(new Uint8Array(12));
-          const ct = new Uint8Array(await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, compressed));
-          const rawKey = new Uint8Array(await crypto.subtle.exportKey('raw', key));
-          keyFrag = '#k=' + toBase64Url(rawKey);
-          envelope = { v: 1, enc: true, name: bundle.name, iv: toBase64Url(iv), ct: toBase64Url(ct) };
-        } else {
-          envelope = { v: 1, enc: false, name: bundle.name, data: toBase64Url(compressed) };
-        }
-
-        const res = await fetch(baseUrl + '/api/handoff', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(envelope)
-        });
-        if (!res.ok) throw new Error('Server returned ' + res.status);
-        const data = await res.json();
-        const url = `${baseUrl}/?s=${encodeURIComponent(data.id)}${keyFrag}`;
-        parent.postMessage({ pluginMessage: { type: 'open-url', url } }, '*');
-        setStatus('ok', `Opened ${msg.layerCount} layers in Web Dev Mode! (E2E encrypted, 7-day link)`);
-      } catch (err) {
-        // Automatic zero-friction fallback to Clipboard if server is unreachable
-        const encoded = 'DEVREADY1:' + toBase64Url(compressed);
-        const ta = document.createElement('textarea');
-        ta.value = encoded;
-        document.body.appendChild(ta);
-        ta.select();
-        document.execCommand('copy');
-        ta.remove();
-        setStatus('info', 'Cloud endpoint unavailable — copied to clipboard instead! Press Ctrl+V in Web Studio.');
-        if (baseUrl) parent.postMessage({ pluginMessage: { type: 'open-url', url: baseUrl + '/?from=figma' } }, '*');
+    if (msg.type === 'selection') {
+      hasSelection = Boolean(msg.node);
+      updateButtons();
+      if (msg.node) {
+        $('selName').textContent = msg.node.name;
+        $('selMeta').textContent = msg.node.type + ' · ' + msg.node.width + ' × ' + msg.node.height + 'px';
+      } else {
+        $('selName').textContent = 'No frame selected';
+        $('selMeta').textContent = 'Select any frame or component on the Figma canvas';
       }
     }
+
+    if (msg.type === 'error') {
+      busy = false;
+      updateButtons();
+      setStatus('err', msg.message || 'Could not extract frame.');
+    }
+
+    if (msg.type === 'extracted') {
+      const baseUrl = ($('webUrl').value.trim() || 'https://devready-studio.vercel.app').replace(/\/+$/, '');
+      const bundle = msg.bundle;
+
+      // 1. Download .devready.json (instant — no gzip needed!)
+      if (msg.mode === 'file') {
+        const jsonStr = JSON.stringify(bundle, null, 2);
+        const blob = new Blob([jsonStr], { type: 'application/json' });
+        const blobUrl = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = blobUrl;
+        a.download = (bundle.name || 'frame').toLowerCase().replace(/[^a-z0-9]+/g, '-') + '.devready.json';
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        setTimeout(() => URL.revokeObjectURL(blobUrl), 2000);
+        setStatus('ok', 'Downloaded .devready.json (' + msg.layerCount + ' layers). Drop it onto DevReady Studio!', {
+          openUrl: baseUrl
+        });
+        busy = false;
+        updateButtons();
+        return;
+      }
+
+      const raw = new TextEncoder().encode(JSON.stringify(bundle));
+      const compressed = await gzip(raw);
+
+      // 2. Copy for Web (100% offline clipboard transfer + fresh-click button fallback)
+      if (msg.mode === 'clipboard') {
+        const encoded = 'DEVREADY1:' + toBase64Url(compressed);
+        const copied = syncCopyText(encoded);
+        if (copied) {
+          setStatus('ok', 'Copied ' + msg.layerCount + ' layers! Opening Web Studio — press Ctrl+V / Cmd+V.', {
+            openUrl: baseUrl + '/?from=figma',
+            copyText: encoded,
+            copyLabel: 'Copy Again'
+          });
+          parent.postMessage({ pluginMessage: { type: 'open-url', url: baseUrl + '/?from=figma' } }, '*');
+        } else {
+          setStatus('info', 'Ready (' + msg.layerCount + ' layers)! Click "Copy Bundle" below, then paste in Web Studio.', {
+            copyText: encoded,
+            copyLabel: 'Copy Bundle',
+            openUrl: baseUrl + '/?from=figma'
+          });
+        }
+        busy = false;
+        updateButtons();
+        return;
+      }
+
+      // 3. Open in Web Dev Mode ↗
+      if (msg.mode === 'cloud') {
+        // First try cloud endpoint; use it ONLY if backed by durable Redis (upstash)
+        let openedUrl = '';
+        try {
+          let envelope;
+          let keyFrag = '';
+          if (window.crypto && crypto.subtle) {
+            const key = await crypto.subtle.generateKey({ name: 'AES-GCM', length: 256 }, true, ['encrypt']);
+            const iv = crypto.getRandomValues(new Uint8Array(12));
+            const ct = new Uint8Array(await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, compressed));
+            const rawKey = new Uint8Array(await crypto.subtle.exportKey('raw', key));
+            keyFrag = '#k=' + toBase64Url(rawKey);
+            envelope = { v: 1, enc: true, name: bundle.name, iv: toBase64Url(iv), ct: toBase64Url(ct) };
+          } else {
+            envelope = { v: 1, enc: false, name: bundle.name, data: toBase64Url(compressed) };
+          }
+
+          const ctrl = new AbortController();
+          const timer = setTimeout(() => ctrl.abort(), 8000);
+          const res = await fetch(baseUrl + '/api/handoff', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(envelope),
+            signal: ctrl.signal
+          });
+          clearTimeout(timer);
+          if (res.ok) {
+            const data = await res.json();
+            if (data && data.id && data.backend === 'upstash') {
+              openedUrl = baseUrl + '/?s=' + encodeURIComponent(data.id) + keyFrag;
+            }
+          }
+        } catch (_) {
+          // Fall through seamlessly to self-contained portable URL!
+        }
+
+        // Portable direct URL (#b=...) — zero cold-start 404s, works 100% reliably on Vercel Hobby!
+        if (!openedUrl) {
+          let hashB64 = toBase64Url(compressed);
+          if (hashB64.length > 36000 && bundle.screenshotDataUrl) {
+            const lightBundle = Object.assign({}, bundle, { screenshotDataUrl: undefined });
+            const lightCompressed = await gzip(new TextEncoder().encode(JSON.stringify(lightBundle)));
+            hashB64 = toBase64Url(lightCompressed);
+          }
+          if (hashB64.length <= 48000) {
+            openedUrl = baseUrl + '/#b=' + hashB64;
+          }
+        }
+
+        if (openedUrl) {
+          parent.postMessage({ pluginMessage: { type: 'open-url', url: openedUrl } }, '*');
+          setStatus('ok', 'Opened ' + msg.layerCount + ' layers in DevReady Studio!', {
+            openUrl: openedUrl,
+            copyText: openedUrl,
+            copyLabel: 'Copy Link'
+          });
+        } else {
+          // Extremely large frame (>48KB compressed vector JSON): fall back to clipboard transfer
+          const encoded = 'DEVREADY1:' + toBase64Url(compressed);
+          syncCopyText(encoded);
+          setStatus('info', 'Large frame (' + msg.layerCount + ' layers) packed for clipboard. Click Copy Bundle & paste in Web Studio.', {
+            copyText: encoded,
+            copyLabel: 'Copy Bundle',
+            openUrl: baseUrl + '/?from=figma'
+          });
+        }
+
+        busy = false;
+        updateButtons();
+      }
+    }
+  } catch (err) {
+    busy = false;
+    updateButtons();
+    setStatus('err', (err && err.message) ? err.message : 'Unexpected bridge error');
   }
 };
 

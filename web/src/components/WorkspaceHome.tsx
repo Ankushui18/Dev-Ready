@@ -522,7 +522,7 @@ export const WorkspaceHome: React.FC<WorkspaceHomeProps> = ({
                 const timeLabel = recentTs
                   ? `Opened ${fmtRelativeTime(recentTs)}`
                   : `Edited ${fmtRelativeTime(new Date(sc.updatedAt).getTime())}`;
-                const previewScale = Math.min(264 / Math.max(sc.width, 1), 156 / Math.max(sc.height, 1));
+                const previewScale = Math.min(280 / Math.max(sc.width, 1), 162 / Math.max(sc.height, 1));
 
                 return (
                   <div
