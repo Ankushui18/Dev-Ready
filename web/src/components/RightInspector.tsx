@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { Suspense, lazy, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import {
   AlertTriangle,
@@ -47,13 +47,18 @@ import { CODE_TARGETS, exportTokens, formatVariableSyntax, generateCode, layerTo
 import { runA11yAudit } from '../lib/a11y';
 import { SyntaxCode } from '../lib/syntax';
 import { PopoverSelect } from './PopoverSelect';
-import { CodeConnectModal } from './CodeConnectModal';
-import { ComponentPlaygroundModal } from './ComponentPlaygroundModal';
 import { findSuggestedToken, findTokenByRef } from '../lib/tokens';
 import { buildLayerDiffCards, type DiffCodeLang } from '../lib/diff';
 import { fmtShift } from '../lib/platform';
 import { buildAiPrompt, buildMcpJson } from '../lib/aiContext';
 import type { PadSide } from './InspectCanvas';
+
+const CodeConnectModal = lazy(() =>
+  import('./CodeConnectModal').then(m => ({ default: m.CodeConnectModal }))
+);
+const ComponentPlaygroundModal = lazy(() =>
+  import('./ComponentPlaygroundModal').then(m => ({ default: m.ComponentPlaygroundModal }))
+);
 
 type ColorFormat = 'HEX' | 'RGB' | 'HSL';
 
@@ -1866,30 +1871,34 @@ export const RightInspector: React.FC<RightInspectorProps> = ({
       {showConnectModal &&
         compKey &&
         createPortal(
-          <CodeConnectModal
-            componentName={compKey}
-            initial={connectedEntry}
-            onSave={saveCodeConnect}
-            onRemove={connectedEntry ? () => removeCodeConnect(compKey) : undefined}
-            onClose={() => setShowConnectModal(false)}
-          />,
+          <Suspense fallback={null}>
+            <CodeConnectModal
+              componentName={compKey}
+              initial={connectedEntry}
+              onSave={saveCodeConnect}
+              onRemove={connectedEntry ? () => removeCodeConnect(compKey) : undefined}
+              onClose={() => setShowConnectModal(false)}
+            />
+          </Suspense>,
           document.body
         )}
 
       {showPlayground &&
         compKey &&
         createPortal(
-          <ComponentPlaygroundModal
-            bundle={bundle}
-            layer={layer}
-            componentName={compKey}
-            initialMode={activeMode}
-            codeTarget={codeTarget}
-            unit={unit}
-            connectedEntry={connectedEntry}
-            onClose={() => setShowPlayground(false)}
-            onNotify={onNotify}
-          />,
+          <Suspense fallback={null}>
+            <ComponentPlaygroundModal
+              bundle={bundle}
+              layer={layer}
+              componentName={compKey}
+              initialMode={activeMode}
+              codeTarget={codeTarget}
+              unit={unit}
+              connectedEntry={connectedEntry}
+              onClose={() => setShowPlayground(false)}
+              onNotify={onNotify}
+            />
+          </Suspense>,
           document.body
         )}
     </aside>

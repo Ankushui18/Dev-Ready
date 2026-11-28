@@ -133,11 +133,44 @@ export function layerToCssMap(layer: InspectLayer, unit: UnitMode): Array<[strin
 
 function pxToTwSpacing(px: number): string {
   const map: Record<number, string> = {
-    0: '0', 2: '0.5', 4: '1', 6: '1.5', 8: '2', 10: '2.5', 12: '3',
+    0: '0', 1: 'px', 2: '0.5', 4: '1', 6: '1.5', 8: '2', 10: '2.5', 12: '3',
     14: '3.5', 16: '4', 20: '5', 24: '6', 28: '7', 32: '8', 36: '9',
     40: '10', 44: '11', 48: '12', 56: '14', 64: '16', 80: '20', 96: '24'
   };
   return map[Math.round(px)] ?? `[${Math.round(px)}px]`;
+}
+
+function twColorToken(hex: string, prefix: 'bg' | 'text' | 'border', opacity?: number): string {
+  const norm = hex.trim().toUpperCase();
+  const op = opacity !== undefined && opacity < 0.99 ? `/${Math.round(opacity * 100)}` : '';
+  if (norm === '#FFFFFF' || norm === '#FFF') return `${prefix}-white${op}`;
+  if (norm === '#000000' || norm === '#000') return `${prefix}-black${op}`;
+  return `${prefix}-[${norm}]${op}`;
+}
+
+function twFontSize(px: number): string {
+  const map: Record<number, string> = {
+    12: 'text-xs', 14: 'text-sm', 16: 'text-base', 18: 'text-lg',
+    20: 'text-xl', 24: 'text-2xl', 30: 'text-3xl', 36: 'text-4xl', 48: 'text-5xl'
+  };
+  return map[Math.round(px)] ?? `text-[${Math.round(px)}px]`;
+}
+
+function twLineHeight(px: number): string {
+  const map: Record<number, string> = {
+    12: 'leading-3', 16: 'leading-4', 20: 'leading-5', 24: 'leading-6',
+    28: 'leading-7', 32: 'leading-8', 36: 'leading-9', 40: 'leading-10'
+  };
+  return map[Math.round(px)] ?? `leading-[${Math.round(px)}px]`;
+}
+
+function twRadius(r: number): string {
+  if (r >= 999) return 'rounded-full';
+  const map: Record<number, string> = {
+    2: 'rounded-sm', 4: 'rounded', 6: 'rounded-md', 8: 'rounded-lg',
+    12: 'rounded-xl', 16: 'rounded-2xl', 24: 'rounded-3xl'
+  };
+  return map[Math.round(r)] ?? `rounded-[${Math.round(r)}px]`;
 }
 
 export function layerToTailwind(layer: InspectLayer): string {
@@ -145,9 +178,11 @@ export function layerToTailwind(layer: InspectLayer): string {
   if (layer.autoLayout) {
     const al = layer.autoLayout;
     cls.push('flex', al.direction === 'HORIZONTAL' ? 'flex-row' : 'flex-col');
+    if (al.wrap) cls.push('flex-wrap');
     if (al.alignItems === 'CENTER') cls.push('items-center');
     else if (al.alignItems === 'END') cls.push('items-end');
     else if (al.alignItems === 'START') cls.push('items-start');
+    else if (al.alignItems === 'STRETCH') cls.push('items-stretch');
 
     if (al.justifyContent === 'CENTER') cls.push('justify-center');
     else if (al.justifyContent === 'SPACE_BETWEEN') cls.push('justify-between');
@@ -170,54 +205,85 @@ export function layerToTailwind(layer: InspectLayer): string {
     }
   }
 
-  cls.push(`w-[${Math.round(layer.width)}px]`);
-  if (layer.type !== 'TEXT') cls.push(`h-[${Math.round(layer.height)}px]`);
+  // Only emit explicit width/height when meaningful (skip fixed width on single-line text labels)
+  if (layer.type !== 'TEXT') {
+    cls.push(`w-[${Math.round(layer.width)}px]`, `h-[${Math.round(layer.height)}px]`);
+  }
 
   const fill = layer.fills?.[0];
   if (fill?.type === 'SOLID' && fill.color) {
-    const op = fill.opacity !== undefined && fill.opacity < 0.99 ? `/${Math.round(fill.opacity * 100)}` : '';
-    cls.push(layer.type === 'TEXT' ? `text-[${fill.color}]${op}` : `bg-[${fill.color}]${op}`);
+    cls.push(twColorToken(fill.color, layer.type === 'TEXT' ? 'text' : 'bg', fill.opacity));
   } else if (fill?.type === 'LINEAR_GRADIENT' && fill.gradient) {
     cls.push(`bg-[${fill.gradient.replace(/\s+/g, '_')}]`);
   }
 
   if (layer.strokes?.[0]) {
     const s = layer.strokes[0];
-    cls.push(s.width === 1 ? 'border' : `border-[${s.width}px]`, `border-[${s.color}]`);
+    cls.push(s.width === 1 ? 'border' : `border-[${s.width}px]`);
+    if (s.dash) cls.push('border-dashed');
+    cls.push(twColorToken(s.color, 'border'));
   }
 
   if (typeof layer.radius === 'number' && layer.radius > 0) {
-    if (layer.radius >= 999) cls.push('rounded-full');
-    else if (layer.radius === 4) cls.push('rounded');
-    else if (layer.radius === 6) cls.push('rounded-md');
-    else if (layer.radius === 8) cls.push('rounded-lg');
-    else if (layer.radius === 12) cls.push('rounded-xl');
-    else if (layer.radius === 16) cls.push('rounded-2xl');
-    else cls.push(`rounded-[${layer.radius}px]`);
+    cls.push(twRadius(layer.radius));
+  } else if (Array.isArray(layer.radius) && layer.radius.some(v => v > 0)) {
+    const [tl, tr, br, bl] = layer.radius;
+    if (tl === tr && br === 0 && bl === 0) cls.push(twRadius(tl).replace('rounded', 'rounded-t'));
+    else if (bl === br && tl === 0 && tr === 0) cls.push(twRadius(bl).replace('rounded', 'rounded-b'));
+    else cls.push(`rounded-[${layer.radius.map(v => `${Math.round(v)}px`).join('_')}]`);
+  }
+
+  if (layer.opacity !== undefined && layer.opacity < 0.99) {
+    const pct = Math.round(layer.opacity * 100);
+    const stdOp = [0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60, 65, 70, 75, 80, 85, 90, 95];
+    cls.push(stdOp.includes(pct) ? `opacity-${pct}` : `opacity-[${Math.round(layer.opacity * 100) / 100}]`);
   }
 
   if (layer.typography) {
     const t = layer.typography;
-    cls.push(`text-[${t.fontSize}px]`, `leading-[${t.lineHeight}px]`);
-    const wMap: Record<number, string> = { 400: 'font-normal', 500: 'font-medium', 600: 'font-semibold', 700: 'font-bold' };
+    cls.push(twFontSize(t.fontSize), twLineHeight(t.lineHeight));
+    const wMap: Record<number, string> = {
+      100: 'font-thin', 200: 'font-extralight', 300: 'font-light',
+      400: 'font-normal', 500: 'font-medium', 600: 'font-semibold',
+      700: 'font-bold', 800: 'font-extrabold', 900: 'font-black'
+    };
     cls.push(wMap[t.fontWeight] || `font-[${t.fontWeight}]`);
+    if (t.letterSpacing) cls.push(`tracking-[${t.letterSpacing}px]`);
     if (t.textAlign === 'CENTER') cls.push('text-center');
-    if (t.textAlign === 'RIGHT') cls.push('text-right');
+    else if (t.textAlign === 'RIGHT') cls.push('text-right');
+    if (t.textTransform === 'UPPERCASE') cls.push('uppercase');
+    else if (t.textTransform === 'LOWERCASE') cls.push('lowercase');
+    else if (t.textTransform === 'CAPITALIZE') cls.push('capitalize');
   }
 
   if (layer.effects?.some(e => e.type === 'DROP_SHADOW')) cls.push('shadow-md');
+  if (layer.effects?.some(e => e.type === 'BACKGROUND_BLUR')) cls.push('backdrop-blur-md');
   if (layer.clipsContent) cls.push('overflow-hidden');
 
   return cls.join(' ');
 }
 
+function semanticTag(layer: InspectLayer): string {
+  const n = layer.name.toLowerCase();
+  if (layer.type === 'TEXT') {
+    const fs = layer.typography?.fontSize || 14;
+    if (fs >= 28) return 'h1';
+    if (fs >= 20) return 'h2';
+    if (fs >= 17) return 'h3';
+    if ((layer.text || '').length > 55) return 'p';
+    return 'span';
+  }
+  if (layer.interactive || /\b(button|btn|cta)\b/.test(n)) return 'button';
+  if (/\b(header|topbar|appbar)\b/.test(n)) return 'header';
+  if (/\b(nav|navbar|sidebar|tabbar)\b/.test(n)) return 'nav';
+  if (/\b(footer)\b/.test(n)) return 'footer';
+  return 'div';
+}
+
 function renderJsxTree(layer: InspectLayer, depth: number, useTw: boolean): string {
   const indent = '  '.repeat(depth);
-  const tag = layer.type === 'TEXT'
-    ? (layer.typography && layer.typography.fontSize >= 20 ? 'h2' : 'span')
-    : layer.interactive
-      ? 'button'
-      : 'div';
+  const tag = semanticTag(layer);
+  const typeAttr = tag === 'button' ? ' type="button"' : '';
 
   const attr = useTw
     ? `className="${layerToTailwind(layer)}"`
@@ -230,10 +296,10 @@ function renderJsxTree(layer: InspectLayer, depth: number, useTw: boolean): stri
     return `${indent}<div ${attr} aria-label="${escapeHtml(layer.name)}">\n${indent}  {/* SVG icon: ${layer.name} (${Math.round(layer.width)}×${Math.round(layer.height)}) */}\n${indent}</div>`;
   }
   if (!layer.children || layer.children.length === 0) {
-    return `${indent}<${tag} ${attr} />`;
+    return `${indent}<${tag}${typeAttr} ${attr} />`;
   }
   const kids = layer.children.slice(0, 24).map(c => renderJsxTree(c, depth + 1, useTw)).join('\n');
-  return `${indent}<${tag} ${attr}>\n${kids}\n${indent}</${tag}>`;
+  return `${indent}<${tag}${typeAttr} ${attr}>\n${kids}\n${indent}</${tag}>`;
 }
 
 function collectCssRules(layer: InspectLayer, unit: UnitMode, out: string[], seen: Set<string>) {

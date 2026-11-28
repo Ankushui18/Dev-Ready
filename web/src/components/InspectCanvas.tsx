@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import {
   AlertTriangle,
+  Check,
   CheckCircle2,
   ChevronRight,
   Clock,
@@ -253,6 +254,7 @@ export const InspectCanvas: React.FC<InspectCanvasProps> = ({
         if (ctxMenu) { setCtxMenu(null); return; }
         if (annDraft) { setAnnDraft(null); return; }
         if (lockedCompareId) { setLockedCompareId(null); return; }
+        if (showLint) { setShowLint(false); return; }
         if (measureFromId) { setMeasureFromId(null); return; }
         if (selectedMeasureId) { setSelectedMeasureId(null); return; }
         if (tool !== 'select') { setTool('select'); return; }
@@ -276,7 +278,7 @@ export const InspectCanvas: React.FC<InspectCanvasProps> = ({
       window.removeEventListener('keyup', onKeyUp);
       window.removeEventListener('blur', onBlur);
     };
-  }, [bundle.measurements, ctxMenu, annDraft, lockedCompareId, measureFromId, selectedMeasureId, tool, onMeasurementsChange, onNotify, onViewModeChange]);
+  }, [bundle.measurements, ctxMenu, annDraft, lockedCompareId, showLint, measureFromId, selectedMeasureId, tool, onMeasurementsChange, onNotify, onViewModeChange]);
 
   // Close context menu on outside click
   useEffect(() => {
@@ -873,47 +875,84 @@ export const InspectCanvas: React.FC<InspectCanvasProps> = ({
         </defs>
       </svg>
 
-      {/* Canvas Design Lint Filter Bar (when Lint overlay is active) */}
+      {/* Canvas Design Lint Filter Bar + Clickable Issues Drawer */}
       {viewMode === 'inspect' && showLint && (
-        <div className="canvas-mode-pill lint-mode-pill" onClick={e => e.stopPropagation()}>
-          <AlertTriangle size={12} className="lint-ic-warn" />
-          <span className="lint-bar-title">Design Lint</span>
-          <div className="seg-inline">
+        <>
+          <div className="canvas-mode-pill lint-mode-pill" onClick={e => e.stopPropagation()}>
+            <AlertTriangle size={12} className="lint-ic-warn" />
+            <span className="lint-bar-title">Design Lint</span>
+            <div className="seg-inline">
+              <button
+                className={lintFilter === 'all' ? 'active' : ''}
+                onClick={() => setLintFilter('all')}
+              >
+                All ({lintReport.counts.all})
+              </button>
+              <button
+                className={lintFilter === 'a11y' ? 'active' : ''}
+                onClick={() => setLintFilter('a11y')}
+              >
+                Contrast ({lintReport.counts.a11y})
+              </button>
+              <button
+                className={lintFilter === 'token' ? 'active' : ''}
+                onClick={() => setLintFilter('token')}
+              >
+                Hardcoded ({lintReport.counts.token})
+              </button>
+              <button
+                className={lintFilter === 'grid' ? 'active' : ''}
+                onClick={() => setLintFilter('grid')}
+              >
+                4px Grid ({lintReport.counts.grid})
+              </button>
+            </div>
             <button
-              className={lintFilter === 'all' ? 'active' : ''}
-              onClick={() => setLintFilter('all')}
+              type="button"
+              className="quiet-icon-btn"
+              onClick={() => setShowLint(false)}
+              title="Close Lint overlay"
+              aria-label="Close Lint overlay"
             >
-              All ({lintReport.counts.all})
-            </button>
-            <button
-              className={lintFilter === 'a11y' ? 'active' : ''}
-              onClick={() => setLintFilter('a11y')}
-            >
-              Contrast ({lintReport.counts.a11y})
-            </button>
-            <button
-              className={lintFilter === 'token' ? 'active' : ''}
-              onClick={() => setLintFilter('token')}
-            >
-              Hardcoded ({lintReport.counts.token})
-            </button>
-            <button
-              className={lintFilter === 'grid' ? 'active' : ''}
-              onClick={() => setLintFilter('grid')}
-            >
-              4px Grid ({lintReport.counts.grid})
+              <X size={11} />
             </button>
           </div>
-          <button
-            type="button"
-            className="quiet-icon-btn"
-            onClick={() => setShowLint(false)}
-            title="Close Lint overlay"
-            aria-label="Close Lint overlay"
-          >
-            <X size={11} />
-          </button>
-        </div>
+
+          <aside className="canvas-lint-drawer" onClick={e => e.stopPropagation()} aria-label="Design lint issues">
+            <div className="cld-head">
+              <span>{visibleLintIssues.length} issue{visibleLintIssues.length === 1 ? '' : 's'}</span>
+              <span className="cld-hint">Click to inspect</span>
+            </div>
+            {visibleLintIssues.length === 0 ? (
+              <div className="cld-empty">
+                <Check size={14} />
+                <span>No issues in this category</span>
+              </div>
+            ) : (
+              <div className="cld-list">
+                {visibleLintIssues.slice(0, 40).map(issue => (
+                  <button
+                    key={issue.id}
+                    type="button"
+                    className={`cld-item ${selectedLayer.id === issue.layerId ? 'active' : ''}`}
+                    onClick={() => {
+                      setCanvasDeselected(false);
+                      onSelect(issue.layerId);
+                    }}
+                    onMouseEnter={() => onHover(issue.layerId)}
+                    onMouseLeave={() => onHover(null)}
+                  >
+                    <span className="cld-dot" style={{ background: LINT_COLORS[issue.category] }} />
+                    <span className="cld-body">
+                      <span className="cld-name">{issue.layerName}</span>
+                      <span className="cld-msg">{issue.message}</span>
+                    </span>
+                  </button>
+                ))}
+              </div>
+            )}
+          </aside>
+        </>
       )}
 
       {/* Shift+Click Locked 2-Layer Distance Banner */}

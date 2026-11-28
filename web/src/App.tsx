@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ArrowRight, ClipboardPaste, PanelLeftOpen, Upload, X } from 'lucide-react';
 import type {
   CanvasMeasurement,
@@ -29,14 +29,32 @@ import { fmtMod } from './lib/platform';
 import { InspectCanvas, type PadSide } from './components/InspectCanvas';
 import { LeftSidebar } from './components/LeftSidebar';
 import { RightInspector } from './components/RightInspector';
-import { PAT_STORAGE_KEY, TransferModal, type ImportTab } from './components/TransferModal';
-import { ShareModal } from './components/ShareModal';
-import { CommandPalette } from './components/CommandPalette';
-import { ShortcutsModal } from './components/ShortcutsModal';
-import { CompareChangesModal } from './components/CompareChangesModal';
-import { VariablesTableModal } from './components/VariablesTableModal';
-import { ReadyForDevFeed } from './components/ReadyForDevFeed';
+import type { ImportTab } from './components/TransferModal';
 import { WorkspaceHome } from './components/WorkspaceHome';
+
+const TransferModal = lazy(() =>
+  import('./components/TransferModal').then(m => ({ default: m.TransferModal }))
+);
+const ShareModal = lazy(() =>
+  import('./components/ShareModal').then(m => ({ default: m.ShareModal }))
+);
+const CommandPalette = lazy(() =>
+  import('./components/CommandPalette').then(m => ({ default: m.CommandPalette }))
+);
+const ShortcutsModal = lazy(() =>
+  import('./components/ShortcutsModal').then(m => ({ default: m.ShortcutsModal }))
+);
+const CompareChangesModal = lazy(() =>
+  import('./components/CompareChangesModal').then(m => ({ default: m.CompareChangesModal }))
+);
+const VariablesTableModal = lazy(() =>
+  import('./components/VariablesTableModal').then(m => ({ default: m.VariablesTableModal }))
+);
+const ReadyForDevFeed = lazy(() =>
+  import('./components/ReadyForDevFeed').then(m => ({ default: m.ReadyForDevFeed }))
+);
+
+const FIGMA_PAT_STORAGE_KEY = 'devready:figma-pat';
 
 function shouldStartInEditor(): boolean {
   if (typeof window === 'undefined') return false;
@@ -95,7 +113,7 @@ export const App: React.FC = () => {
   const [showSamplePill, setShowSamplePill] = useState(true);
   const [figmaBanner, setFigmaBanner] = useState(false);
   const [isDraggingFile, setIsDraggingFile] = useState(false);
-  const [toast, setToast] = useState<string | null>(null);
+  const [toast, setToast] = useState<{ msg: string; onUndo?: () => void } | null>(null);
   const [loadingCloud, setLoadingCloud] = useState(false);
   const vpRef = useRef({ w: 1280, h: 800 });
 
@@ -115,11 +133,13 @@ export const App: React.FC = () => {
 
   const parentMap = useMemo(() => findParentMap(activeScreen.root), [activeScreen.root]);
 
-  const notify = useCallback((msg: string) => setToast(msg), []);
+  const notify = useCallback((msg: string, onUndo?: () => void) => {
+    setToast({ msg, onUndo });
+  }, []);
 
   useEffect(() => {
     if (!toast) return;
-    const t = setTimeout(() => setToast(null), 2200);
+    const t = setTimeout(() => setToast(null), toast.onUndo ? 5200 : 2400);
     return () => clearTimeout(t);
   }, [toast]);
 
@@ -479,7 +499,7 @@ export const App: React.FC = () => {
     }
     let token = '';
     try {
-      token = localStorage.getItem(PAT_STORAGE_KEY) || '';
+      token = localStorage.getItem(FIGMA_PAT_STORAGE_KEY) || '';
     } catch {
       token = '';
     }
@@ -586,6 +606,7 @@ export const App: React.FC = () => {
   };
 
   const handleDeleteScreen = async (id: string) => {
+    const removed = screens.find(s => s.id === id);
     await deleteScreen(id);
     setScreens(prev => {
       const next = prev.filter(s => s.id !== id);
@@ -595,7 +616,15 @@ export const App: React.FC = () => {
       }
       return next;
     });
-    notify('Removed screen');
+    if (removed) {
+      notify(`Removed "${removed.name}"`, async () => {
+        await saveScreen(removed);
+        setScreens(prev => (prev.some(s => s.id === removed.id) ? prev : [removed, ...prev]));
+        setToast({ msg: `Restored "${removed.name}"` });
+      });
+    } else {
+      notify('Removed screen');
+    }
   };
 
   const handleQuickPasteBanner = async () => {
@@ -748,19 +777,21 @@ export const App: React.FC = () => {
           )}
 
           {showReadyFeed ? (
-            <ReadyForDevFeed
-              screens={screens}
-              leftOffset={hidePanels ? 54 : leftWidth + 24}
-              onInspectScreen={handleSelectScreen}
-              onStatusChange={handleStatusChange}
-              onCompareScreen={id => {
-                handleSelectScreen(id);
-                setCompareHistoryId(null);
-                setShowCompareChanges(true);
-              }}
-              onOpenImport={() => openImportModal('figma-url')}
-              onClose={() => setShowReadyFeed(false)}
-            />
+            <Suspense fallback={null}>
+              <ReadyForDevFeed
+                screens={screens}
+                leftOffset={hidePanels ? 54 : leftWidth + 24}
+                onInspectScreen={handleSelectScreen}
+                onStatusChange={handleStatusChange}
+                onCompareScreen={id => {
+                  handleSelectScreen(id);
+                  setCompareHistoryId(null);
+                  setShowCompareChanges(true);
+                }}
+                onOpenImport={() => openImportModal('figma-url')}
+                onClose={() => setShowReadyFeed(false)}
+              />
+            </Suspense>
           ) : (
             !hidePanels && (
               <RightInspector
@@ -837,100 +868,119 @@ export const App: React.FC = () => {
         </div>
       )}
 
-      {showImport && (
-        <TransferModal
-          initialTab={importTab}
-          initialFigmaUrl={importInitialUrl}
-          onClose={() => setShowImport(false)}
-          onImport={b => upsertScreen(b, `Imported "${b.name}"`)}
-          onImportBatch={handleImportBatch}
-        />
-      )}
-      {showShare && (
-        <ShareModal
-          bundle={activeScreen}
-          onClose={() => setShowShare(false)}
-          onNotify={notify}
-        />
-      )}
-      {showCmdK && (
-        <CommandPalette
-          screens={screens}
-          activeScreen={activeScreen}
-          theme={theme}
-          onClose={() => setShowCmdK(false)}
-          onSelectLayer={id => {
-            setActiveView('editor');
-            setHasVisitedEditor(true);
-            handleSelectLayer(id);
-          }}
-          onSelectScreen={handleSelectScreen}
-          onToggleTheme={() => setTheme(t => (t === 'dark' ? 'light' : 'dark'))}
-          onToggleRulers={() => setShowRulers(v => !v)}
-          onOpenImport={() => openImportModal('figma-url')}
-          onOpenShare={() => setShowShare(true)}
-          onOpenCompareChanges={() => {
-            setActiveView('editor');
-            setHasVisitedEditor(true);
-            setCompareHistoryId(null);
-            setShowCompareChanges(true);
-          }}
-          onOpenVariablesTable={() => {
-            setActiveView('editor');
-            setHasVisitedEditor(true);
-            setInitialVarName(undefined);
-            setShowVarsTable(true);
-          }}
-          onOpenReadyFeed={() => {
-            setActiveView('editor');
-            setHasVisitedEditor(true);
-            setShowReadyFeed(true);
-          }}
-          onGoHome={() => {
-            setShowReadyFeed(false);
-            setActiveView('home');
-          }}
-          onCopyAiPrompt={async () => {
-            const text = buildAiPrompt(activeScreen, selectedLayer, unit, 'react-tailwind-ts', 'layer');
-            await navigator.clipboard.writeText(text).catch(() => {});
-            notify(`Copied AI prompt for "${selectedLayer.name}"`);
-          }}
-          onCopyMcpJson={async () => {
-            const text = buildMcpJson(activeScreen, selectedLayer, unit, 'layer');
-            await navigator.clipboard.writeText(text).catch(() => {});
-            notify(`Copied MCP JSON for "${selectedLayer.name}"`);
-          }}
-        />
-      )}
-      {showCompareChanges && (
-        <CompareChangesModal
-          bundle={activeScreen}
-          unit={unit}
-          activeMode={activeTokenMode}
-          initialHistoryId={compareHistoryId || undefined}
-          initialLayerId={selectedLayer.id}
-          onClose={() => setShowCompareChanges(false)}
-          onNotify={notify}
-        />
-      )}
-      {showVarsTable && (
-        <VariablesTableModal
-          bundle={activeScreen}
-          activeMode={activeTokenMode}
-          initialTarget="css"
-          initialTokenName={initialVarName}
-          onModeChange={setActiveTokenMode}
-          onSelectLayer={layerId => {
-            handleSelectLayer(layerId);
-            setShowVarsTable(false);
-          }}
-          onClose={() => setShowVarsTable(false)}
-          onNotify={notify}
-        />
-      )}
-      {showShortcuts && <ShortcutsModal onClose={() => setShowShortcuts(false)} />}
+      <Suspense fallback={null}>
+        {showImport && (
+          <TransferModal
+            initialTab={importTab}
+            initialFigmaUrl={importInitialUrl}
+            onClose={() => setShowImport(false)}
+            onImport={b => upsertScreen(b, `Imported "${b.name}"`)}
+            onImportBatch={handleImportBatch}
+          />
+        )}
+        {showShare && (
+          <ShareModal
+            bundle={activeScreen}
+            onClose={() => setShowShare(false)}
+            onNotify={notify}
+          />
+        )}
+        {showCmdK && (
+          <CommandPalette
+            screens={screens}
+            activeScreen={activeScreen}
+            theme={theme}
+            onClose={() => setShowCmdK(false)}
+            onSelectLayer={id => {
+              setActiveView('editor');
+              setHasVisitedEditor(true);
+              handleSelectLayer(id);
+            }}
+            onSelectScreen={handleSelectScreen}
+            onToggleTheme={() => setTheme(t => (t === 'dark' ? 'light' : 'dark'))}
+            onToggleRulers={() => setShowRulers(v => !v)}
+            onOpenImport={() => openImportModal('figma-url')}
+            onOpenShare={() => setShowShare(true)}
+            onOpenCompareChanges={() => {
+              setActiveView('editor');
+              setHasVisitedEditor(true);
+              setCompareHistoryId(null);
+              setShowCompareChanges(true);
+            }}
+            onOpenVariablesTable={() => {
+              setActiveView('editor');
+              setHasVisitedEditor(true);
+              setInitialVarName(undefined);
+              setShowVarsTable(true);
+            }}
+            onOpenReadyFeed={() => {
+              setActiveView('editor');
+              setHasVisitedEditor(true);
+              setShowReadyFeed(true);
+            }}
+            onGoHome={() => {
+              setShowReadyFeed(false);
+              setActiveView('home');
+            }}
+            onCopyAiPrompt={async () => {
+              const text = buildAiPrompt(activeScreen, selectedLayer, unit, 'react-tailwind-ts', 'layer');
+              await navigator.clipboard.writeText(text).catch(() => {});
+              notify(`Copied AI prompt for "${selectedLayer.name}"`);
+            }}
+            onCopyMcpJson={async () => {
+              const text = buildMcpJson(activeScreen, selectedLayer, unit, 'layer');
+              await navigator.clipboard.writeText(text).catch(() => {});
+              notify(`Copied MCP JSON for "${selectedLayer.name}"`);
+            }}
+          />
+        )}
+        {showCompareChanges && (
+          <CompareChangesModal
+            bundle={activeScreen}
+            unit={unit}
+            activeMode={activeTokenMode}
+            initialHistoryId={compareHistoryId || undefined}
+            initialLayerId={selectedLayer.id}
+            onClose={() => setShowCompareChanges(false)}
+            onNotify={notify}
+          />
+        )}
+        {showVarsTable && (
+          <VariablesTableModal
+            bundle={activeScreen}
+            activeMode={activeTokenMode}
+            initialTarget="css"
+            initialTokenName={initialVarName}
+            onModeChange={setActiveTokenMode}
+            onSelectLayer={layerId => {
+              handleSelectLayer(layerId);
+              setShowVarsTable(false);
+            }}
+            onClose={() => setShowVarsTable(false)}
+            onNotify={notify}
+          />
+        )}
+        {showShortcuts && <ShortcutsModal onClose={() => setShowShortcuts(false)} />}
+      </Suspense>
 
-      {toast && <div className="studio-toast">{toast}</div>}
+      {toast && (
+        <div className="studio-toast" role="status" aria-live="polite">
+          <span>{toast.msg}</span>
+          {toast.onUndo && (
+            <button
+              type="button"
+              className="studio-toast-undo"
+              onClick={() => {
+                const fn = toast.onUndo;
+                setToast(null);
+                fn?.();
+              }}
+            >
+              Undo
+            </button>
+          )}
+        </div>
+      )}
     </div>
   );
 };
