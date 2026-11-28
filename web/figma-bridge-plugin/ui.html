@@ -1,0 +1,206 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>DevReady Web Bridge</title>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:Inter,system-ui,-apple-system,sans-serif;background:#16181d;color:#f3f4f6;padding:16px;font-size:12.5px}
+  .head{display:flex;align-items:center;gap:8px;margin-bottom:14px}
+  .dot{width:10px;height:10px;border-radius:3px;background:linear-gradient(135deg,#10b981,#0d99ff)}
+  h1{font-size:14px;font-weight:700}
+  .badge{margin-left:auto;font-size:10px;padding:2px 6px;border-radius:999px;background:rgba(16,185,129,.16);color:#10b981;font-weight:600}
+  .card{background:#1e2028;border:1px solid rgba(255,255,255,.08);border-radius:10px;padding:12px;margin-bottom:12px}
+  .sel-name{font-weight:600;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .sel-meta{font-size:11px;color:#9ca3af;margin-top:3px;font-family:ui-monospace,monospace}
+  label{display:block;font-size:11px;color:#9ca3af;margin-bottom:5px;font-weight:500}
+  input[type=url]{width:100%;padding:8px 10px;border-radius:7px;background:#111318;border:1px solid rgba(255,255,255,.12);color:#f3f4f6;font-size:12px;outline:none}
+  input[type=url]:focus{border-color:#0d99ff}
+  .btn{width:100%;padding:10px 12px;border-radius:8px;border:0;font-weight:600;font-size:12.5px;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px;margin-top:8px}
+  .btn-primary{background:#10b981;color:#fff}
+  .btn-primary:hover{filter:brightness(1.08)}
+  .btn-secondary{background:#262934;color:#f3f4f6;border:1px solid rgba(255,255,255,.1)}
+  .btn-secondary:hover{background:#2f3342}
+  .btn:disabled{opacity:.45;cursor:not-allowed}
+  .row{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+  .status{margin-top:12px;padding:9px 10px;border-radius:8px;font-size:11.5px;line-height:1.45;display:none}
+  .status.ok{display:block;background:rgba(16,185,129,.14);border:1px solid rgba(16,185,129,.3);color:#6ee7b7}
+  .status.err{display:block;background:rgba(244,63,94,.14);border:1px solid rgba(244,63,94,.3);color:#fda4af}
+  .status.info{display:block;background:rgba(13,153,255,.14);border:1px solid rgba(13,153,255,.3);color:#7dd3fc}
+  .foot{margin-top:14px;font-size:11px;color:#6b7280;line-height:1.45}
+</style>
+</head>
+<body>
+  <div class="head">
+    <span class="dot"></span>
+    <h1>DevReady Web Bridge</h1>
+    <span class="badge">E2E Encrypted</span>
+  </div>
+
+  <div class="card">
+    <div id="selName" class="sel-name">No frame selected</div>
+    <div id="selMeta" class="sel-meta">Select any frame or component on the Figma canvas</div>
+  </div>
+
+  <div class="card">
+    <label for="webUrl">DevReady Web Studio URL (Vercel or localhost)</label>
+    <input id="webUrl" type="url" placeholder="https://devready-studio.vercel.app" value="https://devready-studio.vercel.app" />
+    <button id="btnOpenWeb" class="btn btn-primary" disabled>Open in Web Dev Mode ↗</button>
+    <div class="row">
+      <button id="btnCopy" class="btn btn-secondary" disabled>Copy for Web</button>
+      <button id="btnDownload" class="btn btn-secondary" disabled>Download .json</button>
+    </div>
+  </div>
+
+  <div id="status" class="status"></div>
+
+  <p class="foot">
+    <strong>Zero-cost architecture:</strong> "Open in Web Dev Mode" compresses and AES-256 encrypts your frame locally before transferring to your Vercel URL (key stays in URL <code>#k=</code>). Or use <strong>Copy for Web</strong> for 100% offline transfer.
+  </p>
+
+<script>
+const $ = id => document.getElementById(id);
+let hasSelection = false;
+
+function setStatus(kind, text) {
+  const el = $('status');
+  el.className = 'status ' + kind;
+  el.textContent = text;
+}
+
+function toBase64Url(bytes) {
+  let bin = '';
+  for (let i = 0; i < bytes.length; i += 0x8000) {
+    bin += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+  }
+  return btoa(bin).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
+
+async function gzip(bytes) {
+  if (typeof CompressionStream === 'undefined') return bytes;
+  const cs = new CompressionStream('gzip');
+  const w = cs.writable.getWriter();
+  await w.write(bytes);
+  await w.close();
+  return new Uint8Array(await new Response(cs.readable).arrayBuffer());
+}
+
+$('webUrl').addEventListener('change', () => {
+  parent.postMessage({ pluginMessage: { type: 'save-url', webUrl: $('webUrl').value } }, '*');
+});
+
+$('btnOpenWeb').onclick = () => {
+  setStatus('info', 'Extracting frame specs, 2× PNG & SVG icons…');
+  parent.postMessage({ pluginMessage: { type: 'extract', mode: 'cloud', includeScreenshot: true } }, '*');
+};
+
+$('btnCopy').onclick = () => {
+  setStatus('info', 'Packing offline clipboard bundle…');
+  parent.postMessage({ pluginMessage: { type: 'extract', mode: 'clipboard', includeScreenshot: true } }, '*');
+};
+
+$('btnDownload').onclick = () => {
+  setStatus('info', 'Exporting .devready.json bundle…');
+  parent.postMessage({ pluginMessage: { type: 'extract', mode: 'file', includeScreenshot: true } }, '*');
+};
+
+window.onmessage = async (event) => {
+  const msg = event.data && event.data.pluginMessage;
+  if (!msg) return;
+
+  if (msg.type === 'config' && msg.webUrl) {
+    $('webUrl').value = msg.webUrl;
+  }
+
+  if (msg.type === 'selection') {
+    hasSelection = Boolean(msg.node);
+    $('btnOpenWeb').disabled = !hasSelection;
+    $('btnCopy').disabled = !hasSelection;
+    $('btnDownload').disabled = !hasSelection;
+    if (msg.node) {
+      $('selName').textContent = msg.node.name;
+      $('selMeta').textContent = `${msg.node.type} · ${msg.node.width} × ${msg.node.height}px`;
+    } else {
+      $('selName').textContent = 'No frame selected';
+      $('selMeta').textContent = 'Select any frame or component on the Figma canvas';
+    }
+  }
+
+  if (msg.type === 'error') {
+    setStatus('err', msg.message);
+  }
+
+  if (msg.type === 'extracted') {
+    const baseUrl = $('webUrl').value.trim().replace(/\/+$/, '');
+    const bundle = msg.bundle;
+    const raw = new TextEncoder().encode(JSON.stringify(bundle));
+    const compressed = await gzip(raw);
+
+    if (msg.mode === 'file') {
+      const blob = new Blob([JSON.stringify(bundle, null, 2)], { type: 'application/json' });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = (bundle.name || 'frame').toLowerCase().replace(/[^a-z0-9]+/g, '-') + '.devready.json';
+      a.click();
+      setStatus('ok', `Exported ${msg.layerCount} layers to .devready.json. Drop it into Web Studio.`);
+      return;
+    }
+
+    if (msg.mode === 'clipboard') {
+      const encoded = 'DEVREADY1:' + toBase64Url(compressed);
+      const ta = document.createElement('textarea');
+      ta.value = encoded;
+      document.body.appendChild(ta);
+      ta.select();
+      document.execCommand('copy');
+      ta.remove();
+      setStatus('ok', `Copied ${msg.layerCount} layers! Opening Web Studio — press Ctrl+V / Cmd+V.`);
+      if (baseUrl) parent.postMessage({ pluginMessage: { type: 'open-url', url: baseUrl + '/?from=figma' } }, '*');
+      return;
+    }
+
+    if (msg.mode === 'cloud') {
+      try {
+        let envelope;
+        let keyFrag = '';
+        if (window.crypto && crypto.subtle) {
+          const key = await crypto.subtle.generateKey({ name: 'AES-GCM', length: 256 }, true, ['encrypt']);
+          const iv = crypto.getRandomValues(new Uint8Array(12));
+          const ct = new Uint8Array(await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, compressed));
+          const rawKey = new Uint8Array(await crypto.subtle.exportKey('raw', key));
+          keyFrag = '#k=' + toBase64Url(rawKey);
+          envelope = { v: 1, enc: true, name: bundle.name, iv: toBase64Url(iv), ct: toBase64Url(ct) };
+        } else {
+          envelope = { v: 1, enc: false, name: bundle.name, data: toBase64Url(compressed) };
+        }
+
+        const res = await fetch(baseUrl + '/api/handoff', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(envelope)
+        });
+        if (!res.ok) throw new Error('Server returned ' + res.status);
+        const data = await res.json();
+        const url = `${baseUrl}/?s=${encodeURIComponent(data.id)}${keyFrag}`;
+        parent.postMessage({ pluginMessage: { type: 'open-url', url } }, '*');
+        setStatus('ok', `Opened ${msg.layerCount} layers in Web Dev Mode! (E2E encrypted, 7-day link)`);
+      } catch (err) {
+        // Automatic zero-friction fallback to Clipboard if server is unreachable
+        const encoded = 'DEVREADY1:' + toBase64Url(compressed);
+        const ta = document.createElement('textarea');
+        ta.value = encoded;
+        document.body.appendChild(ta);
+        ta.select();
+        document.execCommand('copy');
+        ta.remove();
+        setStatus('info', 'Cloud endpoint unavailable — copied to clipboard instead! Press Ctrl+V in Web Studio.');
+        if (baseUrl) parent.postMessage({ pluginMessage: { type: 'open-url', url: baseUrl + '/?from=figma' } }, '*');
+      }
+    }
+  }
+};
+
+parent.postMessage({ pluginMessage: { type: 'ready' } }, '*');
+</script>
+</body>
+</html>

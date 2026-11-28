@@ -1,0 +1,13 @@
+{
+  "name": "DevReady Web Bridge",
+  "id": "devready-web-bridge-local",
+  "api": "1.0.0",
+  "main": "code.js",
+  "ui": "ui.html",
+  "editorType": ["figma", "dev"],
+  "documentAccess": "dynamic-page",
+  "networkAccess": {
+    "allowedDomains": ["*"],
+    "reasoning": "Allows opt-in end-to-end encrypted transfer of the selected frame to the user's configured DevReady Web Studio URL (e.g. a Vercel deployment or localhost)."
+  }
+}
