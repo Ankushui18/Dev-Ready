@@ -1,0 +1,84 @@
+import type { DevReadyBundle } from '../types';
+
+const DB_NAME = 'devready-studio-db';
+const DB_VERSION = 1;
+const STORE_NAME = 'screens';
+const FALLBACK_KEY = 'devready-studio-screens-v1';
+
+function openDb(): Promise<IDBDatabase> {
+  return new Promise((resolve, reject) => {
+    if (typeof indexedDB === 'undefined') {
+      reject(new Error('IndexedDB unavailable'));
+      return;
+    }
+    const req = indexedDB.open(DB_NAME, DB_VERSION);
+    req.onupgradeneeded = () => {
+      const db = req.result;
+      if (!db.objectStoreNames.contains(STORE_NAME)) {
+        db.createObjectStore(STORE_NAME, { keyPath: 'id' });
+      }
+    };
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error || new Error('Failed to open IndexedDB'));
+  });
+}
+
+export async function loadSavedScreens(): Promise<DevReadyBundle[]> {
+  try {
+    const db = await openDb();
+    return await new Promise((resolve, reject) => {
+      const tx = db.transaction(STORE_NAME, 'readonly');
+      const req = tx.objectStore(STORE_NAME).getAll();
+      req.onsuccess = () => resolve((req.result as DevReadyBundle[]) || []);
+      req.onerror = () => reject(req.error);
+    });
+  } catch {
+    try {
+      const raw = localStorage.getItem(FALLBACK_KEY);
+      return raw ? (JSON.parse(raw) as DevReadyBundle[]) : [];
+    } catch {
+      return [];
+    }
+  }
+}
+
+export async function saveScreen(bundle: DevReadyBundle): Promise<void> {
+  try {
+    const db = await openDb();
+    await new Promise<void>((resolve, reject) => {
+      const tx = db.transaction(STORE_NAME, 'readwrite');
+      tx.objectStore(STORE_NAME).put(bundle);
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => reject(tx.error);
+    });
+  } catch {
+    try {
+      const list = await loadSavedScreens();
+      const idx = list.findIndex(s => s.id === bundle.id);
+      if (idx >= 0) list[idx] = bundle;
+      else list.unshift(bundle);
+      localStorage.setItem(FALLBACK_KEY, JSON.stringify(list));
+    } catch {
+      // ignore quota error
+    }
+  }
+}
+
+export async function deleteScreen(id: string): Promise<void> {
+  try {
+    const db = await openDb();
+    await new Promise<void>((resolve, reject) => {
+      const tx = db.transaction(STORE_NAME, 'readwrite');
+      tx.objectStore(STORE_NAME).delete(id);
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => reject(tx.error);
+    });
+  } catch {
+    try {
+      const list = (await loadSavedScreens()).filter(s => s.id !== id);
+      localStorage.setItem(FALLBACK_KEY, JSON.stringify(list));
+    } catch {
+      // ignore
+    }
+  }
+}
