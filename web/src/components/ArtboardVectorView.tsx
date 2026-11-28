@@ -41,6 +41,11 @@ export const ArtboardVectorView: React.FC<ArtboardVectorViewProps> = ({
   scale,
   activeMode
 }) => {
+  // For miniature thumbnails (< 0.55), render at native 1:1 resolution and CSS-scale down
+  // so browser minimum font-size clamping never breaks typography or proportions.
+  const isMini = scale < 0.55;
+  const s = isMini ? 1 : scale;
+
   const { tokenByName, tokenByDefaultVal } = useMemo(() => {
     const byName = new Map<string, string>();
     const byVal = new Map<string, string>();
@@ -83,8 +88,8 @@ export const ArtboardVectorView: React.FC<ArtboardVectorViewProps> = ({
     if (!shadows.length) return undefined;
     return shadows
       .map(
-        s =>
-          `${s.type === 'INNER_SHADOW' ? 'inset ' : ''}${(s.x || 0) * scale}px ${(s.y || 0) * scale}px ${s.blur * scale}px ${(s.spread || 0) * scale}px ${s.color || 'rgba(0,0,0,0.18)'}`
+        sh =>
+          `${sh.type === 'INNER_SHADOW' ? 'inset ' : ''}${(sh.x || 0) * s}px ${(sh.y || 0) * s}px ${sh.blur * s}px ${(sh.spread || 0) * s}px ${sh.color || 'rgba(0,0,0,0.18)'}`
       )
       .join(', ');
   };
@@ -97,28 +102,28 @@ export const ArtboardVectorView: React.FC<ArtboardVectorViewProps> = ({
 
     const style: React.CSSProperties = {
       position: 'absolute',
-      left: (node.x - parentX) * scale,
-      top: (node.y - parentY) * scale,
-      width: node.width * scale,
-      height: node.height * scale,
+      left: (node.x - parentX) * s,
+      top: (node.y - parentY) * s,
+      width: node.width * s,
+      height: node.height * s,
       boxSizing: 'border-box',
-      borderRadius: scaledRadius(node.radius, scale),
+      borderRadius: scaledRadius(node.radius, s),
       opacity: node.opacity,
       boxShadow: resolveShadow(node),
       overflow: node.clipsContent ? 'hidden' : undefined
     };
 
     if (stroke && strokeColor) {
-      style.border = `${Math.max(1, stroke.width * scale)}px ${stroke.dash ? 'dashed' : 'solid'} ${strokeColor}`;
+      style.border = `${Math.max(1, stroke.width * s)}px ${stroke.dash ? 'dashed' : 'solid'} ${strokeColor}`;
     }
 
     const layerBlur = (node.effects || []).find(e => e.type === 'LAYER_BLUR');
     if (layerBlur && layerBlur.blur > 0) {
-      style.filter = `blur(${layerBlur.blur * scale}px)`;
+      style.filter = `blur(${layerBlur.blur * s}px)`;
     }
     const bgBlur = (node.effects || []).find(e => e.type === 'BACKGROUND_BLUR');
     if (bgBlur && bgBlur.blur > 0) {
-      const blurPx = `blur(${bgBlur.blur * scale}px)`;
+      const blurPx = `blur(${bgBlur.blur * s}px)`;
       style.backdropFilter = blurPx;
       style.WebkitBackdropFilter = blurPx;
     }
@@ -127,13 +132,13 @@ export const ArtboardVectorView: React.FC<ArtboardVectorViewProps> = ({
       style.color = fill || '#111827';
       if (node.typography) {
         style.fontFamily = `'${node.typography.fontFamily}', Inter, system-ui, sans-serif`;
-        style.fontSize = node.typography.fontSize * scale;
+        style.fontSize = node.typography.fontSize * s;
         style.fontWeight = node.typography.fontWeight;
-        style.lineHeight = `${node.typography.lineHeight * scale}px`;
+        style.lineHeight = `${node.typography.lineHeight * s}px`;
         style.display = 'flex';
         style.alignItems = 'center';
         if (node.typography.letterSpacing) {
-          style.letterSpacing = `${node.typography.letterSpacing * scale}px`;
+          style.letterSpacing = `${node.typography.letterSpacing * s}px`;
         }
         if (node.typography.textAlign === 'CENTER') {
           style.justifyContent = 'center';
@@ -180,6 +185,32 @@ export const ArtboardVectorView: React.FC<ArtboardVectorViewProps> = ({
     bundle.backgroundColor === 'transparent'
       ? 'transparent'
       : resolveColor(bundle.backgroundColor, bundle.root.fills?.[0]?.token) || bundle.backgroundColor;
+
+  if (isMini) {
+    return (
+      <div
+        style={{
+          position: 'relative',
+          width: bundle.width * scale,
+          height: bundle.height * scale,
+          overflow: 'hidden'
+        }}
+      >
+        <div
+          className="artboard-vector-root"
+          style={{
+            width: bundle.width,
+            height: bundle.height,
+            backgroundColor: rootBg,
+            transform: `scale(${scale})`,
+            transformOrigin: 'top left'
+          }}
+        >
+          {renderNode(bundle.root, bundle.root.x, bundle.root.y)}
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div

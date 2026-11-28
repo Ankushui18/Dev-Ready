@@ -13,22 +13,52 @@ import type {
 } from './types';
 import { DEMO_SCREENS } from './data/demoScreens';
 import { findLayerById, findParentMap } from './lib/measure';
-import { deleteScreen, loadSavedScreens, saveScreen } from './lib/storage';
+import {
+  deleteScreen,
+  loadPinnedIds,
+  loadRecentsMap,
+  loadSavedScreens,
+  saveScreen,
+  togglePinScreen,
+  touchRecentScreen
+} from './lib/storage';
 import { decodeClipboardOrJson, decodeHashBundle, loadCloudShareLink } from './lib/transfer';
+import { fetchFigmaBundle, parseFigmaUrl } from './lib/figmaApi';
 import { buildAiPrompt, buildMcpJson } from './lib/aiContext';
 import { fmtMod } from './lib/platform';
 import { InspectCanvas, type PadSide } from './components/InspectCanvas';
 import { LeftSidebar } from './components/LeftSidebar';
 import { RightInspector } from './components/RightInspector';
-import { TransferModal } from './components/TransferModal';
+import { PAT_STORAGE_KEY, TransferModal, type ImportTab } from './components/TransferModal';
 import { ShareModal } from './components/ShareModal';
 import { CommandPalette } from './components/CommandPalette';
 import { ShortcutsModal } from './components/ShortcutsModal';
 import { CompareChangesModal } from './components/CompareChangesModal';
 import { VariablesTableModal } from './components/VariablesTableModal';
 import { ReadyForDevFeed } from './components/ReadyForDevFeed';
+import { WorkspaceHome } from './components/WorkspaceHome';
+
+function shouldStartInEditor(): boolean {
+  if (typeof window === 'undefined') return false;
+  try {
+    const url = new URL(window.location.href);
+    if (url.pathname === '/inspect' || /^\/s\/[A-Za-z0-9_-]{4,32}$/.test(url.pathname)) return true;
+    if (url.searchParams.has('s') || url.searchParams.get('from') === 'figma') return true;
+    const hashParams = new URLSearchParams(url.hash.replace(/^#/, ''));
+    if (hashParams.has('b') || hashParams.has('k')) return true;
+  } catch {
+    return false;
+  }
+  return false;
+}
 
 export const App: React.FC = () => {
+  const [activeView, setActiveView] = useState<'home' | 'editor'>(() =>
+    shouldStartInEditor() ? 'editor' : 'home'
+  );
+  const [hasVisitedEditor, setHasVisitedEditor] = useState<boolean>(() => shouldStartInEditor());
+  const [recentsMap, setRecentsMap] = useState<Record<string, number>>(() => loadRecentsMap());
+  const [pinnedIds, setPinnedIds] = useState<string[]>(() => loadPinnedIds());
   const [screens, setScreens] = useState<DevReadyBundle[]>(DEMO_SCREENS);
   const [activeScreenId, setActiveScreenId] = useState<string>(DEMO_SCREENS[0].id);
   const [selectedLayerId, setSelectedLayerId] = useState<string>(
@@ -51,6 +81,9 @@ export const App: React.FC = () => {
   const [activeTokenMode, setActiveTokenMode] = useState<string>(DEMO_SCREENS[0].tokenModes?.[0] || '');
   const [hidePanels, setHidePanels] = useState(false);
   const [showImport, setShowImport] = useState(false);
+  const [importTab, setImportTab] = useState<ImportTab>('figma-url');
+  const [importInitialUrl, setImportInitialUrl] = useState('');
+  const [syncingFigma, setSyncingFigma] = useState(false);
   const [showShare, setShowShare] = useState(false);
   const [compareHistoryId, setCompareHistoryId] = useState<string | null>(null);
   const [showCompareChanges, setShowCompareChanges] = useState(false);
@@ -129,8 +162,10 @@ export const App: React.FC = () => {
   }, [selectedLayer, activeScreen.width, activeScreen.height, hidePanels, leftWidth, rightWidth, triggerSmoothView]);
 
   useEffect(() => {
-    fitToScreen(activeScreen);
-  }, [activeScreen.id, hidePanels]); // eslint-disable-line react-hooks/exhaustive-deps
+    if (activeView === 'editor') {
+      fitToScreen(activeScreen);
+    }
+  }, [activeScreen.id, hidePanels, activeView]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Full Figma Keyboard Muscle Memory
   useEffect(() => {
@@ -142,6 +177,7 @@ export const App: React.FC = () => {
         return;
       }
       if ((e.metaKey || e.ctrlKey) && e.key === '\\') {
+        if (activeView !== 'editor') return;
         e.preventDefault();
         setHidePanels(v => !v);
         return;
@@ -159,14 +195,16 @@ export const App: React.FC = () => {
         if (showVarsTable) { setShowVarsTable(false); return; }
         if (showReadyFeed) { setShowReadyFeed(false); return; }
         if (showCmdK) { setShowCmdK(false); return; }
+        if (activeView !== 'editor') return;
         // Step UP to parent layer just like Figma!
         const parent = parentMap.get(selectedLayer.id);
         if (parent) setSelectedLayerId(parent.id);
         return;
       }
 
-      // Do not hijack Tab / Enter / canvas shortcuts while a modal or Ready for dev hub is open
+      // Do not hijack Tab / Enter / canvas shortcuts while on Workspace Home or a modal/hub is open
       if (
+        activeView !== 'editor' ||
         showShortcuts ||
         showImport ||
         showShare ||
@@ -228,6 +266,7 @@ export const App: React.FC = () => {
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
   }, [
+    activeView,
     parentMap,
     selectedLayer,
     showShortcuts,
@@ -275,9 +314,13 @@ export const App: React.FC = () => {
       return [bundle, ...prev];
     });
     await saveScreen(nextBundle);
+    setRecentsMap(touchRecentScreen(nextBundle.id));
     setActiveScreenId(nextBundle.id);
     setSelectedLayerId(nextBundle.root.id);
     setHoveredLayerId(null);
+    setActiveView('editor');
+    setHasVisitedEditor(true);
+    setShowReadyFeed(false);
     if (nextBundle.source !== 'demo') setShowSamplePill(false);
     if (announce) notify(announce);
   }, [notify]);
@@ -368,10 +411,111 @@ export const App: React.FC = () => {
   const handleSelectScreen = (id: string) => {
     const target = screens.find(s => s.id === id);
     if (!target) return;
+    setRecentsMap(touchRecentScreen(id));
     setActiveScreenId(id);
     setSelectedLayerId(target.root.id);
     setHoveredLayerId(null);
     setShowReadyFeed(false);
+    setActiveView('editor');
+    setHasVisitedEditor(true);
+  };
+
+  const handleRenameScreen = async (id: string, name: string) => {
+    const target = screens.find(s => s.id === id);
+    if (!target || target.name === name) return;
+    const updated: DevReadyBundle = {
+      ...target,
+      name,
+      updatedAt: new Date().toISOString()
+    };
+    await saveScreen(updated);
+    setScreens(prev => prev.map(s => (s.id === id ? updated : s)));
+    notify(`Renamed to "${name}"`);
+  };
+
+  const openImportModal = (tab: ImportTab = 'figma-url', initialUrl = '') => {
+    setImportTab(tab);
+    setImportInitialUrl(initialUrl);
+    setShowImport(true);
+  };
+
+  const handleTogglePin = (id: string) => {
+    const next = togglePinScreen(id);
+    setPinnedIds(next);
+    notify(next.includes(id) ? 'Pinned to top' : 'Unpinned');
+  };
+
+  const handleDuplicateScreen = async (id: string) => {
+    const target = screens.find(s => s.id === id);
+    if (!target) return;
+    const now = new Date().toISOString();
+    const copy: DevReadyBundle = {
+      ...JSON.parse(JSON.stringify(target)),
+      id: `copy-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+      name: `${target.name} (Copy)`,
+      source: 'file',
+      updatedAt: now
+    };
+    await saveScreen(copy);
+    setScreens(prev => [copy, ...prev]);
+    setRecentsMap(touchRecentScreen(copy.id));
+    notify(`Duplicated "${target.name}"`);
+  };
+
+  const handleImportBatch = async (bundles: DevReadyBundle[]) => {
+    if (bundles.length === 0) return;
+    for (let i = bundles.length - 1; i >= 0; i--) {
+      await upsertScreen(bundles[i]);
+    }
+    notify(`Imported ${bundles.length} frames from Figma`);
+  };
+
+  const handleSyncFromFigma = async () => {
+    if (!activeScreen.figmaUrl || syncingFigma) return;
+    const parsed = parseFigmaUrl(activeScreen.figmaUrl);
+    if (!parsed || !parsed.nodeId) {
+      openImportModal('figma-url', activeScreen.figmaUrl);
+      return;
+    }
+    let token = '';
+    try {
+      token = localStorage.getItem(PAT_STORAGE_KEY) || '';
+    } catch {
+      token = '';
+    }
+    if (!token) {
+      openImportModal('figma-url', activeScreen.figmaUrl);
+      notify('Enter your Figma token once to sync latest changes');
+      return;
+    }
+    setSyncingFigma(true);
+    try {
+      const fresh = await fetchFigmaBundle({
+        fileKey: parsed.fileKey,
+        nodeId: parsed.nodeId,
+        fileName: activeScreen.fileName,
+        pageName: activeScreen.pageName,
+        canonicalUrl: activeScreen.figmaUrl,
+        token
+      });
+      await upsertScreen(
+        { ...fresh, id: activeScreen.id },
+        `Synced "${fresh.name}" — open Compare Changes to inspect diffs`
+      );
+    } catch (e) {
+      notify(e instanceof Error ? e.message : 'Failed to sync from Figma');
+    } finally {
+      setSyncingFigma(false);
+    }
+  };
+
+  const handleShareScreen = (id: string) => {
+    const target = screens.find(s => s.id === id);
+    if (target) {
+      setActiveScreenId(target.id);
+      setSelectedLayerId(target.root.id);
+    }
+    setShowShare(true);
   };
 
   const handleSelectLayer = useCallback((id: string) => {
@@ -497,140 +641,170 @@ export const App: React.FC = () => {
       }}
       onDrop={handleDropFile}
     >
-      <InspectCanvas
-        bundle={activeScreen}
-        selectedId={selectedLayer.id}
-        hoveredId={hoveredLayerId}
-        highlightPadSide={highlightPadSide}
-        unit={unit}
-        viewMode={viewMode}
-        zoom={zoom}
-        pan={pan}
-        animateTransform={animateTransform}
-        showRulers={showRulers}
-        showOutlines={showOutlines}
-        showPadding={showPadding}
-        showAnnotations={showAnnotations}
-        rulerOffsetLeft={hidePanels ? 0 : leftWidth + 20}
-        rulerOffsetRight={hidePanels ? 0 : rightWidth + 20}
-        activeMode={activeTokenMode}
-        onModeChange={setActiveTokenMode}
-        onZoomChange={setZoom}
-        onPanChange={setPan}
-        onViewModeChange={setViewMode}
-        onToggleAnnotations={() => setShowAnnotations(v => !v)}
-        onAnnotationsChange={handleAnnotationsChange}
-        onMeasurementsChange={handleMeasurementsChange}
-        onStatusChange={status => handleStatusChange(activeScreen.id, status)}
-        onNotify={notify}
-        onViewportResize={handleViewportResize}
-        onSelect={setSelectedLayerId}
-        onHover={setHoveredLayerId}
-      />
-
-      {/* Quiet Non-Blocking Sample File Pill (hidden automatically when a real Figma file is loaded or in Preview/Compare mode) */}
-      {!showReadyFeed && viewMode === 'inspect' && showSamplePill && !figmaBanner && activeScreen.source === 'demo' && !hidePanels && (
-        <div className="sample-onboarding-pill">
-          <span className="sample-dot" />
-          <span>Sample Figma file · Hover any layer to measure</span>
-          <button className="sample-cta" onClick={() => setShowImport(true)}>
-            <span>Import your Figma file</span>
-            <ArrowRight size={11} />
-          </button>
-          <button className="sample-close" onClick={() => setShowSamplePill(false)} aria-label="Dismiss">
-            <X size={11} />
-          </button>
-        </div>
-      )}
-
-      {!hidePanels ? (
-        <LeftSidebar
-          width={leftWidth}
+      {activeView === 'home' ? (
+        <WorkspaceHome
           screens={screens}
-          activeScreen={activeScreen}
-          selectedId={selectedLayer.id}
-          hoveredId={hoveredLayerId}
-          unit={unit}
+          recentsMap={recentsMap}
+          pinnedIds={pinnedIds}
+          lastActiveScreen={activeScreen}
+          hasVisitedEditor={hasVisitedEditor}
           theme={theme}
-          showReadyFeed={showReadyFeed}
-          onToggleReadyFeed={() => setShowReadyFeed(v => !v)}
-          onResizeWidth={setLeftWidth}
-          onUnitChange={setUnit}
-          onToggleTheme={() => setTheme(t => (t === 'dark' ? 'light' : 'dark'))}
-          onCollapse={() => setHidePanels(true)}
-          onOpenCmdK={() => setShowCmdK(true)}
-          onOpenShortcuts={() => setShowShortcuts(true)}
-          onSelectLayer={handleSelectLayer}
-          onHoverLayer={setHoveredLayerId}
-          onSelectScreen={handleSelectScreen}
+          onOpenScreen={handleSelectScreen}
+          onShareScreen={handleShareScreen}
+          onTogglePin={handleTogglePin}
+          onDuplicateScreen={handleDuplicateScreen}
+          onRenameScreen={handleRenameScreen}
           onStatusChange={handleStatusChange}
           onDeleteScreen={handleDeleteScreen}
-          onOpenImport={() => setShowImport(true)}
+          onOpenImport={openImportModal}
+          onToggleTheme={() => setTheme(t => (t === 'dark' ? 'light' : 'dark'))}
+          onOpenCmdK={() => setShowCmdK(true)}
+          onOpenShortcuts={() => setShowShortcuts(true)}
         />
       ) : (
-        <button
-          className="floating-restore-btn"
-          onClick={() => setHidePanels(false)}
-          title={`Show UI (${fmtMod('\\')})`}
-        >
-          <PanelLeftOpen size={15} />
-        </button>
-      )}
-
-      {showReadyFeed ? (
-        <ReadyForDevFeed
-          screens={screens}
-          leftOffset={hidePanels ? 54 : leftWidth + 24}
-          onInspectScreen={handleSelectScreen}
-          onStatusChange={handleStatusChange}
-          onCompareScreen={id => {
-            handleSelectScreen(id);
-            setCompareHistoryId(null);
-            setShowCompareChanges(true);
-          }}
-          onOpenImport={() => setShowImport(true)}
-          onClose={() => setShowReadyFeed(false)}
-        />
-      ) : (
-        !hidePanels && (
-          <RightInspector
-            width={rightWidth}
+        <>
+          <InspectCanvas
             bundle={activeScreen}
-            layer={selectedLayer}
+            selectedId={selectedLayer.id}
+            hoveredId={hoveredLayerId}
+            highlightPadSide={highlightPadSide}
             unit={unit}
+            viewMode={viewMode}
             zoom={zoom}
+            pan={pan}
+            animateTransform={animateTransform}
             showRulers={showRulers}
             showOutlines={showOutlines}
             showPadding={showPadding}
+            showAnnotations={showAnnotations}
+            rulerOffsetLeft={hidePanels ? 0 : leftWidth + 20}
+            rulerOffsetRight={hidePanels ? 0 : rightWidth + 20}
             activeMode={activeTokenMode}
             onModeChange={setActiveTokenMode}
-            onResizeWidth={setRightWidth}
-            onHoverPadSide={setHighlightPadSide}
             onZoomChange={setZoom}
-            onFitToScreen={() => fitToScreen()}
-            onZoomToSelection={zoomToSelection}
-            onToggleRulers={() => setShowRulers(v => !v)}
-            onToggleOutlines={() => setShowOutlines(v => !v)}
-            onTogglePadding={() => setShowPadding(v => !v)}
-            onStatusChange={st => handleStatusChange(activeScreen.id, st)}
-            onChecklistChange={handleChecklistChange}
+            onPanChange={setPan}
+            onViewModeChange={setViewMode}
+            onToggleAnnotations={() => setShowAnnotations(v => !v)}
             onAnnotationsChange={handleAnnotationsChange}
-            onDevResourcesChange={handleDevResourcesChange}
-            onCodeConnectChange={handleCodeConnectChange}
-            onOpenImport={() => setShowImport(true)}
-            onOpenShare={() => setShowShare(true)}
-            onOpenCompareChanges={histId => {
-              setCompareHistoryId(histId || null);
-              setShowCompareChanges(true);
-            }}
-            onOpenVariablesTable={tokenName => {
-              setInitialVarName(tokenName);
-              setShowVarsTable(true);
-            }}
-            onSelectLayer={setSelectedLayerId}
+            onMeasurementsChange={handleMeasurementsChange}
+            onStatusChange={status => handleStatusChange(activeScreen.id, status)}
             onNotify={notify}
+            onViewportResize={handleViewportResize}
+            onSelect={setSelectedLayerId}
+            onHover={setHoveredLayerId}
           />
-        )
+
+          {/* Quiet Non-Blocking Sample File Pill (hidden automatically when a real Figma file is loaded or in Preview/Compare mode) */}
+          {!showReadyFeed && viewMode === 'inspect' && showSamplePill && !figmaBanner && activeScreen.source === 'demo' && !hidePanels && (
+            <div className="sample-onboarding-pill">
+              <span className="sample-dot" />
+              <span>Sample Figma file · Hover any layer to measure</span>
+              <button className="sample-cta" onClick={() => openImportModal('figma-url')}>
+                <span>Import your Figma file</span>
+                <ArrowRight size={11} />
+              </button>
+              <button className="sample-close" onClick={() => setShowSamplePill(false)} aria-label="Dismiss">
+                <X size={11} />
+              </button>
+            </div>
+          )}
+
+          {!hidePanels ? (
+            <LeftSidebar
+              width={leftWidth}
+              screens={screens}
+              activeScreen={activeScreen}
+              selectedId={selectedLayer.id}
+              hoveredId={hoveredLayerId}
+              unit={unit}
+              theme={theme}
+              showReadyFeed={showReadyFeed}
+              onToggleReadyFeed={() => setShowReadyFeed(v => !v)}
+              onGoHome={() => {
+                setShowReadyFeed(false);
+                setActiveView('home');
+              }}
+              onResizeWidth={setLeftWidth}
+              onUnitChange={setUnit}
+              onToggleTheme={() => setTheme(t => (t === 'dark' ? 'light' : 'dark'))}
+              onCollapse={() => setHidePanels(true)}
+              onOpenCmdK={() => setShowCmdK(true)}
+              onOpenShortcuts={() => setShowShortcuts(true)}
+              onSelectLayer={handleSelectLayer}
+              onHoverLayer={setHoveredLayerId}
+              onSelectScreen={handleSelectScreen}
+              onStatusChange={handleStatusChange}
+              onDeleteScreen={handleDeleteScreen}
+              onOpenImport={() => openImportModal('figma-url')}
+            />
+          ) : (
+            <button
+              className="floating-restore-btn"
+              onClick={() => setHidePanels(false)}
+              title={`Show UI (${fmtMod('\\')})`}
+            >
+              <PanelLeftOpen size={15} />
+            </button>
+          )}
+
+          {showReadyFeed ? (
+            <ReadyForDevFeed
+              screens={screens}
+              leftOffset={hidePanels ? 54 : leftWidth + 24}
+              onInspectScreen={handleSelectScreen}
+              onStatusChange={handleStatusChange}
+              onCompareScreen={id => {
+                handleSelectScreen(id);
+                setCompareHistoryId(null);
+                setShowCompareChanges(true);
+              }}
+              onOpenImport={() => openImportModal('figma-url')}
+              onClose={() => setShowReadyFeed(false)}
+            />
+          ) : (
+            !hidePanels && (
+              <RightInspector
+                width={rightWidth}
+                bundle={activeScreen}
+                layer={selectedLayer}
+                unit={unit}
+                zoom={zoom}
+                showRulers={showRulers}
+                showOutlines={showOutlines}
+                showPadding={showPadding}
+                activeMode={activeTokenMode}
+                onModeChange={setActiveTokenMode}
+                onResizeWidth={setRightWidth}
+                onHoverPadSide={setHighlightPadSide}
+                onZoomChange={setZoom}
+                onFitToScreen={() => fitToScreen()}
+                onZoomToSelection={zoomToSelection}
+                onToggleRulers={() => setShowRulers(v => !v)}
+                onToggleOutlines={() => setShowOutlines(v => !v)}
+                onTogglePadding={() => setShowPadding(v => !v)}
+                onStatusChange={st => handleStatusChange(activeScreen.id, st)}
+                onChecklistChange={handleChecklistChange}
+                onAnnotationsChange={handleAnnotationsChange}
+                onDevResourcesChange={handleDevResourcesChange}
+                onCodeConnectChange={handleCodeConnectChange}
+                onOpenImport={() => openImportModal('figma-url')}
+                onOpenShare={() => setShowShare(true)}
+                onSyncFromFigma={handleSyncFromFigma}
+                syncingFigma={syncingFigma}
+                onOpenCompareChanges={histId => {
+                  setCompareHistoryId(histId || null);
+                  setShowCompareChanges(true);
+                }}
+                onOpenVariablesTable={tokenName => {
+                  setInitialVarName(tokenName);
+                  setShowVarsTable(true);
+                }}
+                onSelectLayer={setSelectedLayerId}
+                onNotify={notify}
+              />
+            )
+          )}
+        </>
       )}
 
       {figmaBanner && (
@@ -665,8 +839,11 @@ export const App: React.FC = () => {
 
       {showImport && (
         <TransferModal
+          initialTab={importTab}
+          initialFigmaUrl={importInitialUrl}
           onClose={() => setShowImport(false)}
           onImport={b => upsertScreen(b, `Imported "${b.name}"`)}
+          onImportBatch={handleImportBatch}
         />
       )}
       {showShare && (
@@ -682,21 +859,37 @@ export const App: React.FC = () => {
           activeScreen={activeScreen}
           theme={theme}
           onClose={() => setShowCmdK(false)}
-          onSelectLayer={handleSelectLayer}
+          onSelectLayer={id => {
+            setActiveView('editor');
+            setHasVisitedEditor(true);
+            handleSelectLayer(id);
+          }}
           onSelectScreen={handleSelectScreen}
           onToggleTheme={() => setTheme(t => (t === 'dark' ? 'light' : 'dark'))}
           onToggleRulers={() => setShowRulers(v => !v)}
-          onOpenImport={() => setShowImport(true)}
+          onOpenImport={() => openImportModal('figma-url')}
           onOpenShare={() => setShowShare(true)}
           onOpenCompareChanges={() => {
+            setActiveView('editor');
+            setHasVisitedEditor(true);
             setCompareHistoryId(null);
             setShowCompareChanges(true);
           }}
           onOpenVariablesTable={() => {
+            setActiveView('editor');
+            setHasVisitedEditor(true);
             setInitialVarName(undefined);
             setShowVarsTable(true);
           }}
-          onOpenReadyFeed={() => setShowReadyFeed(true)}
+          onOpenReadyFeed={() => {
+            setActiveView('editor');
+            setHasVisitedEditor(true);
+            setShowReadyFeed(true);
+          }}
+          onGoHome={() => {
+            setShowReadyFeed(false);
+            setActiveView('home');
+          }}
           onCopyAiPrompt={async () => {
             const text = buildAiPrompt(activeScreen, selectedLayer, unit, 'react-tailwind-ts', 'layer');
             await navigator.clipboard.writeText(text).catch(() => {});

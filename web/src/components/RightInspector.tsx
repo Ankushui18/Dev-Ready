@@ -21,6 +21,7 @@ import {
   Link2,
   Play,
   Plus,
+  RefreshCw,
   Sparkles,
   Table2,
   Ticket,
@@ -141,6 +142,8 @@ interface RightInspectorProps {
   onCodeConnectChange: (map: Record<string, CodeConnectEntry>) => void;
   onOpenImport: () => void;
   onOpenShare: () => void;
+  onSyncFromFigma?: () => void;
+  syncingFigma?: boolean;
   onOpenCompareChanges: (historyId?: string) => void;
   onOpenVariablesTable: (tokenName?: string) => void;
   onSelectLayer: (id: string) => void;
@@ -192,6 +195,8 @@ export const RightInspector: React.FC<RightInspectorProps> = ({
   onCodeConnectChange,
   onOpenImport,
   onOpenShare,
+  onSyncFromFigma,
+  syncingFigma,
   onOpenCompareChanges,
   onOpenVariablesTable,
   onSelectLayer,
@@ -562,6 +567,17 @@ export const RightInspector: React.FC<RightInspectorProps> = ({
             <Figma size={12} />
             <span>Import</span>
           </button>
+          {bundle.figmaUrl && onSyncFromFigma && (
+            <button
+              className="quiet-icon-btn"
+              onClick={onSyncFromFigma}
+              disabled={syncingFigma}
+              title="Sync latest changes from Figma (creates Compare Changes snapshot)"
+              aria-label="Sync latest from Figma"
+            >
+              <RefreshCw size={12} className={syncingFigma ? 'spin' : ''} />
+            </button>
+          )}
           <button className="btn-figma-dev-green" onClick={onOpenShare}>
             Share
           </button>

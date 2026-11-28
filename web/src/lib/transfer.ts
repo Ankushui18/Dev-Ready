@@ -116,7 +116,13 @@ export function validateBundle(raw: unknown): DevReadyBundle {
     figmaUrl: typeof obj.figmaUrl === 'string' && SAFE_HTTP_URL_RE.test(obj.figmaUrl.trim()) ? obj.figmaUrl.trim() : undefined,
     status: obj.status === 'in-progress' || obj.status === 'done' ? obj.status : 'ready',
     updatedAt: typeof obj.updatedAt === 'string' ? obj.updatedAt : new Date().toISOString(),
-    source: obj.source === 'figma-plugin' || obj.source === 'cloud-link' || obj.source === 'demo' ? obj.source : 'file',
+    source:
+      obj.source === 'figma-plugin' ||
+      obj.source === 'figma-api' ||
+      obj.source === 'cloud-link' ||
+      obj.source === 'demo'
+        ? obj.source
+        : 'file',
     width: typeof obj.width === 'number' && Number.isFinite(obj.width) && obj.width > 0 ? obj.width : root.width,
     height: typeof obj.height === 'number' && Number.isFinite(obj.height) && obj.height > 0 ? obj.height : root.height,
     backgroundColor: typeof obj.backgroundColor === 'string' ? obj.backgroundColor : '#FFFFFF',
@@ -191,6 +197,27 @@ export async function decodeClipboardOrJson(text: string): Promise<DevReadyBundl
   return validateBundle(json);
 }
 
+/** Encode a portable self-contained URL #b=<b64url> bundle (works forever without server storage) */
+export async function encodeHashBundle(
+  bundle: DevReadyBundle
+): Promise<{ hash: string; strippedScreenshot: boolean }> {
+  const raw = new TextEncoder().encode(JSON.stringify(bundle));
+  let compressed = await gzipCompress(raw);
+  let hash = toBase64Url(compressed);
+  let strippedScreenshot = false;
+
+  // Keep portable URLs compact & browser-safe by omitting heavy raster PNGs if needed
+  // (ArtboardVectorView still renders the full vector screen faithfully!)
+  if (hash.length > 36000 && bundle.screenshotDataUrl) {
+    const lightBundle: DevReadyBundle = { ...bundle, screenshotDataUrl: undefined };
+    compressed = await gzipCompress(new TextEncoder().encode(JSON.stringify(lightBundle)));
+    hash = toBase64Url(compressed);
+    strippedScreenshot = true;
+  }
+
+  return { hash, strippedScreenshot };
+}
+
 /** Decode direct URL #b=<b64url> lightweight transfer */
 export async function decodeHashBundle(hashParam: string): Promise<DevReadyBundle> {
   const bytes = fromBase64Url(hashParam);
@@ -263,6 +290,7 @@ export async function createEncryptedShareLink(
   backend: string;
   ttlDays: number;
   encrypted: boolean;
+  strippedScreenshot?: boolean;
 }> {
   const raw = new TextEncoder().encode(JSON.stringify(bundle));
   const compressed = await gzipCompress(raw);
@@ -293,43 +321,95 @@ export async function createEncryptedShareLink(
     };
   }
 
-  const res = await fetch('/api/handoff', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(envelope)
-  });
-
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({}));
-    throw new Error((err as { error?: string }).error || `Upload failed (${res.status})`);
-  }
-
-  const data = (await res.json()) as {
+  let cloudData: {
     id: string;
     revokeToken?: string;
     expiresAt?: string;
     backend: string;
     ttlDays: number;
-  };
-  const url = `${window.location.origin}/?s=${encodeURIComponent(data.id)}${keyFragment}`;
-  saveShareLinkRecord({
-    id: data.id,
-    screenId: bundle.id,
-    screenName: bundle.name,
-    url,
-    revokeToken: data.revokeToken,
-    createdAt: new Date().toISOString(),
-    expiresAt: data.expiresAt
-  });
-  return {
-    url,
-    id: data.id,
-    revokeToken: data.revokeToken,
-    expiresAt: data.expiresAt,
-    backend: data.backend,
-    ttlDays: data.ttlDays || 7,
-    encrypted: canEncrypt
-  };
+  } | null = null;
+
+  try {
+    const res = await fetch('/api/handoff', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(envelope)
+    });
+    if (res.ok) {
+      cloudData = (await res.json()) as {
+        id: string;
+        revokeToken?: string;
+        expiresAt?: string;
+        backend: string;
+        ttlDays: number;
+      };
+    }
+  } catch {
+    cloudData = null;
+  }
+
+  // If backed by durable Upstash Redis, return the short 7-day revocable E2E cloud link
+  if (cloudData && cloudData.backend === 'upstash') {
+    const url = `${window.location.origin}/?s=${encodeURIComponent(cloudData.id)}${keyFragment}`;
+    saveShareLinkRecord({
+      id: cloudData.id,
+      screenId: bundle.id,
+      screenName: bundle.name,
+      url,
+      revokeToken: cloudData.revokeToken,
+      createdAt: new Date().toISOString(),
+      expiresAt: cloudData.expiresAt
+    });
+    return {
+      url,
+      id: cloudData.id,
+      revokeToken: cloudData.revokeToken,
+      expiresAt: cloudData.expiresAt,
+      backend: cloudData.backend,
+      ttlDays: cloudData.ttlDays || 7,
+      encrypted: canEncrypt
+    };
+  }
+
+  // Without durable Redis (e.g. Vercel Hobby serverless cold starts), generate a 100% reliable
+  // permanent self-contained portable URL (#b=...) that never 404s or expires!
+  const { hash, strippedScreenshot } = await encodeHashBundle(bundle);
+  if (hash.length <= 56000) {
+    const url = `${window.location.origin}/#b=${hash}`;
+    return {
+      url,
+      id: 'portable',
+      backend: 'hash',
+      ttlDays: 0,
+      encrypted: false,
+      strippedScreenshot
+    };
+  }
+
+  // Fallback for ultra-massive vector bundles (>56KB compressed)
+  if (cloudData) {
+    const url = `${window.location.origin}/?s=${encodeURIComponent(cloudData.id)}${keyFragment}`;
+    saveShareLinkRecord({
+      id: cloudData.id,
+      screenId: bundle.id,
+      screenName: bundle.name,
+      url,
+      revokeToken: cloudData.revokeToken,
+      createdAt: new Date().toISOString(),
+      expiresAt: cloudData.expiresAt
+    });
+    return {
+      url,
+      id: cloudData.id,
+      revokeToken: cloudData.revokeToken,
+      expiresAt: cloudData.expiresAt,
+      backend: cloudData.backend,
+      ttlDays: cloudData.ttlDays || 7,
+      encrypted: canEncrypt
+    };
+  }
+
+  throw new Error('This screen is too large for a link — export Interactive HTML or .devready.json below.');
 }
 
 /** Revoke a previously created cloud handoff link immediately */
