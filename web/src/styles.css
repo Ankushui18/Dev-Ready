@@ -7473,6 +7473,212 @@ button.artboard-name.is-selected {
   letter-spacing: -0.01em;
 }
 
+/* ==========================================================================
+   Product Polish: Lint Issues Drawer, ErrorBoundary, Undo Toast, A11y Focus
+   ========================================================================== */
+
+/* Interactive Canvas Design Lint Issues Drawer */
+.canvas-lint-drawer {
+  position: absolute;
+  top: 56px;
+  right: 14px;
+  z-index: 25;
+  width: 268px;
+  max-height: min(360px, calc(100% - 140px));
+  display: flex;
+  flex-direction: column;
+  border-radius: 10px;
+  background: var(--bg-panel);
+  border: 1px solid var(--border-strong);
+  box-shadow: var(--dock-shadow);
+  overflow: hidden;
+}
+.cld-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 11px;
+  border-bottom: 1px solid var(--border);
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-1);
+}
+.cld-hint {
+  font-weight: 400;
+  color: var(--text-3);
+  font-size: 10.5px;
+}
+.cld-list {
+  overflow-y: auto;
+  padding: 5px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.cld-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  width: 100%;
+  padding: 6px 8px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+  transition: background 100ms ease;
+}
+.cld-item:hover {
+  background: var(--bg-hover);
+}
+.cld-item.active {
+  background: var(--bg-selected);
+}
+.cld-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 99px;
+  flex-shrink: 0;
+  margin-top: 4px;
+}
+.cld-body {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+.cld-name {
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--text-1);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.cld-msg {
+  font-size: 10.5px;
+  color: var(--text-2);
+  line-height: 1.35;
+}
+.cld-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 18px 12px;
+  font-size: 11.5px;
+  color: var(--dev-green);
+}
+
+/* Sidebar screenshot thumbnail crisp fit */
+.rfd-side-shot {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+/* Toast Undo action */
+.studio-toast {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+}
+.studio-toast-undo {
+  border: 1px solid rgba(255, 255, 255, 0.24);
+  background: rgba(255, 255, 255, 0.12);
+  color: #ffffff;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 5px;
+  cursor: pointer;
+}
+.studio-toast-undo:hover {
+  background: rgba(255, 255, 255, 0.22);
+}
+
+/* ErrorBoundary Recovery Screen */
+.eb-shell {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: var(--bg-canvas);
+  color: var(--text-1);
+}
+.eb-card {
+  width: 100%;
+  max-width: 440px;
+  padding: 24px;
+  border-radius: 12px;
+  background: var(--bg-panel);
+  border: 1px solid var(--border-strong);
+  box-shadow: var(--dock-shadow);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.eb-ic {
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(242, 72, 34, 0.14);
+  color: var(--redline);
+}
+.eb-card h1 {
+  font-size: 16px;
+  font-weight: 600;
+  margin: 0;
+}
+.eb-card p {
+  font-size: 12.5px;
+  color: var(--text-2);
+  margin: 0;
+  line-height: 1.5;
+}
+.eb-msg {
+  margin: 0;
+  padding: 9px 10px;
+  border-radius: 7px;
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  font-size: 11px;
+  color: var(--text-2);
+  overflow-x: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.eb-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+/* Keyboard accessibility focus-visible ring */
+button:focus-visible,
+[role='button']:focus-visible,
+.tree-scroll:focus-visible {
+  outline: 1.5px solid var(--blue);
+  outline-offset: 1px;
+}
+
+/* Responsive Quick-Copy bar protection on narrower laptops */
+@media (max-width: 1240px) {
+  .qc-crumbs {
+    display: none;
+  }
+  .canvas-quickcopy-bar {
+    max-width: calc(100vw - 48px);
+  }
+}
+
+
 
 
 

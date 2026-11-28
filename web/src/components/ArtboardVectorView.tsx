@@ -1,5 +1,6 @@
-import React, { useMemo } from 'react';
+import React, { useEffect, useMemo } from 'react';
 import type { DevReadyBundle, InspectLayer } from '../types';
+import { ensureGoogleFontsLoaded } from '../lib/googleFonts';
 
 interface ArtboardVectorViewProps {
   bundle: DevReadyBundle;
@@ -45,6 +46,10 @@ export const ArtboardVectorView: React.FC<ArtboardVectorViewProps> = ({
   // so browser minimum font-size clamping never breaks typography or proportions.
   const isMini = scale < 0.55;
   const s = isMini ? 1 : scale;
+
+  useEffect(() => {
+    ensureGoogleFontsLoaded(bundle.root);
+  }, [bundle.id, bundle.root]);
 
   const { tokenByName, tokenByDefaultVal } = useMemo(() => {
     const byName = new Map<string, string>();
@@ -117,6 +122,11 @@ export const ArtboardVectorView: React.FC<ArtboardVectorViewProps> = ({
       style.border = `${Math.max(1, stroke.width * s)}px ${stroke.dash ? 'dashed' : 'solid'} ${strokeColor}`;
     }
 
+    if (node.rotation && Math.abs(node.rotation) > 0.01) {
+      style.transform = `rotate(${node.rotation}deg)`;
+      style.transformOrigin = 'center center';
+    }
+
     const layerBlur = (node.effects || []).find(e => e.type === 'LAYER_BLUR');
     if (layerBlur && layerBlur.blur > 0) {
       style.filter = `blur(${layerBlur.blur * s}px)`;
@@ -130,22 +140,36 @@ export const ArtboardVectorView: React.FC<ArtboardVectorViewProps> = ({
 
     if (node.type === 'TEXT') {
       style.color = fill || '#111827';
+      style.whiteSpace = 'pre-wrap';
+      style.wordBreak = 'break-word';
       if (node.typography) {
-        style.fontFamily = `'${node.typography.fontFamily}', Inter, system-ui, sans-serif`;
-        style.fontSize = node.typography.fontSize * s;
-        style.fontWeight = node.typography.fontWeight;
-        style.lineHeight = `${node.typography.lineHeight * s}px`;
-        style.display = 'flex';
-        style.alignItems = 'center';
-        if (node.typography.letterSpacing) {
-          style.letterSpacing = `${node.typography.letterSpacing * s}px`;
+        const t = node.typography;
+        style.fontFamily = `'${t.fontFamily}', Inter, system-ui, sans-serif`;
+        style.fontSize = t.fontSize * s;
+        style.fontWeight = t.fontWeight;
+        style.lineHeight = `${t.lineHeight * s}px`;
+        if (t.letterSpacing) {
+          style.letterSpacing = `${t.letterSpacing * s}px`;
         }
-        if (node.typography.textAlign === 'CENTER') {
-          style.justifyContent = 'center';
-          style.textAlign = 'center';
-        } else if (node.typography.textAlign === 'RIGHT') {
-          style.justifyContent = 'flex-end';
-          style.textAlign = 'right';
+        if (t.textTransform === 'UPPERCASE') style.textTransform = 'uppercase';
+        else if (t.textTransform === 'LOWERCASE') style.textTransform = 'lowercase';
+        else if (t.textTransform === 'CAPITALIZE') style.textTransform = 'capitalize';
+
+        const textStr = node.text || '';
+        const isSingleLine = !textStr.includes('\n') && node.height <= t.lineHeight * 1.65;
+        if (isSingleLine) {
+          style.display = 'flex';
+          style.alignItems = 'center';
+          if (t.textAlign === 'CENTER') {
+            style.justifyContent = 'center';
+            style.textAlign = 'center';
+          } else if (t.textAlign === 'RIGHT') {
+            style.justifyContent = 'flex-end';
+            style.textAlign = 'right';
+          }
+        } else {
+          if (t.textAlign === 'CENTER') style.textAlign = 'center';
+          else if (t.textAlign === 'RIGHT') style.textAlign = 'right';
         }
       }
       return (

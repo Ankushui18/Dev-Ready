@@ -211,6 +211,54 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = ({
     return Boolean(layer.children?.some(matchesSearch));
   };
 
+  const visibleFlatNodes = useMemo(() => {
+    const out: Array<{ node: InspectLayer; parentId: string | null }> = [];
+    const walk = (node: InspectLayer, parentId: string | null) => {
+      if (node.visible === false) return;
+      if (!matchesSearch(node)) return;
+      out.push({ node, parentId });
+      const isCol = collapsed[node.id] && !normalizedQuery;
+      if (!isCol && node.children) {
+        for (const c of node.children) walk(c, node.id);
+      }
+    };
+    walk(activeScreen.root, null);
+    return out;
+  }, [activeScreen.root, collapsed, normalizedQuery]);
+
+  const handleTreeKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
+    if (!visibleFlatNodes.length) return;
+    const idx = visibleFlatNodes.findIndex(x => x.node.id === selectedId);
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      const next = visibleFlatNodes[Math.min(visibleFlatNodes.length - 1, idx < 0 ? 0 : idx + 1)];
+      if (next) onSelectLayer(next.node.id);
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      const prev = visibleFlatNodes[Math.max(0, idx <= 0 ? 0 : idx - 1)];
+      if (prev) onSelectLayer(prev.node.id);
+    } else if (e.key === 'ArrowRight' && idx >= 0) {
+      const cur = visibleFlatNodes[idx].node;
+      if (cur.children && cur.children.length > 0) {
+        e.preventDefault();
+        if (collapsed[cur.id]) {
+          setCollapsed(prev => ({ ...prev, [cur.id]: false }));
+        } else {
+          onSelectLayer(cur.children[0].id);
+        }
+      }
+    } else if (e.key === 'ArrowLeft' && idx >= 0) {
+      const { node: cur, parentId } = visibleFlatNodes[idx];
+      if (cur.children && cur.children.length > 0 && !collapsed[cur.id]) {
+        e.preventDefault();
+        setCollapsed(prev => ({ ...prev, [cur.id]: true }));
+      } else if (parentId) {
+        e.preventDefault();
+        onSelectLayer(parentId);
+      }
+    }
+  };
+
   const renderNode = (node: InspectLayer, depth: number) => {
     if (node.visible === false) return null;
     if (!matchesSearch(node)) return null;
@@ -352,15 +400,19 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = ({
                         title={`Inspect ${sc.name}`}
                       >
                         <div className="rfd-side-thumb">
-                          <div
-                            className="rfd-side-thumb-inner"
-                            style={{
-                              width: Math.max(12, Math.round(sc.width * tScale)),
-                              height: Math.max(12, Math.round(sc.height * tScale))
-                            }}
-                          >
-                            <ArtboardVectorView bundle={sc} scale={tScale} />
-                          </div>
+                          {sc.screenshotDataUrl ? (
+                            <img src={sc.screenshotDataUrl} alt="" className="rfd-side-shot" />
+                          ) : (
+                            <div
+                              className="rfd-side-thumb-inner"
+                              style={{
+                                width: Math.max(12, Math.round(sc.width * tScale)),
+                                height: Math.max(12, Math.round(sc.height * tScale))
+                              }}
+                            >
+                              <ArtboardVectorView bundle={sc} scale={tScale} />
+                            </div>
+                          )}
                         </div>
                         <div className="rfd-side-meta">
                           <div className="rfd-side-name">{sc.name}</div>
@@ -409,7 +461,13 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = ({
               </button>
             )}
           </div>
-          <div className="tree-scroll">
+          <div
+            className="tree-scroll"
+            role="tree"
+            tabIndex={0}
+            aria-label="Layer hierarchy"
+            onKeyDown={handleTreeKeyDown}
+          >
             {matchesSearch(activeScreen.root) ? (
               renderNode(activeScreen.root, 0)
             ) : (
