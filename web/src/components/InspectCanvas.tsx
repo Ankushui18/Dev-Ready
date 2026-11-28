@@ -1,17 +1,20 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import {
+  AlertTriangle,
   CheckCircle2,
   ChevronRight,
   Clock,
   Code2,
   Copy,
   Diamond,
+  Eye,
   FileCode2,
   Hand,
   MessageSquarePlus,
   MessageSquareText,
   MousePointer2,
+  Pin,
   Ruler,
   Smartphone,
   Sparkles,
@@ -43,13 +46,22 @@ import {
 } from '../lib/measure';
 import { layerToCssMap, layerToTailwind } from '../lib/codegen';
 import { buildAiPrompt } from '../lib/aiContext';
+import { runDesignLint, type LintCategory } from '../lib/lint';
 import { CanvasRulers } from './CanvasRulers';
 import { ArtboardVectorView } from './ArtboardVectorView';
+import { PopoverSelect } from './PopoverSelect';
 
 export type PadSide = 'top' | 'right' | 'bottom' | 'left' | 'gap' | null;
 type PreviewBackdrop = 'canvas' | 'dark' | 'light' | 'checker';
 type CompareStyle = 'split' | 'overlay';
 type CanvasTool = 'select' | 'measure' | 'annotate' | 'hand';
+type VisionMode = 'normal' | 'protanopia' | 'deuteranopia' | 'tritanopia' | 'grayscale';
+
+const LINT_COLORS: Record<LintCategory, string> = {
+  a11y: '#F24822',
+  token: '#F59E0B',
+  grid: '#A259FF'
+};
 
 interface InspectCanvasProps {
   bundle: DevReadyBundle;
@@ -145,6 +157,10 @@ export const InspectCanvas: React.FC<InspectCanvasProps> = ({
   const [previewBackdrop, setPreviewBackdrop] = useState<PreviewBackdrop>('canvas');
   const [deviceFrame, setDeviceFrame] = useState(false);
   const [breakpointWidth, setBreakpointWidth] = useState<number | null>(null);
+  const [visionMode, setVisionMode] = useState<VisionMode>('normal');
+  const [lockedCompareId, setLockedCompareId] = useState<string | null>(null);
+  const [showLint, setShowLint] = useState(false);
+  const [lintFilter, setLintFilter] = useState<'all' | LintCategory>('all');
   const [cursorArtboard, setCursorArtboard] = useState<{ x: number; y: number } | null>(null);
   const [canvasDeselected, setCanvasDeselected] = useState(false);
   const panStartRef = useRef({ x: 0, y: 0, panX: 0, panY: 0 });
@@ -180,7 +196,9 @@ export const InspectCanvas: React.FC<InspectCanvasProps> = ({
   useEffect(() => {
     setDeviceFrame(isMobileFrame);
     setBreakpointWidth(null);
+    setVisionMode('normal');
     setMeasureFromId(null);
+    setLockedCompareId(null);
     setSelectedMeasureId(null);
     setCtxMenu(null);
     setAnnDraft(null);
@@ -234,6 +252,7 @@ export const InspectCanvas: React.FC<InspectCanvasProps> = ({
       } else if (e.key === 'Escape') {
         if (ctxMenu) { setCtxMenu(null); return; }
         if (annDraft) { setAnnDraft(null); return; }
+        if (lockedCompareId) { setLockedCompareId(null); return; }
         if (measureFromId) { setMeasureFromId(null); return; }
         if (selectedMeasureId) { setSelectedMeasureId(null); return; }
         if (tool !== 'select') { setTool('select'); return; }
@@ -257,7 +276,7 @@ export const InspectCanvas: React.FC<InspectCanvasProps> = ({
       window.removeEventListener('keyup', onKeyUp);
       window.removeEventListener('blur', onBlur);
     };
-  }, [bundle.measurements, ctxMenu, annDraft, measureFromId, selectedMeasureId, tool, onMeasurementsChange, onNotify, onViewModeChange]);
+  }, [bundle.measurements, ctxMenu, annDraft, lockedCompareId, measureFromId, selectedMeasureId, tool, onMeasurementsChange, onNotify, onViewModeChange]);
 
   // Close context menu on outside click
   useEffect(() => {
@@ -303,6 +322,22 @@ export const InspectCanvas: React.FC<InspectCanvasProps> = ({
     [bundle.root, measureFromId]
   );
 
+  const lockedCompareLayer = useMemo(
+    () => (lockedCompareId ? findLayerById(bundle.root, lockedCompareId) : null),
+    [bundle.root, lockedCompareId]
+  );
+
+  const lintReport = useMemo(() => runDesignLint(bundle), [bundle]);
+  const visibleLintIssues = useMemo(
+    () =>
+      showLint && viewMode === 'inspect'
+        ? lintFilter === 'all'
+          ? lintReport.issues
+          : lintReport.issues.filter(i => i.category === lintFilter)
+        : [],
+    [showLint, viewMode, lintFilter, lintReport.issues]
+  );
+
   const isRootSelected = selectedLayer.id === bundle.root.id;
 
   const redlines = useMemo(() => {
@@ -312,6 +347,10 @@ export const InspectCanvas: React.FC<InspectCanvasProps> = ({
       return computeMeasurements(measureFromLayer, hoveredLayer);
     }
     if (canvasDeselected) return [];
+    // Shift+Click 2-layer distance lock stays visible even when cursor moves away!
+    if (lockedCompareLayer && lockedCompareLayer.id !== selectedLayer.id) {
+      return computeMeasurements(selectedLayer, lockedCompareLayer);
+    }
     // Authentic Figma Dev Mode rule: when the full root artboard is selected,
     // do NOT spam redlines to inner cards on plain hover (only on explicit Alt/Option hold).
     if (isRootSelected) {
@@ -328,7 +367,7 @@ export const InspectCanvas: React.FC<InspectCanvasProps> = ({
       return computeMeasurements(selectedLayer, parent);
     }
     return [];
-  }, [viewMode, tool, measureFromLayer, canvasDeselected, isRootSelected, selectedLayer, hoveredLayer, parentMap, altDown]);
+  }, [viewMode, tool, measureFromLayer, lockedCompareLayer, canvasDeselected, isRootSelected, selectedLayer, hoveredLayer, parentMap, altDown]);
 
   // Authentic Figma Dev Mode Auto-Layout Padding & Gap:
   // When empty canvas is clicked (canvasDeselected) or root is selected, keep the canvas completely calm.
@@ -561,6 +600,13 @@ export const InspectCanvas: React.FC<InspectCanvasProps> = ({
       return;
     }
 
+    // Shift+Click locks distance measurement between current selection and clicked 2nd layer!
+    if (e.shiftKey && !isRootSelected && hit.id !== selectedLayer.id) {
+      setLockedCompareId(prev => (prev === hit.id ? null : hit.id));
+      return;
+    }
+
+    setLockedCompareId(null);
     onSelect(hit.id);
   };
 
@@ -790,6 +836,114 @@ export const InspectCanvas: React.FC<InspectCanvasProps> = ({
               </button>
             </>
           )}
+          <div className="cmp-sep" />
+          <div className="cmp-vision-wrap" title="Color blindness & vision simulator">
+            <Eye size={12} />
+            <PopoverSelect
+              compact
+              value={visionMode}
+              onChange={v => setVisionMode(v as VisionMode)}
+              options={[
+                { value: 'normal', label: 'Normal vision' },
+                { value: 'protanopia', label: 'Protanopia (Red-blind)' },
+                { value: 'deuteranopia', label: 'Deuteranopia (Green-blind)' },
+                { value: 'tritanopia', label: 'Tritanopia (Blue-blind)' },
+                { value: 'grayscale', label: 'Achromatopsia (Grayscale)' }
+              ]}
+            />
+          </div>
+        </div>
+      )}
+
+      {/* Hidden SVG Color-Blindness Filter Definitions (Brettel / Daltonize matrices) */}
+      <svg width="0" height="0" style={{ position: 'absolute', pointerEvents: 'none' }} aria-hidden="true">
+        <defs>
+          <filter id="cvd-protanopia">
+            <feColorMatrix type="matrix" values="0.567,0.433,0,0,0 0.558,0.442,0,0,0 0,0.242,0.758,0,0 0,0,0,1,0" />
+          </filter>
+          <filter id="cvd-deuteranopia">
+            <feColorMatrix type="matrix" values="0.625,0.375,0,0,0 0.7,0.3,0,0,0 0,0.3,0.7,0,0 0,0,0,1,0" />
+          </filter>
+          <filter id="cvd-tritanopia">
+            <feColorMatrix type="matrix" values="0.95,0.05,0,0,0 0,0.433,0.567,0,0 0,0.475,0.525,0,0 0,0,0,1,0" />
+          </filter>
+          <filter id="cvd-grayscale">
+            <feColorMatrix type="saturate" values="0" />
+          </filter>
+        </defs>
+      </svg>
+
+      {/* Canvas Design Lint Filter Bar (when Lint overlay is active) */}
+      {viewMode === 'inspect' && showLint && (
+        <div className="canvas-mode-pill lint-mode-pill" onClick={e => e.stopPropagation()}>
+          <AlertTriangle size={12} className="lint-ic-warn" />
+          <span className="lint-bar-title">Design Lint</span>
+          <div className="seg-inline">
+            <button
+              className={lintFilter === 'all' ? 'active' : ''}
+              onClick={() => setLintFilter('all')}
+            >
+              All ({lintReport.counts.all})
+            </button>
+            <button
+              className={lintFilter === 'a11y' ? 'active' : ''}
+              onClick={() => setLintFilter('a11y')}
+            >
+              Contrast ({lintReport.counts.a11y})
+            </button>
+            <button
+              className={lintFilter === 'token' ? 'active' : ''}
+              onClick={() => setLintFilter('token')}
+            >
+              Hardcoded ({lintReport.counts.token})
+            </button>
+            <button
+              className={lintFilter === 'grid' ? 'active' : ''}
+              onClick={() => setLintFilter('grid')}
+            >
+              4px Grid ({lintReport.counts.grid})
+            </button>
+          </div>
+          <button
+            type="button"
+            className="quiet-icon-btn"
+            onClick={() => setShowLint(false)}
+            title="Close Lint overlay"
+            aria-label="Close Lint overlay"
+          >
+            <X size={11} />
+          </button>
+        </div>
+      )}
+
+      {/* Shift+Click Locked 2-Layer Distance Banner */}
+      {viewMode === 'inspect' && lockedCompareLayer && !showLint && (
+        <div className="canvas-mode-pill lock-dist-pill" onClick={e => e.stopPropagation()}>
+          <Ruler size={12} />
+          <span>
+            Locked: <strong>{selectedLayer.name}</strong> ↔ <strong>{lockedCompareLayer.name}</strong>
+          </span>
+          <button
+            type="button"
+            className="cmp-toggle active"
+            onClick={() => {
+              pinMeasurementBetween(selectedLayer.id, lockedCompareLayer);
+              setLockedCompareId(null);
+            }}
+            title="Pin this distance permanently on canvas"
+          >
+            <Pin size={11} />
+            <span>Pin</span>
+          </button>
+          <button
+            type="button"
+            className="quiet-icon-btn"
+            onClick={() => setLockedCompareId(null)}
+            title="Clear distance lock (Esc)"
+            aria-label="Clear distance lock"
+          >
+            <X size={11} />
+          </button>
         </div>
       )}
 
@@ -916,7 +1070,8 @@ export const InspectCanvas: React.FC<InspectCanvasProps> = ({
           style={{
             width: stageW,
             height: stageH,
-            backgroundColor: effectiveRootBg
+            backgroundColor: effectiveRootBg,
+            filter: viewMode === 'preview' && visionMode !== 'normal' ? `url(#cvd-${visionMode})` : undefined
           }}
           onMouseDown={handleBoardMouseDown}
           onMouseUp={handleBoardMouseUp}
@@ -1115,6 +1270,51 @@ export const InspectCanvas: React.FC<InspectCanvasProps> = ({
                   strokeWidth={inv}
                 />
               ))}
+
+              {/* Canvas Design Lint Overlays (Contrast / Hardcoded Color / Off 4px Grid) */}
+              {visibleLintIssues.map(issue => {
+                const color = LINT_COLORS[issue.category];
+                return (
+                  <g key={issue.id}>
+                    <rect
+                      x={issue.x}
+                      y={issue.y}
+                      width={issue.width}
+                      height={issue.height}
+                      fill={`${color}18`}
+                      stroke={color}
+                      strokeWidth={1.5 * inv}
+                      strokeDasharray={issue.category === 'grid' ? `${4 * inv} ${2.5 * inv}` : undefined}
+                    >
+                      <title>{`${issue.layerName}: ${issue.message}`}</title>
+                    </rect>
+                    <circle
+                      cx={issue.x + issue.width}
+                      cy={issue.y}
+                      r={4.2 * inv}
+                      fill={color}
+                      stroke="#1E1E1E"
+                      strokeWidth={1 * inv}
+                    >
+                      <title>{`${issue.layerName}: ${issue.message}`}</title>
+                    </circle>
+                  </g>
+                );
+              })}
+
+              {/* Shift+Click Locked 2nd Layer Highlight */}
+              {lockedCompareLayer && (
+                <rect
+                  x={lockedCompareLayer.x}
+                  y={lockedCompareLayer.y}
+                  width={lockedCompareLayer.width}
+                  height={lockedCompareLayer.height}
+                  fill="rgba(242, 72, 34, 0.06)"
+                  stroke="#F24822"
+                  strokeWidth={1.5 * inv}
+                  strokeDasharray={`${4 * inv} ${3 * inv}`}
+                />
+              )}
 
               {/* Auto Layout Padding Overlays — authentic Figma Dev Mode BLUE hatch + blue pills */}
               {paddingOverlays.map(p => {
@@ -1504,26 +1704,86 @@ export const InspectCanvas: React.FC<InspectCanvasProps> = ({
         </div>
       </div>
 
-      {/* Live Layer Breadcrumb Bar above Bottom Dock (Inspect mode) */}
-      {viewMode === 'inspect' && breadcrumbs.length > 1 && (
-        <div className="canvas-breadcrumbs" onClick={e => e.stopPropagation()}>
-          {breadcrumbs.slice(-4).map((node, idx, arr) => {
-            const isLast = idx === arr.length - 1;
-            const isComp = Boolean(node.componentName || node.type === 'COMPONENT' || node.type === 'INSTANCE');
-            return (
-              <React.Fragment key={node.id}>
-                {idx > 0 && <ChevronRight size={10} className="crumb-sep" />}
-                <button
-                  className={`crumb-btn ${isLast ? 'active' : ''} ${isComp ? 'is-comp' : ''}`}
-                  onClick={() => onSelect(node.id)}
-                  title={node.name}
-                >
-                  {isComp && <Diamond size={9} />}
-                  <span>{node.name}</span>
-                </button>
-              </React.Fragment>
-            );
-          })}
+      {/* Floating Quick-Copy Bar + Breadcrumbs above Bottom Dock (Inspect mode) */}
+      {viewMode === 'inspect' && !canvasDeselected && !isRootSelected && (
+        <div className="canvas-quickcopy-bar" onClick={e => e.stopPropagation()}>
+          <div className="qc-actions">
+            <button
+              type="button"
+              className="qc-btn"
+              onClick={() => copyQuick(layerToTailwind(selectedLayer), 'Tailwind classes')}
+              title="Copy Tailwind classes"
+            >
+              <FileCode2 size={11} />
+              <span>Tailwind</span>
+            </button>
+            <button
+              type="button"
+              className="qc-btn"
+              onClick={() => {
+                const css = Object.entries(layerToCssMap(selectedLayer, unit))
+                  .map(([k, v]) => `${k}: ${v};`)
+                  .join('\n');
+                copyQuick(css, 'CSS');
+              }}
+              title="Copy CSS properties"
+            >
+              <Copy size={11} />
+              <span>CSS</span>
+            </button>
+            {selectedLayer.text && (
+              <button
+                type="button"
+                className="qc-btn"
+                onClick={() => copyQuick(selectedLayer.text!, 'text')}
+                title="Copy text content"
+              >
+                <span>Text</span>
+              </button>
+            )}
+            {selectedLayer.svg && (
+              <button
+                type="button"
+                className="qc-btn"
+                onClick={() => copyQuick(selectedLayer.svg!, 'SVG')}
+                title="Copy SVG markup"
+              >
+                <span>SVG</span>
+              </button>
+            )}
+            <button
+              type="button"
+              className="qc-btn is-ai"
+              onClick={() =>
+                copyQuick(buildAiPrompt(bundle, selectedLayer, unit, 'react-tailwind-ts', 'layer'), 'AI prompt')
+              }
+              title="Copy structured prompt for Cursor / Claude / ChatGPT"
+            >
+              <Sparkles size={11} />
+              <span>AI Prompt</span>
+            </button>
+          </div>
+          {breadcrumbs.length > 1 && (
+            <div className="qc-crumbs">
+              {breadcrumbs.slice(-3).map((node, idx, arr) => {
+                const isLast = idx === arr.length - 1;
+                const isComp = Boolean(node.componentName || node.type === 'COMPONENT' || node.type === 'INSTANCE');
+                return (
+                  <React.Fragment key={node.id}>
+                    {idx > 0 && <ChevronRight size={9} className="crumb-sep" />}
+                    <button
+                      className={`crumb-btn ${isLast ? 'active' : ''} ${isComp ? 'is-comp' : ''}`}
+                      onClick={() => onSelect(node.id)}
+                      title={`${node.name} · Shift+Click another layer to lock distance`}
+                    >
+                      {isComp && <Diamond size={8} />}
+                      <span>{node.name}</span>
+                    </button>
+                  </React.Fragment>
+                );
+              })}
+            </div>
+          )}
         </div>
       )}
 
@@ -1578,6 +1838,19 @@ export const InspectCanvas: React.FC<InspectCanvasProps> = ({
         >
           <MessageSquareText size={14} />
           {annCount > 0 && <span className="dock-ann-count">{annCount}</span>}
+        </button>
+        <button
+          className={`dock-tool dock-ann-btn dock-lint-btn ${showLint ? 'is-lint-on' : ''}`}
+          onClick={() => {
+            onViewModeChange('inspect');
+            setShowLint(v => !v);
+          }}
+          title={`Design Lint overlay — ${lintReport.counts.all} issue${lintReport.counts.all === 1 ? '' : 's'} (Contrast, Hardcoded colors, 4px Grid)`}
+        >
+          <AlertTriangle size={14} />
+          {lintReport.counts.all > 0 && (
+            <span className="dock-lint-count">{lintReport.counts.all}</span>
+          )}
         </button>
 
         <div className="dock-sep" />

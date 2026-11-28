@@ -15,18 +15,21 @@ import { DEMO_SCREENS } from './data/demoScreens';
 import { findLayerById, findParentMap } from './lib/measure';
 import {
   deleteScreen,
+  loadPinnedIds,
   loadRecentsMap,
   loadSavedScreens,
   saveScreen,
+  togglePinScreen,
   touchRecentScreen
 } from './lib/storage';
 import { decodeClipboardOrJson, decodeHashBundle, loadCloudShareLink } from './lib/transfer';
+import { fetchFigmaBundle, parseFigmaUrl } from './lib/figmaApi';
 import { buildAiPrompt, buildMcpJson } from './lib/aiContext';
 import { fmtMod } from './lib/platform';
 import { InspectCanvas, type PadSide } from './components/InspectCanvas';
 import { LeftSidebar } from './components/LeftSidebar';
 import { RightInspector } from './components/RightInspector';
-import { TransferModal, type ImportTab } from './components/TransferModal';
+import { PAT_STORAGE_KEY, TransferModal, type ImportTab } from './components/TransferModal';
 import { ShareModal } from './components/ShareModal';
 import { CommandPalette } from './components/CommandPalette';
 import { ShortcutsModal } from './components/ShortcutsModal';
@@ -55,6 +58,7 @@ export const App: React.FC = () => {
   );
   const [hasVisitedEditor, setHasVisitedEditor] = useState<boolean>(() => shouldStartInEditor());
   const [recentsMap, setRecentsMap] = useState<Record<string, number>>(() => loadRecentsMap());
+  const [pinnedIds, setPinnedIds] = useState<string[]>(() => loadPinnedIds());
   const [screens, setScreens] = useState<DevReadyBundle[]>(DEMO_SCREENS);
   const [activeScreenId, setActiveScreenId] = useState<string>(DEMO_SCREENS[0].id);
   const [selectedLayerId, setSelectedLayerId] = useState<string>(
@@ -78,6 +82,8 @@ export const App: React.FC = () => {
   const [hidePanels, setHidePanels] = useState(false);
   const [showImport, setShowImport] = useState(false);
   const [importTab, setImportTab] = useState<ImportTab>('figma-url');
+  const [importInitialUrl, setImportInitialUrl] = useState('');
+  const [syncingFigma, setSyncingFigma] = useState(false);
   const [showShare, setShowShare] = useState(false);
   const [compareHistoryId, setCompareHistoryId] = useState<string | null>(null);
   const [showCompareChanges, setShowCompareChanges] = useState(false);
@@ -427,9 +433,80 @@ export const App: React.FC = () => {
     notify(`Renamed to "${name}"`);
   };
 
-  const openImportModal = (tab: ImportTab = 'figma-url') => {
+  const openImportModal = (tab: ImportTab = 'figma-url', initialUrl = '') => {
     setImportTab(tab);
+    setImportInitialUrl(initialUrl);
     setShowImport(true);
+  };
+
+  const handleTogglePin = (id: string) => {
+    const next = togglePinScreen(id);
+    setPinnedIds(next);
+    notify(next.includes(id) ? 'Pinned to top' : 'Unpinned');
+  };
+
+  const handleDuplicateScreen = async (id: string) => {
+    const target = screens.find(s => s.id === id);
+    if (!target) return;
+    const now = new Date().toISOString();
+    const copy: DevReadyBundle = {
+      ...JSON.parse(JSON.stringify(target)),
+      id: `copy-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+      name: `${target.name} (Copy)`,
+      source: 'file',
+      updatedAt: now
+    };
+    await saveScreen(copy);
+    setScreens(prev => [copy, ...prev]);
+    setRecentsMap(touchRecentScreen(copy.id));
+    notify(`Duplicated "${target.name}"`);
+  };
+
+  const handleImportBatch = async (bundles: DevReadyBundle[]) => {
+    if (bundles.length === 0) return;
+    for (let i = bundles.length - 1; i >= 0; i--) {
+      await upsertScreen(bundles[i]);
+    }
+    notify(`Imported ${bundles.length} frames from Figma`);
+  };
+
+  const handleSyncFromFigma = async () => {
+    if (!activeScreen.figmaUrl || syncingFigma) return;
+    const parsed = parseFigmaUrl(activeScreen.figmaUrl);
+    if (!parsed || !parsed.nodeId) {
+      openImportModal('figma-url', activeScreen.figmaUrl);
+      return;
+    }
+    let token = '';
+    try {
+      token = localStorage.getItem(PAT_STORAGE_KEY) || '';
+    } catch {
+      token = '';
+    }
+    if (!token) {
+      openImportModal('figma-url', activeScreen.figmaUrl);
+      notify('Enter your Figma token once to sync latest changes');
+      return;
+    }
+    setSyncingFigma(true);
+    try {
+      const fresh = await fetchFigmaBundle({
+        fileKey: parsed.fileKey,
+        nodeId: parsed.nodeId,
+        fileName: activeScreen.fileName,
+        pageName: activeScreen.pageName,
+        canonicalUrl: activeScreen.figmaUrl,
+        token
+      });
+      await upsertScreen(
+        { ...fresh, id: activeScreen.id },
+        `Synced "${fresh.name}" — open Compare Changes to inspect diffs`
+      );
+    } catch (e) {
+      notify(e instanceof Error ? e.message : 'Failed to sync from Figma');
+    } finally {
+      setSyncingFigma(false);
+    }
   };
 
   const handleShareScreen = (id: string) => {
@@ -568,11 +645,14 @@ export const App: React.FC = () => {
         <WorkspaceHome
           screens={screens}
           recentsMap={recentsMap}
+          pinnedIds={pinnedIds}
           lastActiveScreen={activeScreen}
           hasVisitedEditor={hasVisitedEditor}
           theme={theme}
           onOpenScreen={handleSelectScreen}
           onShareScreen={handleShareScreen}
+          onTogglePin={handleTogglePin}
+          onDuplicateScreen={handleDuplicateScreen}
           onRenameScreen={handleRenameScreen}
           onStatusChange={handleStatusChange}
           onDeleteScreen={handleDeleteScreen}
@@ -709,6 +789,8 @@ export const App: React.FC = () => {
                 onCodeConnectChange={handleCodeConnectChange}
                 onOpenImport={() => openImportModal('figma-url')}
                 onOpenShare={() => setShowShare(true)}
+                onSyncFromFigma={handleSyncFromFigma}
+                syncingFigma={syncingFigma}
                 onOpenCompareChanges={histId => {
                   setCompareHistoryId(histId || null);
                   setShowCompareChanges(true);
@@ -758,8 +840,10 @@ export const App: React.FC = () => {
       {showImport && (
         <TransferModal
           initialTab={importTab}
+          initialFigmaUrl={importInitialUrl}
           onClose={() => setShowImport(false)}
           onImport={b => upsertScreen(b, `Imported "${b.name}"`)}
+          onImportBatch={handleImportBatch}
         />
       )}
       {showShare && (

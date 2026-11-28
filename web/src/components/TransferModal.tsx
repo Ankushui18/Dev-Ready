@@ -4,11 +4,14 @@ import {
   Check,
   ClipboardPaste,
   Copy,
+  Download,
+  ExternalLink,
   Eye,
   EyeOff,
   Frame,
   Link2,
   Lock,
+  Search,
   Trash2,
   Upload,
   X
@@ -21,23 +24,28 @@ import {
   parseFigmaUrl,
   type FigmaFrameCandidate
 } from '../lib/figmaApi';
+import { downloadBridgePluginZip } from '../lib/pluginZip';
 import { fmtMod } from '../lib/platform';
 
 export type ImportTab = 'figma-url' | 'paste' | 'file' | 'plugin';
 
 interface TransferModalProps {
   initialTab?: ImportTab;
+  initialFigmaUrl?: string;
   onClose: () => void;
   onImport: (bundle: DevReadyBundle) => void;
+  onImportBatch?: (bundles: DevReadyBundle[]) => void;
 }
 
 const MANIFEST_PATH = 'web/figma-bridge-plugin/manifest.json';
-const PAT_STORAGE_KEY = 'devready-figma-pat-v1';
+export const PAT_STORAGE_KEY = 'devready-figma-pat-v1';
 
 export const TransferModal: React.FC<TransferModalProps> = ({
   initialTab = 'figma-url',
+  initialFigmaUrl = '',
   onClose,
-  onImport
+  onImport,
+  onImportBatch
 }) => {
   const fileRef = useRef<HTMLInputElement>(null);
   const pasteInputRef = useRef<HTMLInputElement>(null);
@@ -45,7 +53,7 @@ export const TransferModal: React.FC<TransferModalProps> = ({
 
   const [tab, setTab] = useState<ImportTab>(initialTab);
   const [pasteVal, setPasteVal] = useState('');
-  const [figmaUrl, setFigmaUrl] = useState('');
+  const [figmaUrl, setFigmaUrl] = useState(initialFigmaUrl);
   const [figmaToken, setFigmaToken] = useState(() => {
     try {
       return localStorage.getItem(PAT_STORAGE_KEY) || '';
@@ -67,13 +75,25 @@ export const TransferModal: React.FC<TransferModalProps> = ({
     fileName: string;
     frames: FigmaFrameCandidate[];
   } | null>(null);
+  const [selectedFrameIds, setSelectedFrameIds] = useState<Set<string>>(new Set());
+  const [frameQuery, setFrameQuery] = useState('');
 
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [dragging, setDragging] = useState(false);
   const [copiedPath, setCopiedPath] = useState(false);
+  const [downloadedZip, setDownloadedZip] = useState(false);
 
   const parsedUrl = useMemo(() => parseFigmaUrl(figmaUrl), [figmaUrl]);
+
+  const filteredFrames = useMemo(() => {
+    if (!framePicker) return [];
+    const q = frameQuery.trim().toLowerCase();
+    if (!q) return framePicker.frames;
+    return framePicker.frames.filter(
+      f => f.name.toLowerCase().includes(q) || f.pageName.toLowerCase().includes(q)
+    );
+  }, [framePicker, frameQuery]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -187,6 +207,62 @@ export const TransferModal: React.FC<TransferModalProps> = ({
     }
   };
 
+  const handleBatchImport = async () => {
+    if (!framePicker || selectedFrameIds.size === 0) return;
+    setError(null);
+    setBusy(true);
+    persistTokenPreference(figmaToken, rememberToken);
+
+    const targets = framePicker.frames.filter(f => selectedFrameIds.has(f.id)).slice(0, 12);
+    const imported: DevReadyBundle[] = [];
+    try {
+      for (let i = 0; i < targets.length; i++) {
+        const fr = targets[i];
+        setStageMsg(`Importing ${i + 1} of ${targets.length}: ${fr.name}…`);
+        const bundle = await fetchFigmaBundle({
+          fileKey: framePicker.fileKey,
+          nodeId: fr.id,
+          fileName: framePicker.fileName,
+          pageName: fr.pageName,
+          token: figmaToken
+        });
+        imported.push(bundle);
+      }
+      if (imported.length === 1) {
+        onImport(imported[0]);
+      } else if (imported.length > 1) {
+        if (onImportBatch) {
+          onImportBatch(imported);
+        } else {
+          for (const b of imported) onImport(b);
+        }
+      }
+      onClose();
+    } catch (e) {
+      if (imported.length > 0) {
+        if (onImportBatch) onImportBatch(imported);
+        else for (const b of imported) onImport(b);
+      }
+      setError(
+        e instanceof Error
+          ? `${e.message}${imported.length ? ` (${imported.length} frames saved before error)` : ''}`
+          : 'Batch import interrupted'
+      );
+    } finally {
+      setBusy(false);
+      setStageMsg(null);
+    }
+  };
+
+  const toggleFrameSelect = (id: string) => {
+    setSelectedFrameIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
   const handleFigmaUrlSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
@@ -206,7 +282,7 @@ export const TransferModal: React.FC<TransferModalProps> = ({
       return;
     }
 
-    // No node-id in URL: list top-level frames so user can pick one cleanly
+    // No node-id in URL: list top-level frames so user can pick 1 or batch-import multiple!
     setBusy(true);
     setStageMsg('Listing frames in Figma file…');
     try {
@@ -218,6 +294,8 @@ export const TransferModal: React.FC<TransferModalProps> = ({
         return;
       } else {
         setFramePicker({ fileKey: parsedUrl.fileKey, fileName, frames });
+        setSelectedFrameIds(new Set([frames[0].id]));
+        setFrameQuery('');
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not read Figma file');
@@ -231,6 +309,12 @@ export const TransferModal: React.FC<TransferModalProps> = ({
     await navigator.clipboard.writeText(MANIFEST_PATH).catch(() => {});
     setCopiedPath(true);
     setTimeout(() => setCopiedPath(false), 1600);
+  };
+
+  const handleDownloadPlugin = () => {
+    downloadBridgePluginZip();
+    setDownloadedZip(true);
+    setTimeout(() => setDownloadedZip(false), 2400);
   };
 
   return (
@@ -303,7 +387,7 @@ export const TransferModal: React.FC<TransferModalProps> = ({
                     <div>
                       <div className="fig-frame-picker-title">{framePicker.fileName}</div>
                       <div className="fig-frame-picker-sub">
-                        Choose a frame to inspect ({framePicker.frames.length} found)
+                        Select 1 or multiple frames ({framePicker.frames.length} found · up to 12/batch)
                       </div>
                     </div>
                     <button
@@ -315,29 +399,80 @@ export const TransferModal: React.FC<TransferModalProps> = ({
                       Change link
                     </button>
                   </div>
-                  <div className="fig-frame-list">
-                    {framePicker.frames.slice(0, 60).map(fr => (
-                      <button
-                        key={fr.id}
-                        type="button"
-                        className="fig-frame-item"
+
+                  <div className="fig-frame-toolbar">
+                    <div className="fig-frame-search">
+                      <Search size={11} />
+                      <input
+                        type="text"
+                        placeholder="Filter frames or pages…"
+                        value={frameQuery}
+                        onChange={e => setFrameQuery(e.target.value)}
                         disabled={busy}
-                        onClick={() =>
-                          handleImportFigmaFrame(framePicker.fileKey, fr.id, framePicker.fileName, fr.pageName)
+                      />
+                    </div>
+                    <button
+                      type="button"
+                      className="fig-mini-link"
+                      disabled={busy}
+                      onClick={() => {
+                        if (selectedFrameIds.size > 0) {
+                          setSelectedFrameIds(new Set());
+                        } else {
+                          setSelectedFrameIds(new Set(filteredFrames.slice(0, 12).map(f => f.id)));
                         }
-                      >
-                        <Frame size={13} className="fig-frame-ic" />
-                        <div className="fig-frame-meta">
-                          <span className="fig-frame-name">{fr.name}</span>
-                          <span className="fig-frame-page">{fr.pageName}</span>
-                        </div>
-                        <span className="fig-frame-dim mono">
-                          {fr.width}×{fr.height}
-                        </span>
-                      </button>
-                    ))}
+                      }}
+                    >
+                      {selectedFrameIds.size > 0 ? 'Clear' : 'Select up to 12'}
+                    </button>
                   </div>
-                  {stageMsg && <div className="fig-stage-line">{stageMsg}</div>}
+
+                  <div className="fig-frame-list">
+                    {filteredFrames.slice(0, 80).map(fr => {
+                      const checked = selectedFrameIds.has(fr.id);
+                      return (
+                        <div
+                          key={fr.id}
+                          className={`fig-frame-item ${checked ? 'is-checked' : ''}`}
+                          onClick={() => !busy && toggleFrameSelect(fr.id)}
+                          onDoubleClick={() =>
+                            !busy &&
+                            handleImportFigmaFrame(framePicker.fileKey, fr.id, framePicker.fileName, fr.pageName)
+                          }
+                        >
+                          <input
+                            type="checkbox"
+                            checked={checked}
+                            disabled={busy}
+                            onChange={() => toggleFrameSelect(fr.id)}
+                            onClick={e => e.stopPropagation()}
+                            aria-label={`Select ${fr.name}`}
+                          />
+                          <Frame size={13} className="fig-frame-ic" />
+                          <div className="fig-frame-meta">
+                            <span className="fig-frame-name">{fr.name}</span>
+                            <span className="fig-frame-page">{fr.pageName}</span>
+                          </div>
+                          <span className="fig-frame-dim mono">
+                            {fr.width}×{fr.height}
+                          </span>
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  <button
+                    type="button"
+                    className="fig-btn-primary fig-btn-full"
+                    disabled={selectedFrameIds.size === 0 || busy}
+                    onClick={handleBatchImport}
+                  >
+                    {busy
+                      ? stageMsg || 'Importing frames…'
+                      : selectedFrameIds.size === 1
+                        ? 'Import 1 Selected Frame'
+                        : `Import ${Math.min(selectedFrameIds.size, 12)} Selected Frames`}
+                  </button>
                 </div>
               ) : (
                 <form className="fig-url-form" onSubmit={handleFigmaUrlSubmit}>
@@ -350,7 +485,7 @@ export const TransferModal: React.FC<TransferModalProps> = ({
                         <span className="fig-parsed-badge">
                           <Link2 size={10} />
                           <span>
-                            {parsedUrl.nodeId ? `Frame ${parsedUrl.nodeId}` : 'Whole file'}
+                            {parsedUrl.nodeId ? `Frame ${parsedUrl.nodeId}` : 'Whole file (multi-select)'}
                           </span>
                         </span>
                       )}
@@ -372,7 +507,15 @@ export const TransferModal: React.FC<TransferModalProps> = ({
                       <label className="fig-field-label" htmlFor="fig-token-input">
                         Figma Personal Access Token
                       </label>
-                      <span className="fig-label-hint">Settings → Security → Read-only</span>
+                      <a
+                        className="fig-token-help-link"
+                        href="https://www.figma.com/settings"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                      >
+                        <span>Create token</span>
+                        <ExternalLink size={10} />
+                      </a>
                     </div>
                     <div className="fig-token-wrap">
                       <input
@@ -429,7 +572,7 @@ export const TransferModal: React.FC<TransferModalProps> = ({
                   </button>
 
                   <p className="fig-hint-line">
-                    Calls <code>api.figma.com</code> directly from your browser — your token is never sent to our server or included in share links.
+                    Calls <code>api.figma.com</code> directly from your browser — your token never touches our server or share links.
                   </p>
                 </form>
               )}
@@ -527,32 +670,51 @@ export const TransferModal: React.FC<TransferModalProps> = ({
           )}
 
           {tab === 'plugin' && (
-            <div className="fig-steps">
-              <div className="fig-step">
-                <span className="fig-step-num">1</span>
-                <div className="fig-step-text">
-                  In Figma Desktop, open <strong>Plugins → Development → Import plugin from manifest…</strong>
+            <div className="fig-plugin-tab">
+              <div className="fig-plugin-dl-card">
+                <div className="fig-plugin-dl-copy">
+                  <div className="fig-plugin-dl-title">DevReady Web Bridge Plugin</div>
+                  <div className="fig-plugin-dl-sub">
+                    Sync selected Figma frames, Local Variables, SVG icons &amp; PNGs in 1 click.
+                  </div>
                 </div>
+                <button
+                  type="button"
+                  className="fig-btn-primary"
+                  onClick={handleDownloadPlugin}
+                >
+                  {downloadedZip ? <Check size={12} /> : <Download size={12} />}
+                  <span>{downloadedZip ? 'Downloaded!' : 'Download .zip'}</span>
+                </button>
               </div>
-              <div className="fig-step">
-                <span className="fig-step-num">2</span>
-                <div className="fig-step-text">
-                  <div>Select the companion bridge manifest:</div>
-                  <button
-                    type="button"
-                    className="fig-path-pill"
-                    onClick={handleCopyPath}
-                    title="Copy manifest path"
-                  >
-                    <code className="fig-path-text">{MANIFEST_PATH}</code>
-                    {copiedPath ? <Check size={11} className="ic-ok" /> : <Copy size={11} />}
-                  </button>
+
+              <div className="fig-steps">
+                <div className="fig-step">
+                  <span className="fig-step-num">1</span>
+                  <div className="fig-step-text">
+                    Download &amp; unzip <strong>devready-figma-bridge-plugin.zip</strong> (or use the repo folder below).
+                  </div>
                 </div>
-              </div>
-              <div className="fig-step">
-                <span className="fig-step-num">3</span>
-                <div className="fig-step-text">
-                  Select any frame and click <strong>Open in Web Dev Mode ↗</strong> to inspect full-screen with 2× PNG, SVG assets & variables.
+                <div className="fig-step">
+                  <span className="fig-step-num">2</span>
+                  <div className="fig-step-text">
+                    In Figma Desktop, open <strong>Plugins → Development → Import plugin from manifest…</strong> and select <code>manifest.json</code>:
+                    <button
+                      type="button"
+                      className="fig-path-pill"
+                      onClick={handleCopyPath}
+                      title="Copy repo manifest path"
+                    >
+                      <code className="fig-path-text">{MANIFEST_PATH}</code>
+                      {copiedPath ? <Check size={11} className="ic-ok" /> : <Copy size={11} />}
+                    </button>
+                  </div>
+                </div>
+                <div className="fig-step">
+                  <span className="fig-step-num">3</span>
+                  <div className="fig-step-text">
+                    Select any frame and click <strong>Open in Web Dev Mode ↗</strong>.
+                  </div>
                 </div>
               </div>
             </div>

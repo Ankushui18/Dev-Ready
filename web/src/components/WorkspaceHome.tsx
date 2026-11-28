@@ -2,9 +2,13 @@ import React, { useMemo, useState } from 'react';
 import {
   ArrowRight,
   Check,
+  ChevronDown,
+  ChevronRight,
   ClipboardPaste,
   Clock,
   Code2,
+  Copy,
+  Folder,
   FolderInput,
   Keyboard,
   LayoutGrid,
@@ -17,6 +21,7 @@ import {
   Search,
   Share2,
   Sparkles,
+  Star,
   Sun,
   Trash2,
   Upload,
@@ -28,17 +33,20 @@ import { PopoverSelect } from './PopoverSelect';
 import type { ImportTab } from './TransferModal';
 import { fmtMod } from '../lib/platform';
 
-export type WorkspaceSection = 'recents' | 'imports' | 'ready' | 'samples';
+export type WorkspaceSection = 'recents' | 'pinned' | 'imports' | 'ready' | 'samples';
 type SortMode = 'recent' | 'modified' | 'name' | 'layers';
 
 interface WorkspaceHomeProps {
   screens: DevReadyBundle[];
   recentsMap: Record<string, number>;
+  pinnedIds: string[];
   lastActiveScreen: DevReadyBundle | null;
   hasVisitedEditor: boolean;
   theme: 'dark' | 'light';
   onOpenScreen: (id: string) => void;
   onShareScreen: (id: string) => void;
+  onTogglePin: (id: string) => void;
+  onDuplicateScreen: (id: string) => void;
   onRenameScreen: (id: string, name: string) => void;
   onStatusChange: (id: string, status: ScreenStatus) => void;
   onDeleteScreen: (id: string) => void;
@@ -92,11 +100,14 @@ function sourceLabel(src: DevReadyBundle['source']): string {
 export const WorkspaceHome: React.FC<WorkspaceHomeProps> = ({
   screens,
   recentsMap,
+  pinnedIds,
   lastActiveScreen,
   hasVisitedEditor,
   theme,
   onOpenScreen,
   onShareScreen,
+  onTogglePin,
+  onDuplicateScreen,
   onRenameScreen,
   onStatusChange,
   onDeleteScreen,
@@ -110,9 +121,13 @@ export const WorkspaceHome: React.FC<WorkspaceHomeProps> = ({
   const [statusFilter, setStatusFilter] = useState<'all' | ScreenStatus>('all');
   const [sortMode, setSortMode] = useState<SortMode>('recent');
   const [layout, setLayout] = useState<'grid' | 'list'>('grid');
+  const [groupByFile, setGroupByFile] = useState(false);
+  const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>({});
   const [renamingId, setRenamingId] = useState<string | null>(null);
   const [renameDraft, setRenameDraft] = useState('');
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+
+  const pinnedSet = useMemo(() => new Set(pinnedIds), [pinnedIds]);
 
   const layerCounts = useMemo(() => {
     const map = new Map<string, number>();
@@ -121,15 +136,17 @@ export const WorkspaceHome: React.FC<WorkspaceHomeProps> = ({
   }, [screens]);
 
   const counts = useMemo(() => {
+    const pinned = screens.filter(s => pinnedSet.has(s.id)).length;
     const imports = screens.filter(s => s.source !== 'demo').length;
     const ready = screens.filter(s => s.status === 'ready').length;
     const samples = screens.filter(s => s.source === 'demo').length;
-    return { all: screens.length, imports, ready, samples };
-  }, [screens]);
+    return { all: screens.length, pinned, imports, ready, samples };
+  }, [screens, pinnedSet]);
 
   const visibleScreens = useMemo(() => {
     const q = query.trim().toLowerCase();
     let list = screens.filter(sc => {
+      if (section === 'pinned' && !pinnedSet.has(sc.id)) return false;
       if (section === 'imports' && sc.source === 'demo') return false;
       if (section === 'ready' && sc.status !== 'ready') return false;
       if (section === 'samples' && sc.source !== 'demo') return false;
@@ -144,12 +161,17 @@ export const WorkspaceHome: React.FC<WorkspaceHomeProps> = ({
     });
 
     list = [...list].sort((a, b) => {
+      // Pinned items float gracefully to top in Recents
+      if (section === 'recents' && sortMode === 'recent') {
+        const pa = pinnedSet.has(a.id) ? 1 : 0;
+        const pb = pinnedSet.has(b.id) ? 1 : 0;
+        if (pa !== pb) return pb - pa;
+      }
       if (sortMode === 'name') return a.name.localeCompare(b.name);
       if (sortMode === 'layers') return (layerCounts.get(b.id) || 0) - (layerCounts.get(a.id) || 0);
       if (sortMode === 'modified') {
         return new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime();
       }
-      // 'recent': imported files & recently opened items float cleanly to top
       const ta = recentsMap[a.id] || new Date(a.updatedAt).getTime();
       const tb = recentsMap[b.id] || new Date(b.updatedAt).getTime();
       if (ta !== tb) return tb - ta;
@@ -157,7 +179,19 @@ export const WorkspaceHome: React.FC<WorkspaceHomeProps> = ({
       return 0;
     });
     return list;
-  }, [screens, section, statusFilter, query, sortMode, recentsMap, layerCounts]);
+  }, [screens, section, statusFilter, query, sortMode, recentsMap, layerCounts, pinnedSet]);
+
+  const groupedScreens = useMemo(() => {
+    if (!groupByFile) return null;
+    const groups = new Map<string, DevReadyBundle[]>();
+    for (const sc of visibleScreens) {
+      const key = sc.fileName?.trim() || 'Standalone Frames';
+      const arr = groups.get(key) || [];
+      arr.push(sc);
+      groups.set(key, arr);
+    }
+    return [...groups.entries()];
+  }, [groupByFile, visibleScreens]);
 
   const startRename = (sc: DevReadyBundle, e: React.MouseEvent) => {
     e.stopPropagation();
@@ -176,11 +210,304 @@ export const WorkspaceHome: React.FC<WorkspaceHomeProps> = ({
   const sectionTitle =
     section === 'recents'
       ? 'Recents'
-      : section === 'imports'
-        ? 'My imports'
-        : section === 'ready'
-          ? 'Ready for dev'
-          : 'Sample files';
+      : section === 'pinned'
+        ? 'Pinned'
+        : section === 'imports'
+          ? 'My imports'
+          : section === 'ready'
+            ? 'Ready for dev'
+            : 'Sample files';
+
+  const renderGridCards = (items: DevReadyBundle[]) => (
+    <div className="ws-grid">
+      {items.map(sc => {
+        const isSample = sc.source === 'demo';
+        const isPinned = pinnedSet.has(sc.id);
+        const layers = layerCounts.get(sc.id) || 1;
+        const recentTs = recentsMap[sc.id];
+        const timeLabel = recentTs
+          ? `Opened ${fmtRelativeTime(recentTs)}`
+          : `Edited ${fmtRelativeTime(new Date(sc.updatedAt).getTime())}`;
+        const previewScale = Math.min(280 / Math.max(sc.width, 1), 162 / Math.max(sc.height, 1));
+
+        return (
+          <div
+            key={sc.id}
+            className="ws-card"
+            role="button"
+            tabIndex={0}
+            onClick={() => {
+              if (renamingId !== sc.id) onOpenScreen(sc.id);
+            }}
+            onKeyDown={e => {
+              if (renamingId === sc.id) return;
+              if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                onOpenScreen(sc.id);
+              }
+            }}
+          >
+            {/* Live Miniature Artboard Thumbnail */}
+            <div className="ws-card-thumb">
+              {sc.screenshotDataUrl ? (
+                <img
+                  src={sc.screenshotDataUrl}
+                  alt={sc.name}
+                  className="ws-card-shot"
+                  loading="lazy"
+                />
+              ) : (
+                <div
+                  className="ws-card-vec-wrap"
+                  style={{
+                    width: Math.max(40, Math.round(sc.width * previewScale)),
+                    height: Math.max(30, Math.round(sc.height * previewScale))
+                  }}
+                >
+                  <ArtboardVectorView bundle={sc} scale={previewScale} />
+                </div>
+              )}
+
+              <div className="ws-thumb-badges">
+                <span className={`ws-source-tag ${isSample ? 'sample' : 'imported'}`}>
+                  {sourceLabel(sc.source)}
+                </span>
+                {isPinned && (
+                  <span className="ws-pin-badge" title="Pinned">
+                    <Star size={10} fill="currentColor" />
+                  </span>
+                )}
+              </div>
+
+              <div className="ws-card-hover-bar" onClick={e => e.stopPropagation()}>
+                <button
+                  type="button"
+                  className={`ws-card-act ${isPinned ? 'is-pinned' : ''}`}
+                  title={isPinned ? 'Unpin' : 'Pin to top'}
+                  aria-label={isPinned ? `Unpin ${sc.name}` : `Pin ${sc.name}`}
+                  onClick={() => onTogglePin(sc.id)}
+                >
+                  <Star size={12} fill={isPinned ? 'currentColor' : 'none'} />
+                </button>
+                <button
+                  type="button"
+                  className="ws-card-act"
+                  title="Share link"
+                  aria-label={`Share ${sc.name}`}
+                  onClick={() => onShareScreen(sc.id)}
+                >
+                  <Share2 size={12} />
+                </button>
+                <button
+                  type="button"
+                  className="ws-card-act"
+                  title="Duplicate copy"
+                  aria-label={`Duplicate ${sc.name}`}
+                  onClick={() => onDuplicateScreen(sc.id)}
+                >
+                  <Copy size={12} />
+                </button>
+                <button
+                  type="button"
+                  className="ws-card-act"
+                  title="Rename"
+                  aria-label={`Rename ${sc.name}`}
+                  onClick={e => startRename(sc, e)}
+                >
+                  <Pencil size={12} />
+                </button>
+                {!isSample &&
+                  (confirmDeleteId === sc.id ? (
+                    <button
+                      type="button"
+                      className="ws-card-act danger-confirm"
+                      title="Confirm delete"
+                      onClick={() => {
+                        setConfirmDeleteId(null);
+                        onDeleteScreen(sc.id);
+                      }}
+                    >
+                      <Check size={12} />
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      className="ws-card-act danger"
+                      title="Remove project"
+                      aria-label={`Remove ${sc.name}`}
+                      onClick={() => setConfirmDeleteId(sc.id)}
+                    >
+                      <Trash2 size={12} />
+                    </button>
+                  ))}
+              </div>
+            </div>
+
+            {/* Card Footer */}
+            <div className="ws-card-foot">
+              <div className="ws-card-title-row">
+                {renamingId === sc.id ? (
+                  <form
+                    className="ws-rename-form"
+                    onClick={e => e.stopPropagation()}
+                    onSubmit={e => {
+                      e.preventDefault();
+                      commitRename();
+                    }}
+                  >
+                    <input
+                      type="text"
+                      className="ws-rename-input"
+                      value={renameDraft}
+                      autoFocus
+                      onChange={e => setRenameDraft(e.target.value)}
+                      onBlur={commitRename}
+                      onKeyDown={e => {
+                        if (e.key === 'Escape') {
+                          e.stopPropagation();
+                          setRenamingId(null);
+                        }
+                      }}
+                    />
+                  </form>
+                ) : (
+                  <div className="ws-card-name" title={sc.name}>
+                    {sc.name}
+                  </div>
+                )}
+                <span
+                  className="ws-status-dot"
+                  style={{ background: STATUS_META[sc.status].dot }}
+                  title={STATUS_META[sc.status].label}
+                />
+              </div>
+
+              <div className="ws-card-sub">
+                <span className="ws-card-file" title={sc.fileName || sc.pageName}>
+                  {sc.fileName || sc.pageName || 'Figma Frame'}
+                </span>
+                <span className="ws-card-sep">·</span>
+                <span className="mono">
+                  {sc.width}×{sc.height}
+                </span>
+              </div>
+
+              <div className="ws-card-meta">
+                <span className="mono">
+                  {layers} layers · {sc.tokens.length} tokens
+                </span>
+                <span className="ws-card-time">{timeLabel}</span>
+              </div>
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+
+  const renderListRows = (items: DevReadyBundle[]) => (
+    <div className="ws-list">
+      <div className="ws-list-head">
+        <span>Screen</span>
+        <span>Status</span>
+        <span>Size</span>
+        <span>Layers</span>
+        <span>Activity</span>
+        <span aria-hidden="true" />
+      </div>
+      {items.map(sc => {
+        const isSample = sc.source === 'demo';
+        const isPinned = pinnedSet.has(sc.id);
+        const layers = layerCounts.get(sc.id) || 1;
+        const recentTs = recentsMap[sc.id];
+        const timeLabel = recentTs
+          ? `Opened ${fmtRelativeTime(recentTs)}`
+          : `Edited ${fmtRelativeTime(new Date(sc.updatedAt).getTime())}`;
+        const miniScale = Math.min(44 / Math.max(sc.width, 1), 28 / Math.max(sc.height, 1));
+
+        return (
+          <div key={sc.id} className="ws-list-row" onClick={() => onOpenScreen(sc.id)}>
+            <div className="ws-list-main">
+              <div className="ws-list-thumb">
+                {sc.screenshotDataUrl ? (
+                  <img src={sc.screenshotDataUrl} alt="" />
+                ) : (
+                  <div
+                    style={{
+                      width: Math.max(12, Math.round(sc.width * miniScale)),
+                      height: Math.max(10, Math.round(sc.height * miniScale)),
+                      overflow: 'hidden',
+                      borderRadius: 2
+                    }}
+                  >
+                    <ArtboardVectorView bundle={sc} scale={miniScale} />
+                  </div>
+                )}
+              </div>
+              <div className="ws-list-titles">
+                <div className="ws-list-name">
+                  {isPinned && <Star size={10} fill="#F59E0B" color="#F59E0B" style={{ marginRight: 5 }} />}
+                  {sc.name}
+                </div>
+                <div className="ws-list-sub">
+                  <span>{sc.fileName || sc.pageName || 'Figma Frame'}</span>
+                  <span>·</span>
+                  <span>{sourceLabel(sc.source)}</span>
+                </div>
+              </div>
+            </div>
+
+            <div onClick={e => e.stopPropagation()}>
+              <PopoverSelect
+                value={sc.status}
+                onChange={v => onStatusChange(sc.id, v as ScreenStatus)}
+                options={[
+                  { value: 'ready', label: 'Ready for dev', dotColor: '#14AE5C' },
+                  { value: 'in-progress', label: 'In progress', dotColor: '#F59E0B' },
+                  { value: 'done', label: 'Completed', dotColor: '#0D99FF' }
+                ]}
+              />
+            </div>
+
+            <div className="mono ws-list-dim">
+              {sc.width}×{sc.height}
+            </div>
+            <div className="mono ws-list-dim">{layers}</div>
+            <div className="ws-list-time">{timeLabel}</div>
+
+            <div className="ws-list-acts" onClick={e => e.stopPropagation()}>
+              <button
+                type="button"
+                className="quiet-icon-btn"
+                title={isPinned ? 'Unpin' : 'Pin'}
+                onClick={() => onTogglePin(sc.id)}
+              >
+                <Star size={13} fill={isPinned ? '#F59E0B' : 'none'} color={isPinned ? '#F59E0B' : 'currentColor'} />
+              </button>
+              <button
+                type="button"
+                className="quiet-icon-btn"
+                title="Share link"
+                onClick={() => onShareScreen(sc.id)}
+              >
+                <Share2 size={13} />
+              </button>
+              {!isSample && (
+                <button
+                  type="button"
+                  className="quiet-icon-btn"
+                  title="Remove"
+                  onClick={() => onDeleteScreen(sc.id)}
+                >
+                  <Trash2 size={13} />
+                </button>
+              )}
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
 
   return (
     <div className="ws-shell">
@@ -219,6 +546,15 @@ export const WorkspaceHome: React.FC<WorkspaceHomeProps> = ({
             <Clock size={14} />
             <span>Recents</span>
             <span className="ws-nav-count mono">{counts.all}</span>
+          </button>
+          <button
+            type="button"
+            className={`ws-nav-item ${section === 'pinned' ? 'active' : ''}`}
+            onClick={() => setSection('pinned')}
+          >
+            <Star size={14} />
+            <span>Pinned</span>
+            <span className="ws-nav-count mono">{counts.pinned}</span>
           </button>
           <button
             type="button"
@@ -369,7 +705,7 @@ export const WorkspaceHome: React.FC<WorkspaceHomeProps> = ({
                 <div className="ws-quick-body">
                   <div className="ws-quick-title">Import via Figma URL</div>
                   <div className="ws-quick-sub">
-                    Paste any figma.com link — no plugin required
+                    Single frame or multi-frame batch — no plugin needed
                   </div>
                 </div>
                 <ArrowRight size={13} className="ws-quick-arrow" />
@@ -384,9 +720,9 @@ export const WorkspaceHome: React.FC<WorkspaceHomeProps> = ({
                   <Plug size={15} />
                 </div>
                 <div className="ws-quick-body">
-                  <div className="ws-quick-title">Figma Bridge Plugin</div>
+                  <div className="ws-quick-title">Figma Bridge Plugin (.zip)</div>
                   <div className="ws-quick-sub">
-                    1-click live frame sync with 2× PNG & SVGs
+                    1-click download · live sync with 2× PNG &amp; variables
                   </div>
                 </div>
                 <ArrowRight size={13} className="ws-quick-arrow" />
@@ -430,6 +766,16 @@ export const WorkspaceHome: React.FC<WorkspaceHomeProps> = ({
             </div>
 
             <div className="ws-controls-right">
+              <button
+                type="button"
+                className={`ws-pill ${groupByFile ? 'active' : ''}`}
+                onClick={() => setGroupByFile(v => !v)}
+                title="Group screens by Figma file"
+              >
+                <Folder size={12} />
+                <span>Group by file</span>
+              </button>
+
               <PopoverSelect
                 value={sortMode}
                 onChange={v => setSortMode(v as SortMode)}
@@ -468,17 +814,27 @@ export const WorkspaceHome: React.FC<WorkspaceHomeProps> = ({
           {visibleScreens.length === 0 ? (
             <div className="ws-empty">
               <div className="ws-empty-ic">
-                {section === 'imports' ? <FolderInput size={22} /> : <Search size={22} />}
+                {section === 'pinned' ? (
+                  <Star size={22} />
+                ) : section === 'imports' ? (
+                  <FolderInput size={22} />
+                ) : (
+                  <Search size={22} />
+                )}
               </div>
               <h2>
-                {section === 'imports' && !query && statusFilter === 'all'
-                  ? 'No imported Figma files yet'
-                  : 'No matching screens'}
+                {section === 'pinned' && !query
+                  ? 'No pinned screens yet'
+                  : section === 'imports' && !query && statusFilter === 'all'
+                    ? 'No imported Figma files yet'
+                    : 'No matching screens'}
               </h2>
               <p>
-                {section === 'imports' && !query && statusFilter === 'all'
-                  ? 'Import directly from a Figma URL, send a frame with the Figma Bridge plugin, or drop a .devready.json bundle onto this window.'
-                  : 'Try clearing your search query or switching status filters.'}
+                {section === 'pinned' && !query
+                  ? 'Click the star icon on any screen card to pin your active sprint screens to the top.'
+                  : section === 'imports' && !query && statusFilter === 'all'
+                    ? 'Import directly from a Figma URL, download the Figma Bridge plugin (.zip), or drop a .devready.json bundle onto this window.'
+                    : 'Try clearing your search query or switching status filters.'}
               </p>
               <div className="ws-empty-actions">
                 {section === 'imports' && !query && statusFilter === 'all' ? (
@@ -498,6 +854,14 @@ export const WorkspaceHome: React.FC<WorkspaceHomeProps> = ({
                       Explore sample files
                     </button>
                   </>
+                ) : section === 'pinned' && !query ? (
+                  <button
+                    type="button"
+                    className="fig-btn-ghost"
+                    onClick={() => setSection('recents')}
+                  >
+                    Browse Recents
+                  </button>
                 ) : (
                   <button
                     type="button"
@@ -512,261 +876,34 @@ export const WorkspaceHome: React.FC<WorkspaceHomeProps> = ({
                 )}
               </div>
             </div>
-          ) : layout === 'grid' ? (
-            /* Project Cards Grid */
-            <div className="ws-grid">
-              {visibleScreens.map(sc => {
-                const isSample = sc.source === 'demo';
-                const layers = layerCounts.get(sc.id) || 1;
-                const recentTs = recentsMap[sc.id];
-                const timeLabel = recentTs
-                  ? `Opened ${fmtRelativeTime(recentTs)}`
-                  : `Edited ${fmtRelativeTime(new Date(sc.updatedAt).getTime())}`;
-                const previewScale = Math.min(280 / Math.max(sc.width, 1), 162 / Math.max(sc.height, 1));
-
+          ) : groupedScreens ? (
+            <div className="ws-groups">
+              {groupedScreens.map(([fileName, groupItems]) => {
+                const isCollapsed = Boolean(collapsedGroups[fileName]);
                 return (
-                  <div
-                    key={sc.id}
-                    className="ws-card"
-                    role="button"
-                    tabIndex={0}
-                    onClick={() => {
-                      if (renamingId !== sc.id) onOpenScreen(sc.id);
-                    }}
-                    onKeyDown={e => {
-                      if (renamingId === sc.id) return;
-                      if (e.key === 'Enter' || e.key === ' ') {
-                        e.preventDefault();
-                        onOpenScreen(sc.id);
+                  <section key={fileName} className="ws-group-section">
+                    <button
+                      type="button"
+                      className="ws-group-head"
+                      onClick={() =>
+                        setCollapsedGroups(prev => ({ ...prev, [fileName]: !prev[fileName] }))
                       }
-                    }}
-                  >
-                    {/* Live Miniature Artboard Thumbnail */}
-                    <div className="ws-card-thumb">
-                      {sc.screenshotDataUrl ? (
-                        <img
-                          src={sc.screenshotDataUrl}
-                          alt={sc.name}
-                          className="ws-card-shot"
-                          loading="lazy"
-                        />
-                      ) : (
-                        <div
-                          className="ws-card-vec-wrap"
-                          style={{
-                            width: Math.max(40, Math.round(sc.width * previewScale)),
-                            height: Math.max(30, Math.round(sc.height * previewScale))
-                          }}
-                        >
-                          <ArtboardVectorView bundle={sc} scale={previewScale} />
-                        </div>
-                      )}
-
-                      <span className={`ws-source-tag ${isSample ? 'sample' : 'imported'}`}>
-                        {sourceLabel(sc.source)}
-                      </span>
-
-                      <div className="ws-card-hover-bar" onClick={e => e.stopPropagation()}>
-                        <button
-                          type="button"
-                          className="ws-card-act"
-                          title="Share encrypted link"
-                          aria-label={`Share ${sc.name}`}
-                          onClick={() => onShareScreen(sc.id)}
-                        >
-                          <Share2 size={12} />
-                        </button>
-                        <button
-                          type="button"
-                          className="ws-card-act"
-                          title="Rename"
-                          aria-label={`Rename ${sc.name}`}
-                          onClick={e => startRename(sc, e)}
-                        >
-                          <Pencil size={12} />
-                        </button>
-                        {!isSample &&
-                          (confirmDeleteId === sc.id ? (
-                            <button
-                              type="button"
-                              className="ws-card-act danger-confirm"
-                              title="Confirm delete"
-                              onClick={() => {
-                                setConfirmDeleteId(null);
-                                onDeleteScreen(sc.id);
-                              }}
-                            >
-                              <Check size={12} />
-                            </button>
-                          ) : (
-                            <button
-                              type="button"
-                              className="ws-card-act danger"
-                              title="Remove project"
-                              aria-label={`Remove ${sc.name}`}
-                              onClick={() => setConfirmDeleteId(sc.id)}
-                            >
-                              <Trash2 size={12} />
-                            </button>
-                          ))}
-                      </div>
-                    </div>
-
-                    {/* Card Footer */}
-                    <div className="ws-card-foot">
-                      <div className="ws-card-title-row">
-                        {renamingId === sc.id ? (
-                          <form
-                            className="ws-rename-form"
-                            onClick={e => e.stopPropagation()}
-                            onSubmit={e => {
-                              e.preventDefault();
-                              commitRename();
-                            }}
-                          >
-                            <input
-                              type="text"
-                              className="ws-rename-input"
-                              value={renameDraft}
-                              autoFocus
-                              onChange={e => setRenameDraft(e.target.value)}
-                              onBlur={commitRename}
-                              onKeyDown={e => {
-                                if (e.key === 'Escape') {
-                                  e.stopPropagation();
-                                  setRenamingId(null);
-                                }
-                              }}
-                            />
-                          </form>
-                        ) : (
-                          <div className="ws-card-name" title={sc.name}>
-                            {sc.name}
-                          </div>
-                        )}
-                        <span
-                          className="ws-status-dot"
-                          style={{ background: STATUS_META[sc.status].dot }}
-                          title={STATUS_META[sc.status].label}
-                        />
-                      </div>
-
-                      <div className="ws-card-sub">
-                        <span className="ws-card-file" title={sc.fileName || sc.pageName}>
-                          {sc.fileName || sc.pageName || 'Figma Frame'}
-                        </span>
-                        <span className="ws-card-sep">·</span>
-                        <span className="mono">
-                          {sc.width}×{sc.height}
-                        </span>
-                      </div>
-
-                      <div className="ws-card-meta">
-                        <span className="mono">
-                          {layers} layers · {sc.tokens.length} tokens
-                        </span>
-                        <span className="ws-card-time">{timeLabel}</span>
-                      </div>
-                    </div>
-                  </div>
+                    >
+                      {isCollapsed ? <ChevronRight size={13} /> : <ChevronDown size={13} />}
+                      <Folder size={13} className="ws-group-ic" />
+                      <span className="ws-group-title">{fileName}</span>
+                      <span className="ws-count-pill mono">{groupItems.length}</span>
+                    </button>
+                    {!isCollapsed &&
+                      (layout === 'grid' ? renderGridCards(groupItems) : renderListRows(groupItems))}
+                  </section>
                 );
               })}
             </div>
+          ) : layout === 'grid' ? (
+            renderGridCards(visibleScreens)
           ) : (
-            /* List / Table View */
-            <div className="ws-list">
-              <div className="ws-list-head">
-                <span>Screen</span>
-                <span>Status</span>
-                <span>Size</span>
-                <span>Layers</span>
-                <span>Activity</span>
-                <span aria-hidden="true" />
-              </div>
-              {visibleScreens.map(sc => {
-                const isSample = sc.source === 'demo';
-                const layers = layerCounts.get(sc.id) || 1;
-                const recentTs = recentsMap[sc.id];
-                const timeLabel = recentTs
-                  ? `Opened ${fmtRelativeTime(recentTs)}`
-                  : `Edited ${fmtRelativeTime(new Date(sc.updatedAt).getTime())}`;
-                const miniScale = Math.min(44 / Math.max(sc.width, 1), 28 / Math.max(sc.height, 1));
-
-                return (
-                  <div
-                    key={sc.id}
-                    className="ws-list-row"
-                    onClick={() => onOpenScreen(sc.id)}
-                  >
-                    <div className="ws-list-main">
-                      <div className="ws-list-thumb">
-                        {sc.screenshotDataUrl ? (
-                          <img src={sc.screenshotDataUrl} alt="" />
-                        ) : (
-                          <div
-                            style={{
-                              width: Math.max(12, Math.round(sc.width * miniScale)),
-                              height: Math.max(10, Math.round(sc.height * miniScale)),
-                              overflow: 'hidden',
-                              borderRadius: 2
-                            }}
-                          >
-                            <ArtboardVectorView bundle={sc} scale={miniScale} />
-                          </div>
-                        )}
-                      </div>
-                      <div className="ws-list-titles">
-                        <div className="ws-list-name">{sc.name}</div>
-                        <div className="ws-list-sub">
-                          <span>{sc.fileName || sc.pageName || 'Figma Frame'}</span>
-                          <span>·</span>
-                          <span>{sourceLabel(sc.source)}</span>
-                        </div>
-                      </div>
-                    </div>
-
-                    <div onClick={e => e.stopPropagation()}>
-                      <PopoverSelect
-                        value={sc.status}
-                        onChange={v => onStatusChange(sc.id, v as ScreenStatus)}
-                        options={[
-                          { value: 'ready', label: 'Ready for dev', dotColor: '#14AE5C' },
-                          { value: 'in-progress', label: 'In progress', dotColor: '#F59E0B' },
-                          { value: 'done', label: 'Completed', dotColor: '#0D99FF' }
-                        ]}
-                      />
-                    </div>
-
-                    <div className="mono ws-list-dim">
-                      {sc.width}×{sc.height}
-                    </div>
-                    <div className="mono ws-list-dim">{layers}</div>
-                    <div className="ws-list-time">{timeLabel}</div>
-
-                    <div className="ws-list-acts" onClick={e => e.stopPropagation()}>
-                      <button
-                        type="button"
-                        className="quiet-icon-btn"
-                        title="Share link"
-                        onClick={() => onShareScreen(sc.id)}
-                      >
-                        <Share2 size={13} />
-                      </button>
-                      {!isSample && (
-                        <button
-                          type="button"
-                          className="quiet-icon-btn"
-                          title="Remove"
-                          onClick={() => onDeleteScreen(sc.id)}
-                        >
-                          <Trash2 size={13} />
-                        </button>
-                      )}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
+            renderListRows(visibleScreens)
           )}
         </div>
       </main>

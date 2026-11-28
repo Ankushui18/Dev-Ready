@@ -5,6 +5,7 @@ const DB_VERSION = 1;
 const STORE_NAME = 'screens';
 const FALLBACK_KEY = 'devready-studio-screens-v1';
 const RECENTS_KEY = 'devready-studio-recents-v1';
+const PINNED_KEY = 'devready-studio-pinned-v1';
 
 export function loadRecentsMap(): Record<string, number> {
   try {
@@ -21,6 +22,28 @@ export function touchRecentScreen(id: string): Record<string, number> {
   const next = { ...loadRecentsMap(), [id]: Date.now() };
   try {
     localStorage.setItem(RECENTS_KEY, JSON.stringify(next));
+  } catch {
+    // ignore quota error
+  }
+  return next;
+}
+
+export function loadPinnedIds(): string[] {
+  try {
+    const raw = localStorage.getItem(PINNED_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed.filter((x): x is string => typeof x === 'string') : [];
+  } catch {
+    return [];
+  }
+}
+
+export function togglePinScreen(id: string): string[] {
+  const current = loadPinnedIds();
+  const next = current.includes(id) ? current.filter(x => x !== id) : [id, ...current];
+  try {
+    localStorage.setItem(PINNED_KEY, JSON.stringify(next));
   } catch {
     // ignore quota error
   }
