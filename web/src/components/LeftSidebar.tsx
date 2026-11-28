@@ -49,6 +49,7 @@ interface LeftSidebarProps {
   theme: 'dark' | 'light';
   showReadyFeed: boolean;
   onToggleReadyFeed: () => void;
+  onGoHome: () => void;
   onResizeWidth: (w: number) => void;
   onUnitChange: (u: UnitMode) => void;
   onToggleTheme: () => void;
@@ -95,6 +96,7 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = ({
   theme,
   showReadyFeed,
   onToggleReadyFeed,
+  onGoHome,
   onResizeWidth,
   onUnitChange,
   onToggleTheme,
@@ -258,12 +260,20 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = ({
 
       <div className="panel-top-row">
         <div className="file-identity">
-          <div className="fig-glyph" aria-hidden="true">
-            <span />
-            <span />
-            <span />
-            <span />
-          </div>
+          <button
+            type="button"
+            className="fig-glyph-btn"
+            onClick={onGoHome}
+            title="Back to Recents / Projects"
+            aria-label="Back to Recents / Projects"
+          >
+            <div className="fig-glyph" aria-hidden="true">
+              <span />
+              <span />
+              <span />
+              <span />
+            </div>
+          </button>
           <div className="file-titles">
             <div className="file-title" title={activeScreen.fileName || 'DevReady Studio'}>
               {activeScreen.fileName || 'DevReady Studio'}

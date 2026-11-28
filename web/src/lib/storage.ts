@@ -4,6 +4,28 @@ const DB_NAME = 'devready-studio-db';
 const DB_VERSION = 1;
 const STORE_NAME = 'screens';
 const FALLBACK_KEY = 'devready-studio-screens-v1';
+const RECENTS_KEY = 'devready-studio-recents-v1';
+
+export function loadRecentsMap(): Record<string, number> {
+  try {
+    const raw = localStorage.getItem(RECENTS_KEY);
+    if (!raw) return {};
+    const parsed = JSON.parse(raw);
+    return parsed && typeof parsed === 'object' ? (parsed as Record<string, number>) : {};
+  } catch {
+    return {};
+  }
+}
+
+export function touchRecentScreen(id: string): Record<string, number> {
+  const next = { ...loadRecentsMap(), [id]: Date.now() };
+  try {
+    localStorage.setItem(RECENTS_KEY, JSON.stringify(next));
+  } catch {
+    // ignore quota error
+  }
+  return next;
+}
 
 function openDb(): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {

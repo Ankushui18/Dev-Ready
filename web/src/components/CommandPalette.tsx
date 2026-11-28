@@ -3,6 +3,7 @@ import {
   Figma,
   FileJson,
   GitCompareArrows,
+  Home,
   Layers,
   LayoutGrid,
   Moon,
@@ -31,6 +32,7 @@ interface CommandPaletteProps {
   onOpenCompareChanges: () => void;
   onOpenVariablesTable: () => void;
   onOpenReadyFeed: () => void;
+  onGoHome: () => void;
   onCopyAiPrompt: () => void;
   onCopyMcpJson: () => void;
 }
@@ -58,6 +60,7 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
   onOpenCompareChanges,
   onOpenVariablesTable,
   onOpenReadyFeed,
+  onGoHome,
   onCopyAiPrompt,
   onCopyMcpJson
 }) => {
@@ -71,6 +74,14 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
 
   const items = useMemo<PaletteItem[]>(() => {
     const actions: PaletteItem[] = [
+      {
+        id: 'act-home',
+        group: 'Actions',
+        label: 'Go to Recents / Home dashboard',
+        meta: 'Workspace',
+        icon: <Home size={14} />,
+        run: onGoHome
+      },
       {
         id: 'act-ready-feed',
         group: 'Actions',

@@ -116,7 +116,13 @@ export function validateBundle(raw: unknown): DevReadyBundle {
     figmaUrl: typeof obj.figmaUrl === 'string' && SAFE_HTTP_URL_RE.test(obj.figmaUrl.trim()) ? obj.figmaUrl.trim() : undefined,
     status: obj.status === 'in-progress' || obj.status === 'done' ? obj.status : 'ready',
     updatedAt: typeof obj.updatedAt === 'string' ? obj.updatedAt : new Date().toISOString(),
-    source: obj.source === 'figma-plugin' || obj.source === 'cloud-link' || obj.source === 'demo' ? obj.source : 'file',
+    source:
+      obj.source === 'figma-plugin' ||
+      obj.source === 'figma-api' ||
+      obj.source === 'cloud-link' ||
+      obj.source === 'demo'
+        ? obj.source
+        : 'file',
     width: typeof obj.width === 'number' && Number.isFinite(obj.width) && obj.width > 0 ? obj.width : root.width,
     height: typeof obj.height === 'number' && Number.isFinite(obj.height) && obj.height > 0 ? obj.height : root.height,
     backgroundColor: typeof obj.backgroundColor === 'string' ? obj.backgroundColor : '#FFFFFF',

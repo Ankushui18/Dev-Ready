@@ -191,7 +191,7 @@ export interface DevReadyBundle {
   figmaUrl?: string;
   status: ScreenStatus;
   updatedAt: string;
-  source: 'demo' | 'figma-plugin' | 'file' | 'cloud-link';
+  source: 'demo' | 'figma-plugin' | 'figma-api' | 'file' | 'cloud-link';
   width: number;
   height: number;
   backgroundColor: string;
